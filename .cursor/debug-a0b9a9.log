@@ -1,0 +1,5 @@
+{"sessionId":"a0b9a9","runId":"diagnostic","hypothesisId":"A","location":"simctl","message":"devices available","data":{"deviceCount":0,"output":"== Devices == (empty)"},"timestamp":1733456789000}
+{"sessionId":"a0b9a9","runId":"diagnostic","hypothesisId":"A","location":"simctl","message":"runtimes list","data":{"runtimeCount":0,"output":"== Runtimes == (empty)"},"timestamp":1733456789001}
+{"sessionId":"a0b9a9","runId":"diagnostic","hypothesisId":"C","location":"xcode-select","message":"developer dir","data":{"path":"/Applications/Xcode.app/Contents/Developer"},"timestamp":1733456789002}
+{"sessionId":"a0b9a9","runId":"diagnostic","hypothesisId":"C","location":"xcodebuild","message":"xcode version","data":{"version":"Xcode 26.5 Build 17F42"},"timestamp":1733456789003}
+{"sessionId":"a0b9a9","runId":"diagnostic","hypothesisId":"A","location":"filesystem","message":"runtime profiles path missing","data":{"path":"/Library/Developer/CoreSimulator/Profiles/Runtimes","exists":false},"timestamp":1733456789004}
