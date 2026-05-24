@@ -34,18 +34,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   enabled: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.cream,
   },
   disabled: {
     backgroundColor: COLORS.disabled,
   },
   pressed: {
-    backgroundColor: COLORS.primaryDark,
+    backgroundColor: COLORS.primaryLight,
   },
   text: {
     fontSize: 16,
     fontWeight: '600',
-    color: HachisuColors.white,
+    color: HachisuColors.black,
   },
   disabledText: {
     color: COLORS.secondaryText,

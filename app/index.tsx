@@ -138,10 +138,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.darkButton,
   },
   signUpButton: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.cream,
   },
   signUpButtonPressed: {
-    backgroundColor: COLORS.primaryDark,
+    backgroundColor: COLORS.primaryLight,
   },
   loginButtonText: {
     fontSize: 16,
@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   signUpButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: HachisuColors.white,
+    color: HachisuColors.black,
   },
   pressed: {
     opacity: 0.8,
