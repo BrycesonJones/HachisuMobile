@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/auth-context';
 import { COLORS } from '@/constants/colors';
+import { HachisuColors } from '@/constants/hachisu-colors';
 
 export default function LandingScreen() {
   const router = useRouter();
@@ -58,7 +59,11 @@ export default function LandingScreen() {
         </Pressable>
         <Pressable
           onPress={() => router.push('/auth/choose-account-type')}
-          style={({ pressed }) => [styles.button, styles.signUpButton, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.button,
+            styles.signUpButton,
+            pressed && styles.signUpButtonPressed,
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Sign up">
           <Text style={styles.signUpButtonText}>Sign up</Text>
@@ -99,7 +104,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 4,
     borderRadius: 2,
-    backgroundColor: COLORS.orange,
+    backgroundColor: COLORS.primary,
   },
   copyArea: {
     paddingBottom: 32,
@@ -133,7 +138,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.darkButton,
   },
   signUpButton: {
-    backgroundColor: COLORS.whiteButton,
+    backgroundColor: COLORS.primary,
+  },
+  signUpButtonPressed: {
+    backgroundColor: COLORS.primaryDark,
   },
   loginButtonText: {
     fontSize: 16,
@@ -143,7 +151,7 @@ const styles = StyleSheet.create({
   signUpButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: COLORS.background,
+    color: HachisuColors.white,
   },
   pressed: {
     opacity: 0.8,

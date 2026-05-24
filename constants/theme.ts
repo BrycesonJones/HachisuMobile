@@ -5,8 +5,10 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+import { HachisuColors } from '@/constants/hachisu-colors';
+
+const tintColorLight = HachisuColors.primary;
+const tintColorDark = HachisuColors.primary;
 
 export const Colors = {
   light: {

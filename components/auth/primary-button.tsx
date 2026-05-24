@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
 
 import { COLORS } from '@/constants/colors';
+import { HachisuColors } from '@/constants/hachisu-colors';
 
 interface PrimaryButtonProps {
   label: string;
@@ -33,18 +34,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   enabled: {
-    backgroundColor: COLORS.whiteButton,
+    backgroundColor: COLORS.primary,
   },
   disabled: {
     backgroundColor: COLORS.disabled,
   },
   pressed: {
-    opacity: 0.8,
+    backgroundColor: COLORS.primaryDark,
   },
   text: {
     fontSize: 16,
     fontWeight: '600',
-    color: COLORS.background,
+    color: HachisuColors.white,
   },
   disabledText: {
     color: COLORS.secondaryText,
