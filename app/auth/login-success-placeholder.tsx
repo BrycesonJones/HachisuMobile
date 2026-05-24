@@ -1,44 +1,38 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useEffect } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
-import { BackButton } from '@/components/auth/back-button';
-import { ScreenContainer } from '@/components/auth/screen-container';
+import { useAuth } from '@/contexts/auth-context';
 import { COLORS } from '@/constants/colors';
 
-// TODO: authenticated session, dashboard routing, and auth guards
-
+/** Legacy route — redirects based on session. Login now goes directly to home. */
 export default function LoginSuccessPlaceholderScreen() {
+  const router = useRouter();
+  const { session, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    if (session) {
+      router.replace('/(tabs)/home');
+      return;
+    }
+
+    router.replace('/auth/login');
+  }, [isLoading, router, session]);
+
   return (
-    <ScreenContainer>
-      <View style={styles.header}>
-        <BackButton />
-      </View>
-      <View style={styles.content}>
-        <Text style={styles.title}>Login flow coming next</Text>
-        <Text style={styles.subtitle}>
-          Session creation and the authenticated dashboard will be added in a future
-          update.
-        </Text>
-      </View>
-    </ScreenContainer>
+    <View style={styles.container}>
+      <ActivityIndicator color={COLORS.primaryText} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    paddingTop: 8,
-    paddingBottom: 24,
-  },
-  content: {
-    gap: 12,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: COLORS.primaryText,
-  },
-  subtitle: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: COLORS.secondaryText,
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

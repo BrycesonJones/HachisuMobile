@@ -1,13 +1,24 @@
 import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Platform, Pressable, StyleSheet, Text } from 'react-native';
 
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Link } from 'expo-router';
+import { useAuth } from '@/contexts/auth-context';
+import { COLORS } from '@/constants/colors';
 
 export default function HomeScreen() {
+  const router = useRouter();
+  const { profile, signOut } = useAuth();
+
+  async function handleSignOut() {
+    await signOut();
+    router.replace('/');
+  }
+
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
@@ -18,9 +29,20 @@ export default function HomeScreen() {
         />
       }>
       <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
+        <ThemedText type="title">Welcome{profile?.username ? `, ${profile.username}` : ''}!</ThemedText>
         <HelloWave />
       </ThemedView>
+
+      <ThemedView style={styles.stepContainer}>
+        <Pressable
+          onPress={handleSignOut}
+          style={({ pressed }) => [styles.logoutButton, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Log out">
+          <Text style={styles.logoutButtonText}>Log out</Text>
+        </Pressable>
+      </ThemedView>
+
       <ThemedView style={styles.stepContainer}>
         <ThemedText type="subtitle">Step 1: Try it</ThemedText>
         <ThemedText>
@@ -94,5 +116,20 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     position: 'absolute',
+  },
+  logoutButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.darkButton,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 999,
+  },
+  logoutButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.primaryText,
+  },
+  pressed: {
+    opacity: 0.8,
   },
 });

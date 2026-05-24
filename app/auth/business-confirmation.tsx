@@ -8,20 +8,59 @@ import { OtpInputPlaceholder } from '@/components/auth/otp-input-placeholder';
 import { PrimaryButton } from '@/components/auth/primary-button';
 import { ScreenContainer } from '@/components/auth/screen-container';
 import { COLORS } from '@/constants/colors';
+import { useAuth } from '@/contexts/auth-context';
+import { isAuthDevBypassEnabled } from '@/lib/auth/config';
+import { ensureUserProfile, verifyEmailOtp } from '@/lib/auth/auth-service';
+import type { AccountType } from '@/types/user-profile';
 
 const CODE_LENGTH = 6;
 
 export default function BusinessEmailConfirmationScreen() {
   const router = useRouter();
-  const { email } = useLocalSearchParams<{ email?: string }>();
+  const { refreshProfile } = useAuth();
+  const { email, accountType } = useLocalSearchParams<{ email?: string; accountType?: string }>();
   const [code, setCode] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const displayEmail = typeof email === 'string' && email.length > 0 ? email : 'your email';
   const isCodeComplete = code.length === CODE_LENGTH;
+  const resolvedAccountType: AccountType =
+    accountType === 'personal' ? 'personal' : 'business';
 
-  function handleNext() {
-    if (!isCodeComplete) return;
-    router.push('/auth/choose-username');
+  async function handleNext() {
+    if (!isCodeComplete || isLoading || typeof email !== 'string') return;
+
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    const { error: verifyError } = await verifyEmailOtp(email, code);
+
+    if (verifyError) {
+      setIsLoading(false);
+      setErrorMessage(verifyError.message);
+      return;
+    }
+
+    const { error: profileError } = await ensureUserProfile({
+      email,
+      accountType: resolvedAccountType,
+      onboardingStatus: 'email_verified',
+    });
+
+    if (profileError) {
+      setIsLoading(false);
+      setErrorMessage(profileError.message);
+      return;
+    }
+
+    await refreshProfile();
+    setIsLoading(false);
+
+    router.push({
+      pathname: '/auth/choose-username',
+      params: { flow: resolvedAccountType },
+    });
   }
 
   return (
@@ -45,10 +84,22 @@ export default function BusinessEmailConfirmationScreen() {
 
           <OtpInputPlaceholder value={code} onChange={setCode} length={CODE_LENGTH} />
 
-          <Text style={styles.helperText}>Verification will be enabled later.</Text>
+          {isAuthDevBypassEnabled ? (
+            <Text style={styles.helperText}>
+              Dev mode: enter any 6-digit code to continue without email delivery.
+            </Text>
+          ) : (
+            <Text style={styles.helperText}>Check your email for the 6-digit code.</Text>
+          )}
+
+          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
           <View style={styles.buttonArea}>
-            <PrimaryButton label="Next" onPress={handleNext} disabled={!isCodeComplete} />
+            <PrimaryButton
+              label={isLoading ? 'Verifying…' : 'Next'}
+              onPress={handleNext}
+              disabled={!isCodeComplete || isLoading}
+            />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -72,6 +123,12 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 13,
     color: COLORS.mutedText,
+    textAlign: 'center',
+  },
+  errorText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: COLORS.orange,
     textAlign: 'center',
   },
   buttonArea: {

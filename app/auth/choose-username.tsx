@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AuthTitleBlock } from '@/components/auth/auth-title-block';
 import { CloseButton } from '@/components/auth/close-button';
@@ -12,20 +12,43 @@ import {
   BUSINESS_ONBOARDING_PROGRESS,
   BUSINESS_ONBOARDING_STEP_COUNT,
 } from '@/constants/business-onboarding-progress';
+import { COLORS } from '@/constants/colors';
 import {
   PERSONAL_ONBOARDING_PROGRESS,
   PERSONAL_ONBOARDING_STEP_COUNT,
 } from '@/constants/personal-onboarding-progress';
+import { useAuth } from '@/contexts/auth-context';
+import { updateUserProfile } from '@/lib/auth/auth-service';
 
 export default function ChooseUsernameScreen() {
   const router = useRouter();
+  const { refreshProfile } = useAuth();
   const { flow } = useLocalSearchParams<{ flow?: string }>();
   const [username, setUsername] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isUsernameValid = username.trim().length > 0;
   const isPersonalFlow = flow === 'personal';
 
-  function handleNext() {
-    if (!isUsernameValid) return;
+  async function handleNext() {
+    if (!isUsernameValid || isLoading) return;
+
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    const { error } = await updateUserProfile({
+      username: username.trim(),
+      onboarding_status: 'username_set',
+    });
+
+    if (error) {
+      setIsLoading(false);
+      setErrorMessage(error.message);
+      return;
+    }
+
+    await refreshProfile();
+    setIsLoading(false);
 
     if (isPersonalFlow) {
       router.push({ pathname: '/auth/push-notifications', params: { flow: 'personal' } });
@@ -76,8 +99,14 @@ export default function ChooseUsernameScreen() {
             showClearButton
           />
 
+          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+
           <View style={styles.buttonArea}>
-            <PrimaryButton label="Next" onPress={handleNext} disabled={!isUsernameValid} />
+            <PrimaryButton
+              label={isLoading ? 'Saving…' : 'Next'}
+              onPress={handleNext}
+              disabled={!isUsernameValid || isLoading}
+            />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -106,6 +135,12 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
+  },
+  errorText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: COLORS.orange,
+    textAlign: 'center',
   },
   buttonArea: {
     marginTop: 32,
