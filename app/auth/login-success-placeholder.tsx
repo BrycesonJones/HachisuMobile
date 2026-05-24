@@ -8,18 +8,18 @@ import { COLORS } from '@/constants/colors';
 /** Legacy route — redirects based on session. Login now goes directly to home. */
 export default function LoginSuccessPlaceholderScreen() {
   const router = useRouter();
-  const { session, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
     if (isLoading) return;
 
-    if (session) {
+    if (isAuthenticated) {
       router.replace('/(tabs)/home');
       return;
     }
 
     router.replace('/auth/login');
-  }, [isLoading, router, session]);
+  }, [isAuthenticated, isLoading, router]);
 
   return (
     <View style={styles.container}>

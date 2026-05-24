@@ -60,7 +60,7 @@ export default function PersonalVerificationInfoScreen() {
 
   function handleContinue() {
     if (!isFormValid) return;
-    router.push('/auth/identity-verification-placeholder');
+    router.replace('/(tabs)/home');
   }
 
   return (

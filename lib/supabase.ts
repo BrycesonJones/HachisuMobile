@@ -12,9 +12,33 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+const ssrSafeStorage = {
+  getItem: (key: string) => {
+    if (typeof window === 'undefined') {
+      return Promise.resolve(null);
+    }
+
+    return AsyncStorage.getItem(key);
+  },
+  setItem: (key: string, value: string) => {
+    if (typeof window === 'undefined') {
+      return Promise.resolve();
+    }
+
+    return AsyncStorage.setItem(key, value);
+  },
+  removeItem: (key: string) => {
+    if (typeof window === 'undefined') {
+      return Promise.resolve();
+    }
+
+    return AsyncStorage.removeItem(key);
+  },
+};
+
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
+    storage: ssrSafeStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,

@@ -17,7 +17,7 @@ const CODE_LENGTH = 6;
 
 export default function BusinessEmailConfirmationScreen() {
   const router = useRouter();
-  const { refreshProfile } = useAuth();
+  const { devSignIn } = useAuth();
   const { email, accountType } = useLocalSearchParams<{ email?: string; accountType?: string }>();
   const [code, setCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -33,6 +33,14 @@ export default function BusinessEmailConfirmationScreen() {
 
     setIsLoading(true);
     setErrorMessage(null);
+
+    if (isAuthDevBypassEnabled) {
+      console.warn(`[auth] Dev bypass: accepting code for ${email}`);
+      await devSignIn(email, resolvedAccountType);
+      setIsLoading(false);
+      router.replace('/auth/choose-username');
+      return;
+    }
 
     const { error: verifyError } = await verifyEmailOtp(email, code);
 
@@ -54,13 +62,9 @@ export default function BusinessEmailConfirmationScreen() {
       return;
     }
 
-    await refreshProfile();
     setIsLoading(false);
 
-    router.push({
-      pathname: '/auth/choose-username',
-      params: { flow: resolvedAccountType },
-    });
+    router.replace('/auth/choose-username');
   }
 
   return (
@@ -86,7 +90,7 @@ export default function BusinessEmailConfirmationScreen() {
 
           {isAuthDevBypassEnabled ? (
             <Text style={styles.helperText}>
-              Dev mode: enter any 6-digit code to continue without email delivery.
+              Dev mode: enter any 6-digit code to continue.
             </Text>
           ) : (
             <Text style={styles.helperText}>Check your email for the 6-digit code.</Text>

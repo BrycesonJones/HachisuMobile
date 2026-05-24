@@ -54,7 +54,7 @@ export default function CompanyVerificationInfoScreen() {
 
   function handleContinue() {
     if (!isFormValid) return;
-    router.push('/auth/business-verification-placeholder');
+    router.replace('/(tabs)/home');
   }
 
   return (

@@ -9,13 +9,13 @@ import { HachisuColors } from '@/constants/hachisu-colors';
 
 export default function LandingScreen() {
   const router = useRouter();
-  const { session, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
-    if (!isLoading && session) {
+    if (!isLoading && isAuthenticated) {
       router.replace('/(tabs)/home');
     }
-  }, [isLoading, router, session]);
+  }, [isAuthenticated, isLoading, router]);
 
   if (isLoading) {
     return (
@@ -25,7 +25,7 @@ export default function LandingScreen() {
     );
   }
 
-  if (session) {
+  if (isAuthenticated) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator color={COLORS.primaryText} />

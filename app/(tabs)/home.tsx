@@ -1,135 +1,56 @@
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { Platform, Pressable, StyleSheet, Text } from 'react-native';
+import { useState } from 'react';
+import { StatusBar, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { DashboardHeader } from '@/components/dashboard/dashboard-header';
+import { TransactionDetailsModal } from '@/components/dashboard/transaction-details-modal';
+import { TransactionList } from '@/components/dashboard/transaction-list';
+import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
 import { useAuth } from '@/contexts/auth-context';
-import { COLORS } from '@/constants/colors';
+import { MOCK_TRANSACTIONS } from '@/data/mock-transactions';
+import type { Transaction } from '@/types/transaction';
 
-export default function HomeScreen() {
+export default function MerchantDashboardScreen() {
   const router = useRouter();
-  const { profile, signOut } = useAuth();
+  const { signOut } = useAuth();
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
-  async function handleSignOut() {
+  function handleTransactionPress(transaction: Transaction) {
+    setSelectedTransaction(transaction);
+  }
+
+  function handleCloseDetails() {
+    setSelectedTransaction(null);
+  }
+
+  async function handleProfilePress() {
     await signOut();
     router.replace('/');
   }
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome{profile?.username ? `, ${profile.username}` : ''}!</ThemedText>
-        <HelloWave />
-      </ThemedView>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <StatusBar barStyle="light-content" />
 
-      <ThemedView style={styles.stepContainer}>
-        <Pressable
-          onPress={handleSignOut}
-          style={({ pressed }) => [styles.logoutButton, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Log out">
-          <Text style={styles.logoutButtonText}>Log out</Text>
-        </Pressable>
-      </ThemedView>
+      <TransactionList
+        transactions={MOCK_TRANSACTIONS}
+        onTransactionPress={handleTransactionPress}
+        ListHeaderComponent={<DashboardHeader onProfilePress={handleProfilePress} />}
+      />
 
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/home.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
-
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      <TransactionDetailsModal
+        transaction={selectedTransaction}
+        visible={selectedTransaction !== null}
+        onClose={handleCloseDetails}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-  logoutButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: COLORS.darkButton,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 999,
-  },
-  logoutButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.primaryText,
-  },
-  pressed: {
-    opacity: 0.8,
+  container: {
+    flex: 1,
+    backgroundColor: DASHBOARD_COLORS.background,
   },
 });

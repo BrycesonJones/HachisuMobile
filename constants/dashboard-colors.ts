@@ -1,16 +1,17 @@
+import { COLORS } from '@/constants/colors';
 import { HachisuColors } from '@/constants/hachisu-colors';
 
 export const DASHBOARD_COLORS = {
-  background: HachisuColors.white,
-  primaryText: HachisuColors.black,
-  secondaryText: HachisuColors.gray,
-  mutedText: '#9ca3af',
-  divider: '#e5e7eb',
+  background: COLORS.background,
+  primaryText: COLORS.primaryText,
+  secondaryText: COLORS.secondaryText,
+  mutedText: COLORS.mutedText,
+  divider: COLORS.cardBorder,
   avatarBackground: '#14b8a6',
   bitcoinGreen: '#22c55e',
   bitcoinOrange: HachisuColors.primary,
-  failedText: '#9ca3af',
-  statusComplete: HachisuColors.black,
-  iconBackground: '#f3f4f6',
+  failedText: '#71717a',
+  statusComplete: COLORS.primaryText,
+  iconBackground: COLORS.card,
   profileBlue: '#3b82f6',
 } as const;

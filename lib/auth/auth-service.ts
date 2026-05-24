@@ -1,4 +1,11 @@
 import { isAuthDevBypassEnabled } from '@/lib/auth/config';
+import {
+  activateDevAuth,
+  clearDevAuth,
+  getDevProfile,
+  isDevAuthActive,
+  updateDevProfile,
+} from '@/lib/auth/dev-session';
 import { supabase } from '@/lib/supabase';
 import type { AccountType, OnboardingStatus, UserProfile } from '@/types/user-profile';
 
@@ -46,25 +53,13 @@ export async function sendEmailOtp(email: string): Promise<{ error: AuthError | 
 
 /**
  * Verifies the email OTP and establishes a Supabase session.
- * In dev bypass mode, signs in anonymously so RLS and logout work without real email delivery.
+ * Dev bypass is handled separately via activateDevAuth in AuthContext — never call this in dev mode.
  */
 export async function verifyEmailOtp(
   email: string,
   token: string,
 ): Promise<{ error: AuthError | null }> {
   const trimmedEmail = email.trim();
-
-  if (isAuthDevBypassEnabled) {
-    console.warn('[auth] Dev bypass: skipping verifyOtp; using anonymous sign-in for', trimmedEmail);
-
-    const { error } = await supabase.auth.signInAnonymously();
-
-    if (error) {
-      return { error: toAuthError(error) };
-    }
-
-    return { error: null };
-  }
 
   // TODO: production — verifyOtp
   const { error } = await supabase.auth.verifyOtp({
@@ -81,6 +76,11 @@ export async function verifyEmailOtp(
 }
 
 export async function signOut(): Promise<{ error: AuthError | null }> {
+  if (isDevAuthActive()) {
+    clearDevAuth();
+    return { error: null };
+  }
+
   const { error } = await supabase.auth.signOut();
 
   if (error) {
@@ -91,6 +91,10 @@ export async function signOut(): Promise<{ error: AuthError | null }> {
 }
 
 export async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
+  if (isAuthDevBypassEnabled && userId === 'dev-user-id') {
+    return getDevProfile();
+  }
+
   const { data, error } = await supabase
     .from('user_profiles')
     .select('*')
@@ -107,6 +111,16 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
 export async function ensureUserProfile(
   input: EnsureUserProfileInput,
 ): Promise<{ profile: UserProfile | null; error: AuthError | null }> {
+  if (isAuthDevBypassEnabled) {
+  // TODO: In production, after verifyOtp succeeds, create/update user_profiles using the authenticated Supabase user id.
+    const { profile } = activateDevAuth(
+      input.email,
+      input.accountType,
+      input.onboardingStatus ?? 'email_verified',
+    );
+    return { profile, error: null };
+  }
+
   const {
     data: { user },
     error: userError,
@@ -160,6 +174,11 @@ export async function ensureUserProfile(
 export async function updateUserProfile(
   updates: Partial<Pick<UserProfile, 'username' | 'onboarding_status'>>,
 ): Promise<{ profile: UserProfile | null; error: AuthError | null }> {
+  if (isAuthDevBypassEnabled && isDevAuthActive()) {
+    const profile = updateDevProfile(updates);
+    return { profile, error: null };
+  }
+
   const {
     data: { user },
     error: userError,

@@ -17,7 +17,7 @@ const CODE_LENGTH = 6;
 
 export default function PersonalEmailConfirmationScreen() {
   const router = useRouter();
-  const { refreshProfile } = useAuth();
+  const { devSignIn } = useAuth();
   const { email, accountType } = useLocalSearchParams<{ email?: string; accountType?: string }>();
   const [code, setCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -33,6 +33,17 @@ export default function PersonalEmailConfirmationScreen() {
 
     setIsLoading(true);
     setErrorMessage(null);
+
+    if (isAuthDevBypassEnabled) {
+      console.warn(`[auth] Dev bypass: accepting code for ${email}`);
+      await devSignIn(email, resolvedAccountType);
+      setIsLoading(false);
+      router.replace({
+        pathname: '/auth/choose-username',
+        params: { flow: 'personal' },
+      });
+      return;
+    }
 
     const { error: verifyError } = await verifyEmailOtp(email, code);
 
@@ -54,12 +65,11 @@ export default function PersonalEmailConfirmationScreen() {
       return;
     }
 
-    await refreshProfile();
     setIsLoading(false);
 
-    router.push({
+    router.replace({
       pathname: '/auth/choose-username',
-      params: { flow: resolvedAccountType },
+      params: { flow: 'personal' },
     });
   }
 
@@ -86,7 +96,7 @@ export default function PersonalEmailConfirmationScreen() {
 
           {isAuthDevBypassEnabled ? (
             <Text style={styles.helperText}>
-              Dev mode: enter any 6-digit code to continue without email delivery.
+              Dev mode: enter any 6-digit code to continue.
             </Text>
           ) : (
             <Text style={styles.helperText}>Check your email for the 6-digit code.</Text>

@@ -16,7 +16,7 @@ const CODE_LENGTH = 6;
 
 export default function LoginEmailVerificationScreen() {
   const router = useRouter();
-  const { refreshProfile } = useAuth();
+  const { devSignIn, refreshProfile } = useAuth();
   const { email } = useLocalSearchParams<{ email?: string }>();
   const [code, setCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -31,6 +31,15 @@ export default function LoginEmailVerificationScreen() {
     setIsLoading(true);
     setErrorMessage(null);
 
+    if (isAuthDevBypassEnabled) {
+      console.warn(`[auth] Dev bypass: accepting code for ${email}`);
+      await devSignIn(email, 'personal', 'onboarding_complete');
+      await refreshProfile();
+      setIsLoading(false);
+      router.replace('/(tabs)/home');
+      return;
+    }
+
     const { error: verifyError } = await verifyEmailOtp(email, code);
 
     if (verifyError) {
@@ -42,7 +51,6 @@ export default function LoginEmailVerificationScreen() {
     const { error: profileError } = await ensureUserProfile({
       email,
       accountType: 'personal',
-      onboardingStatus: 'email_verified',
     });
 
     if (profileError) {
@@ -79,7 +87,7 @@ export default function LoginEmailVerificationScreen() {
 
           {isAuthDevBypassEnabled ? (
             <Text style={styles.helperText}>
-              Dev mode: enter any 6-digit code to sign in without email delivery.
+              Dev mode: enter any 6-digit code to continue.
             </Text>
           ) : (
             <Text style={styles.helperText}>
