@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
   avatarInitial: {
     fontSize: 20,
     fontWeight: '700',
-    color: HachisuColors.white,
+    color: HachisuColors.black,
   },
   mutedAvatarInitial: {
     color: DASHBOARD_COLORS.secondaryText,

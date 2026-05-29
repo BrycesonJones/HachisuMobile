@@ -10,7 +10,7 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: HachisuColors.primary,
+        tabBarActiveTintColor: HachisuColors.cream,
         tabBarInactiveTintColor: DASHBOARD_COLORS.secondaryText,
         headerShown: false,
         tabBarButton: HapticTab,

@@ -7,11 +7,11 @@ export const DASHBOARD_COLORS = {
   secondaryText: COLORS.secondaryText,
   mutedText: COLORS.mutedText,
   divider: COLORS.cardBorder,
-  avatarBackground: '#14b8a6',
+  avatarBackground: HachisuColors.cream,
   bitcoinGreen: '#22c55e',
   bitcoinOrange: HachisuColors.primary,
   failedText: '#71717a',
   statusComplete: COLORS.primaryText,
   iconBackground: COLORS.card,
-  profileBlue: '#3b82f6',
+  profileIcon: HachisuColors.cream,
 } as const;
