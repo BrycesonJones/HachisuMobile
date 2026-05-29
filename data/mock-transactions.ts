@@ -17,3 +17,7 @@ export const MOCK_TRANSACTIONS: Transaction[] = [
     fees: 'None applied',
   },
 ];
+
+export function getTransactionById(id: string): Transaction | undefined {
+  return MOCK_TRANSACTIONS.find((transaction) => transaction.id === id);
+}

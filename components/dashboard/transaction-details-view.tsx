@@ -1,8 +1,9 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as Clipboard from 'expo-clipboard';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CloseButton } from '@/components/auth/close-button';
 import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
 import {
   formatCurrency,
@@ -13,22 +14,14 @@ import {
 } from '@/lib/transactions/transaction-utils';
 import type { Transaction } from '@/types/transaction';
 
-interface TransactionDetailsModalProps {
-  transaction: Transaction | null;
-  visible: boolean;
+interface TransactionDetailsViewProps {
+  transaction: Transaction;
   onClose: () => void;
 }
 
-export function TransactionDetailsModal({
-  transaction,
-  visible,
-  onClose,
-}: TransactionDetailsModalProps) {
-  if (!transaction) return null;
-
+export function TransactionDetailsView({ transaction, onClose }: TransactionDetailsViewProps) {
   const merchantName = transaction.merchantName ?? 'Your business';
   const fees = transaction.fees ?? 'None applied';
-
   const transactionNumber = transaction.transactionNumber;
 
   async function handleCopyTransactionNumber() {
@@ -36,74 +29,64 @@ export function TransactionDetailsModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
-      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}>
-          <Pressable
-            onPress={onClose}
-            style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Close transaction details">
-            <MaterialIcons name="close" size={28} color={DASHBOARD_COLORS.primaryText} />
-          </Pressable>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
+      <View style={styles.header}>
+        <CloseButton onPress={onClose} />
+      </View>
 
-          <View style={styles.summary}>
-            <Text style={styles.payerName}>{transaction.payerName}</Text>
-            <Text style={styles.dateTime}>
-              {formatDetailDateTime(transaction.date, transaction.time)}
-            </Text>
-            <Text style={styles.description}>{transaction.description}</Text>
-            {transaction.customerEmail ? (
-              <Text style={styles.customerEmail}>{transaction.customerEmail}</Text>
-            ) : null}
-            <Text style={styles.amount}>{formatCurrency(transaction.amountUsd)}</Text>
-            {transaction.amountBtc ? (
-              <Text style={styles.btcAmount}>{transaction.amountBtc} BTC</Text>
-            ) : null}
-          </View>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled">
+        <View style={styles.summary}>
+          <Text style={styles.payerName}>{transaction.payerName}</Text>
+          <Text style={styles.dateTime}>
+            {formatDetailDateTime(transaction.date, transaction.time)}
+          </Text>
+          <Text style={styles.description}>{transaction.description}</Text>
+          {transaction.customerEmail ? (
+            <Text style={styles.customerEmail}>{transaction.customerEmail}</Text>
+          ) : null}
+          <Text style={styles.amount}>{formatCurrency(transaction.amountUsd)}</Text>
+          {transaction.amountBtc ? (
+            <Text style={styles.btcAmount}>{transaction.amountBtc} BTC</Text>
+          ) : null}
+        </View>
 
-          <View style={styles.divider} />
+        <View style={styles.divider} />
 
-          <Text style={styles.sectionTitle}>Transaction details</Text>
+        <Text style={styles.sectionTitle}>Transaction details</Text>
 
-          <DetailRow
-            icon="check-circle"
-            title={getStatusLabel(transaction.status)}
-            subtitle={getStatusDescription(transaction.status)}
-          />
+        <DetailRow
+          icon="check-circle"
+          title={getStatusLabel(transaction.status)}
+          subtitle={getStatusDescription(transaction.status)}
+        />
 
-          <DetailRow
-            icon="person-outline"
-            title="Payment between"
-            subtitle={`To: ${merchantName}\nFrom: ${transaction.payerName}`}
-          />
+        <DetailRow
+          icon="person-outline"
+          title="Payment between"
+          subtitle={`To: ${merchantName}\nFrom: ${transaction.payerName}`}
+        />
 
-          <DetailRow
-            icon="attach-money"
-            title="Payment source"
-            subtitle={getPaymentSourceLabel(transaction)}
-          />
+        <DetailRow
+          icon="attach-money"
+          title="Payment source"
+          subtitle={getPaymentSourceLabel(transaction)}
+        />
 
-          <DetailRow
-            icon="receipt-long"
-            title="Fees"
-            subtitle={fees}
-            trailingIcon="info-outline"
-          />
+        <DetailRow icon="receipt-long" title="Fees" subtitle={fees} trailingIcon="info-outline" />
 
-          <DetailRow
-            icon="tag"
-            title="Transaction number"
-            subtitle={`#${transaction.transactionNumber}`}
-            trailingIcon="content-copy"
-            onTrailingPress={handleCopyTransactionNumber}
-          />
-        </ScrollView>
-      </SafeAreaView>
-    </Modal>
+        <DetailRow
+          icon="tag"
+          title="Transaction number"
+          subtitle={`#${transaction.transactionNumber}`}
+          trailingIcon="content-copy"
+          onTrailingPress={handleCopyTransactionNumber}
+        />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -155,6 +138,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: DASHBOARD_COLORS.background,
   },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
   scrollView: {
     flex: 1,
   },
@@ -162,19 +150,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 40,
   },
-  closeButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
-    marginLeft: -8,
-  },
   pressed: {
     opacity: 0.7,
   },
   summary: {
-    marginTop: 8,
     gap: 6,
   },
   payerName: {
