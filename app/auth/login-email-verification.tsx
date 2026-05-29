@@ -10,7 +10,9 @@ import { ScreenContainer } from '@/components/auth/screen-container';
 import { COLORS } from '@/constants/colors';
 import { useAuth } from '@/contexts/auth-context';
 import { isAuthDevBypassEnabled } from '@/lib/auth/config';
-import { ensureUserProfile, verifyEmailOtp } from '@/lib/auth/auth-service';
+import { fetchUserProfile, upsertUserProfile, verifyEmailOtp } from '@/lib/auth/auth-service';
+import { resolvePostAuthRoute } from '@/lib/auth/onboarding-routing';
+import { supabase } from '@/lib/supabase';
 
 const CODE_LENGTH = 6;
 
@@ -48,20 +50,38 @@ export default function LoginEmailVerificationScreen() {
       return;
     }
 
-    const { error: profileError } = await ensureUserProfile({
-      email,
-      accountType: 'personal',
-    });
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    if (profileError) {
+    if (!user) {
       setIsLoading(false);
-      setErrorMessage(profileError.message);
+      setErrorMessage('No authenticated user');
       return;
     }
 
+    const existing = await fetchUserProfile(user.id);
+
+    // First-time login (e.g. user signed up before profiles existed): create a minimal row
+    // defaulting to personal so they can complete onboarding.
+    if (!existing) {
+      const { error: upsertError } = await upsertUserProfile({
+        email,
+        account_type: 'personal',
+        onboarding_status: 'email_verified',
+      });
+
+      if (upsertError) {
+        setIsLoading(false);
+        setErrorMessage(upsertError.message);
+        return;
+      }
+    }
+
     await refreshProfile();
+    const profile = await fetchUserProfile(user.id);
     setIsLoading(false);
-    router.replace('/(tabs)/home');
+    router.replace(resolvePostAuthRoute(profile));
   }
 
   return (
@@ -87,7 +107,7 @@ export default function LoginEmailVerificationScreen() {
 
           {isAuthDevBypassEnabled ? (
             <Text style={styles.helperText}>
-              Dev mode: enter any 6-digit code to continue.
+              Dev mode: any 6-digit code works — no real Supabase user is created.
             </Text>
           ) : (
             <Text style={styles.helperText}>

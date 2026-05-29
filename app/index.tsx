@@ -6,16 +6,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/auth-context';
 import { COLORS } from '@/constants/colors';
 import { HachisuColors } from '@/constants/hachisu-colors';
+import { resolvePostAuthRoute } from '@/lib/auth/onboarding-routing';
 
 export default function LandingScreen() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, profile } = useAuth();
 
   useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      router.replace('/(tabs)/home');
-    }
-  }, [isAuthenticated, isLoading, router]);
+    if (isLoading || !isAuthenticated) return;
+    router.replace(resolvePostAuthRoute(profile));
+  }, [isAuthenticated, isLoading, profile, router]);
 
   if (isLoading) {
     return (
@@ -43,7 +43,7 @@ export default function LandingScreen() {
       </View>
 
       <View style={styles.copyArea}>
-        <Text style={styles.headline}>Accept bitcoin instantly</Text>
+        <Text style={styles.headline}>accept Bitcoin instantly</Text>
         <Text style={styles.supporting}>
           Ultra-low fees, high payment limits, industry grade security, available and transparent support.
         </Text>

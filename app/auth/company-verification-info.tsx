@@ -16,28 +16,21 @@ import { LabeledTextInput } from '@/components/auth/labeled-text-input';
 import { PrimaryButton } from '@/components/auth/primary-button';
 import { ScreenContainer } from '@/components/auth/screen-container';
 import { COLORS } from '@/constants/colors';
+import { useAuth } from '@/contexts/auth-context';
+import { completeOnboarding } from '@/lib/auth/auth-service';
 import {
-  formatEinInput,
+  INITIAL_COMPANY_VERIFICATION_FORM,
   isCompanyVerificationFormValid,
   type CompanyVerificationForm,
 } from '@/lib/company-verification';
 
-// TODO: Connect EIN and business information to production KYB provider.
-
-const INITIAL_FORM: CompanyVerificationForm = {
-  companyName: '',
-  streetAddress: '',
-  suite: '',
-  city: '',
-  state: '',
-  zipCode: '',
-  ein: '',
-};
-
 export default function CompanyVerificationInfoScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [form, setForm] = useState<CompanyVerificationForm>(INITIAL_FORM);
+  const { refreshProfile } = useAuth();
+  const [form, setForm] = useState<CompanyVerificationForm>(INITIAL_COMPANY_VERIFICATION_FORM);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isFormValid = useMemo(() => isCompanyVerificationFormValid(form), [form]);
 
@@ -48,12 +41,30 @@ export default function CompanyVerificationInfoScreen() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
-  function handleEinChange(value: string) {
-    updateField('ein', formatEinInput(value));
-  }
+  async function handleContinue() {
+    if (!isFormValid || isSaving) return;
 
-  function handleContinue() {
-    if (!isFormValid) return;
+    setIsSaving(true);
+    setErrorMessage(null);
+
+    const { error } = await completeOnboarding({
+      account_type: 'business',
+      business_name: form.companyName.trim(),
+      business_address: form.businessAddress.trim(),
+      business_website: form.businessWebsite.trim() || null,
+      business_country: form.businessCountry.trim(),
+      business_description: form.businessDescription.trim(),
+      expected_monthly_volume: form.expectedMonthlyVolume.trim(),
+    });
+
+    if (error) {
+      setIsSaving(false);
+      setErrorMessage(error.message);
+      return;
+    }
+
+    await refreshProfile();
+    setIsSaving(false);
     router.replace('/(tabs)/home');
   }
 
@@ -79,11 +90,11 @@ export default function CompanyVerificationInfoScreen() {
 
           <AuthTitleBlock
             title="Company information"
-            subtitle="Enter the information required to verify your business."
+            subtitle="Tell us about your business so we can set up your merchant account."
           />
 
           <Text style={styles.helperIntro}>
-            This information helps us verify your business and protect your account.
+            This information appears on your Profile Hub and helps us tailor your account.
           </Text>
 
           <View style={styles.form}>
@@ -96,65 +107,61 @@ export default function CompanyVerificationInfoScreen() {
               autoCorrect={false}
             />
             <LabeledTextInput
-              label="Business street address"
-              value={form.streetAddress}
-              onChangeText={(value) => updateField('streetAddress', value)}
-              placeholder="123 Main Street"
+              label="Business address"
+              value={form.businessAddress}
+              onChangeText={(value) => updateField('businessAddress', value)}
+              placeholder="123 Main Street, Suite 200, Atlanta, GA 30301"
+              autoCapitalize="words"
+              autoCorrect={false}
+              multiline
+            />
+            <LabeledTextInput
+              label="Business website (optional)"
+              value={form.businessWebsite}
+              onChangeText={(value) => updateField('businessWebsite', value.trim())}
+              placeholder="https://hachisu.com"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+            <LabeledTextInput
+              label="Business country"
+              value={form.businessCountry}
+              onChangeText={(value) => updateField('businessCountry', value)}
+              placeholder="United States"
               autoCapitalize="words"
               autoCorrect={false}
             />
             <LabeledTextInput
-              label="Suite, unit, etc. optional"
-              value={form.suite}
-              onChangeText={(value) => updateField('suite', value)}
-              placeholder="Suite 200"
-              autoCapitalize="words"
-              autoCorrect={false}
+              label="What does your business do?"
+              value={form.businessDescription}
+              onChangeText={(value) => updateField('businessDescription', value)}
+              placeholder="We sell specialty coffee online and in our Atlanta cafe."
+              autoCapitalize="sentences"
+              multiline
             />
             <LabeledTextInput
-              label="City"
-              value={form.city}
-              onChangeText={(value) => updateField('city', value)}
-              placeholder="Atlanta"
-              autoCapitalize="words"
+              label="Expected monthly payment volume"
+              value={form.expectedMonthlyVolume}
+              onChangeText={(value) => updateField('expectedMonthlyVolume', value)}
+              placeholder="$5,000 – $10,000"
+              autoCapitalize="none"
               autoCorrect={false}
             />
-            <LabeledTextInput
-              label="State"
-              value={form.state}
-              onChangeText={(value) => updateField('state', value)}
-              placeholder="GA"
-              autoCapitalize="characters"
-              autoCorrect={false}
-              maxLength={2}
-            />
-            <LabeledTextInput
-              label="ZIP code"
-              value={form.zipCode}
-              onChangeText={(value) => updateField('zipCode', value.replace(/\D/g, '').slice(0, 10))}
-              placeholder="30301"
-              keyboardType="number-pad"
-              maxLength={10}
-            />
-            <View>
-              <LabeledTextInput
-                label="Employer Identification Number"
-                value={form.ein}
-                onChangeText={handleEinChange}
-                placeholder="12-3456789"
-                keyboardType="number-pad"
-                maxLength={10}
-              />
-              <Text style={styles.fieldHelper}>Used only for business verification.</Text>
-            </View>
           </View>
 
+          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+
           <Text style={styles.securityNote}>
-            Your business information is used for verification and account security.
+            You can update these details later from your Profile Hub.
           </Text>
 
           <View style={styles.buttonArea}>
-            <PrimaryButton label="Continue" onPress={handleContinue} disabled={!isFormValid} />
+            <PrimaryButton
+              label={isSaving ? 'Saving…' : 'Continue'}
+              onPress={handleContinue}
+              disabled={!isFormValid || isSaving}
+            />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -187,11 +194,11 @@ const styles = StyleSheet.create({
   form: {
     gap: 12,
   },
-  fieldHelper: {
-    fontSize: 13,
-    color: COLORS.mutedText,
-    marginTop: 8,
-    paddingHorizontal: 4,
+  errorText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: COLORS.orange,
+    textAlign: 'center',
   },
   securityNote: {
     fontSize: 13,

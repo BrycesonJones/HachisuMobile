@@ -96,7 +96,7 @@ export default function PersonalEmailConfirmationScreen() {
 
           {isAuthDevBypassEnabled ? (
             <Text style={styles.helperText}>
-              Dev mode: enter any 6-digit code to continue.
+              Dev mode: any 6-digit code works — no real Supabase user is created.
             </Text>
           ) : (
             <Text style={styles.helperText}>Check your email for the 6-digit code.</Text>

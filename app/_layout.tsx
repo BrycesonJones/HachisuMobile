@@ -16,6 +16,22 @@ export default function RootLayout() {
           <Stack.Screen name="index" />
           <Stack.Screen name="auth" />
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="transaction-details"
+            options={{
+              presentation: 'fullScreenModal',
+              headerShown: false,
+              animation: 'slide_from_bottom',
+            }}
+          />
+          <Stack.Screen
+            name="account"
+            options={{
+              presentation: 'fullScreenModal',
+              headerShown: false,
+              animation: 'slide_from_bottom',
+            }}
+          />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         <StatusBar style="light" />

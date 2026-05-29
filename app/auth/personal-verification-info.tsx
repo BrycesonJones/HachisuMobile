@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -15,6 +15,8 @@ import { BackButton } from '@/components/auth/back-button';
 import { LabeledTextInput } from '@/components/auth/labeled-text-input';
 import { PrimaryButton } from '@/components/auth/primary-button';
 import { COLORS } from '@/constants/colors';
+import { useAuth } from '@/contexts/auth-context';
+import { completeOnboarding } from '@/lib/auth/auth-service';
 import {
   formatDateOfBirthInput,
   formatSsnLast4Input,
@@ -24,11 +26,35 @@ import {
   isValidZip,
 } from '@/utils/auth-validation';
 
-// TODO: Confirm whether full SSN or last 4 SSN is required for production KYC provider.
+// Note: DOB and SSN are collected for KYC UX parity but are intentionally NOT persisted to
+// user_profiles. They will be sent to a KYC provider in a future iteration.
+
+function buildPersonalAddress({
+  streetAddress,
+  apartment,
+  city,
+  state,
+  zipCode,
+}: {
+  streetAddress: string;
+  apartment: string;
+  city: string;
+  state: string;
+  zipCode: string;
+}): string {
+  const line1 = [streetAddress.trim(), apartment.trim()].filter(Boolean).join(', ');
+  const cityStateZip = [city.trim(), [state.trim(), zipCode.trim()].filter(Boolean).join(' ')]
+    .filter(Boolean)
+    .join(', ');
+  return [line1, cityStateZip].filter(Boolean).join(', ');
+}
 
 export default function PersonalVerificationInfoScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { refreshProfile } = useAuth();
+  const { phone: phoneParam } = useLocalSearchParams<{ phone?: string }>();
+  const phone = typeof phoneParam === 'string' ? phoneParam.trim() : '';
   const [fullName, setFullName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [streetAddress, setStreetAddress] = useState('');
@@ -37,6 +63,8 @@ export default function PersonalVerificationInfoScreen() {
   const [state, setState] = useState('');
   const [zipCode, setZipCode] = useState('');
   const [ssnLast4, setSsnLast4] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isFormValid = useMemo(
     () =>
@@ -58,8 +86,34 @@ export default function PersonalVerificationInfoScreen() {
     setSsnLast4(formatSsnLast4Input(value));
   }
 
-  function handleContinue() {
-    if (!isFormValid) return;
+  async function handleContinue() {
+    if (!isFormValid || isSaving) return;
+    setIsSaving(true);
+    setErrorMessage(null);
+
+    const personalAddress = buildPersonalAddress({
+      streetAddress,
+      apartment,
+      city,
+      state,
+      zipCode,
+    });
+
+    const { error } = await completeOnboarding({
+      account_type: 'personal',
+      full_name: fullName.trim(),
+      personal_address: personalAddress,
+      phone: phone || null,
+    });
+
+    if (error) {
+      setIsSaving(false);
+      setErrorMessage(error.message);
+      return;
+    }
+
+    await refreshProfile();
+    setIsSaving(false);
     router.replace('/(tabs)/home');
   }
 
@@ -167,8 +221,14 @@ export default function PersonalVerificationInfoScreen() {
               Your information is used for identity verification and account security.
             </Text>
 
+            {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+
             <View style={styles.buttonContainer}>
-              <PrimaryButton label="Continue" onPress={handleContinue} disabled={!isFormValid} />
+              <PrimaryButton
+                label={isSaving ? 'Saving…' : 'Continue'}
+                onPress={handleContinue}
+                disabled={!isFormValid || isSaving}
+              />
             </View>
           </View>
         </ScrollView>
@@ -228,5 +288,11 @@ const styles = StyleSheet.create({
   buttonContainer: {
     marginTop: 28,
     marginBottom: 24,
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: COLORS.orange,
+    textAlign: 'center',
   },
 });

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
+import { isAuthDevBypassEnabled, isProfileDebugEnabled } from '@/lib/auth/config';
 import type { Database } from '@/types/supabase';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -10,6 +11,23 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
     'Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY. Check your .env file.',
   );
+}
+
+if (__DEV__) {
+  console.log('[auth-mode]', {
+    devBypass: process.env.EXPO_PUBLIC_AUTH_DEV_BYPASS,
+    mode: isAuthDevBypassEnabled
+      ? 'LOCAL_DEV_BYPASS_NO_SUPABASE_WRITES'
+      : 'REAL_SUPABASE_AUTH',
+  });
+}
+
+if (isProfileDebugEnabled) {
+  console.log('[supabase-runtime]', {
+    url: supabaseUrl,
+    authDevBypass: isAuthDevBypassEnabled,
+    profileDebug: isProfileDebugEnabled,
+  });
 }
 
 const ssrSafeStorage = {

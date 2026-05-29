@@ -1,33 +1,28 @@
 export interface CompanyVerificationForm {
   companyName: string;
-  streetAddress: string;
-  suite: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  ein: string;
+  businessAddress: string;
+  businessWebsite: string;
+  businessCountry: string;
+  businessDescription: string;
+  expectedMonthlyVolume: string;
 }
 
-function digitCount(value: string): number {
-  return value.replace(/\D/g, '').length;
-}
+export const INITIAL_COMPANY_VERIFICATION_FORM: CompanyVerificationForm = {
+  companyName: '',
+  businessAddress: '',
+  businessWebsite: '',
+  businessCountry: '',
+  businessDescription: '',
+  expectedMonthlyVolume: '',
+};
 
-export function formatEinInput(value: string): string {
-  const digits = value.replace(/\D/g, '').slice(0, 9);
-  if (digits.length <= 2) return digits;
-  return `${digits.slice(0, 2)}-${digits.slice(2)}`;
-}
-
+/** Required fields: company name, address, country, description, monthly volume. Website is optional. */
 export function isCompanyVerificationFormValid(form: CompanyVerificationForm): boolean {
-  const einDigits = digitCount(form.ein);
-  const zipDigits = digitCount(form.zipCode);
-
   return (
     form.companyName.trim().length > 0 &&
-    form.streetAddress.trim().length > 0 &&
-    form.city.trim().length > 0 &&
-    form.state.trim().length > 0 &&
-    zipDigits >= 5 &&
-    einDigits === 9
+    form.businessAddress.trim().length > 0 &&
+    form.businessCountry.trim().length > 0 &&
+    form.businessDescription.trim().length > 0 &&
+    form.expectedMonthlyVolume.trim().length > 0
   );
 }

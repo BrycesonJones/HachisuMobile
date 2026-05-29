@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -13,12 +13,16 @@ const CODE_LENGTH = 6;
 
 export default function PersonalPhoneConfirmationScreen() {
   const router = useRouter();
+  const { phone } = useLocalSearchParams<{ phone?: string }>();
   const [code, setCode] = useState('');
   const isCodeComplete = code.length === CODE_LENGTH;
 
   function handleNext() {
     if (!isCodeComplete) return;
-    router.push('/auth/verify-personal');
+    router.push({
+      pathname: '/auth/verify-personal',
+      params: typeof phone === 'string' && phone.length > 0 ? { phone } : undefined,
+    });
   }
 
   return (

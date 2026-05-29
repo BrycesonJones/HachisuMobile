@@ -20,7 +20,10 @@ export default function PersonalPhoneScreen() {
 
   function handleNext() {
     if (!isPhoneValid) return;
-    router.push('/auth/personal-phone-confirmation');
+    router.push({
+      pathname: '/auth/personal-phone-confirmation',
+      params: { phone },
+    });
   }
 
   return (

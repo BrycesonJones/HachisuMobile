@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
 import { AuthProgressHeader } from '@/components/auth/auth-progress-header';
@@ -24,9 +24,13 @@ const PERSONAL_VERIFICATION_ROWS = [
 
 export default function VerifyPersonalScreen() {
   const router = useRouter();
+  const { phone } = useLocalSearchParams<{ phone?: string }>();
 
   function handleLetsGo() {
-    router.push('/auth/personal-verification-info');
+    router.push({
+      pathname: '/auth/personal-verification-info',
+      params: typeof phone === 'string' && phone.length > 0 ? { phone } : undefined,
+    });
   }
 
   return (

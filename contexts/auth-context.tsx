@@ -5,6 +5,7 @@ import {
   fetchUserProfile,
   signOut as authSignOut,
 } from '@/lib/auth/auth-service';
+import { isProfileDebugEnabled } from '@/lib/auth/config';
 import {
   activateDevAuth,
   clearDevAuth,
@@ -100,6 +101,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const {
         data: { session: initialSession },
       } = await supabase.auth.getSession();
+
+      if (isProfileDebugEnabled) {
+        console.log('[auth-session-check]', {
+          hasSession: initialSession != null,
+          userId: initialSession?.user?.id,
+          email: initialSession?.user?.email,
+        });
+      }
 
       if (!isMounted) return;
 

@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { AuthProgressHeader } from '@/components/auth/auth-progress-header';
@@ -11,6 +12,7 @@ import {
   PERSONAL_ONBOARDING_PROGRESS,
   PERSONAL_ONBOARDING_STEP_COUNT,
 } from '@/constants/personal-onboarding-progress';
+import { upsertUserProfile } from '@/lib/auth/auth-service';
 
 function LegalConsentText() {
   function handleLinkPress(_label: string) {
@@ -38,8 +40,25 @@ function LegalConsentText() {
 
 export default function PersonalCountryScreen() {
   const router = useRouter();
+  // TODO: replace with a real country picker; persisted value is the display string for now.
+  const [country] = useState('United States');
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  function handleAgree() {
+  async function handleAgree() {
+    if (isSaving) return;
+    setIsSaving(true);
+    setErrorMessage(null);
+
+    const { error } = await upsertUserProfile({ country });
+
+    if (error) {
+      setIsSaving(false);
+      setErrorMessage(error.message);
+      return;
+    }
+
+    setIsSaving(false);
     router.push('/auth/personal-phone');
   }
 
@@ -57,11 +76,17 @@ export default function PersonalCountryScreen() {
         centered
       />
 
-      <CountrySelectorCard label="Select your country" value="United States" />
+      <CountrySelectorCard label="Select your country" value={country} />
+
+      {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
       <View style={styles.footer}>
         <LegalConsentText />
-        <PrimaryButton label="Agree" onPress={handleAgree} />
+        <PrimaryButton
+          label={isSaving ? 'Saving…' : 'Agree'}
+          onPress={handleAgree}
+          disabled={isSaving}
+        />
       </View>
     </ScreenContainer>
   );
@@ -85,5 +110,11 @@ const styles = StyleSheet.create({
   link: {
     textDecorationLine: 'underline',
     color: COLORS.secondaryText,
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: COLORS.orange,
+    textAlign: 'center',
   },
 });

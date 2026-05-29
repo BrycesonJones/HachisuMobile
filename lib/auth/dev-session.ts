@@ -76,6 +76,19 @@ export function createInitialDevProfile(
     username: null,
     created_at: now,
     updated_at: now,
+    full_name: null,
+    phone: null,
+    country: null,
+    personal_address: null,
+    business_name: null,
+    business_address: null,
+    business_website: null,
+    business_country: null,
+    business_description: null,
+    expected_monthly_volume: null,
+    wallet_address: null,
+    wallet_connected: false,
+    onboarding_completed: onboardingStatus === 'onboarding_complete',
   };
 }
 
@@ -93,9 +106,9 @@ export function activateDevAuth(
   return { session, profile };
 }
 
-export function updateDevProfile(
-  updates: Partial<Pick<UserProfile, 'username' | 'onboarding_status'>>,
-): UserProfile | null {
+export type DevProfileUpdates = Partial<Omit<UserProfile, 'id' | 'created_at'>>;
+
+export function updateDevProfile(updates: DevProfileUpdates): UserProfile | null {
   if (!activeDevProfile) {
     return null;
   }
