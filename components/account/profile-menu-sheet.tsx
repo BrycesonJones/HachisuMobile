@@ -23,7 +23,7 @@ interface ProfileMenuItem {
 
 function buildMenuItems(
   accountType: AccountType | null,
-  walletConnected: boolean,
+  walletTag: string,
 ): readonly ProfileMenuItem[] {
   const profileItem: ProfileMenuItem =
     accountType === 'business'
@@ -37,7 +37,7 @@ function buildMenuItems(
       id: 'wallet',
       label: 'Wallet',
       icon: 'account-balance-wallet',
-      tag: walletConnected ? 'Connected' : 'Not connected',
+      tag: walletTag,
     },
     { id: 'documents', label: 'Documents', icon: 'description' },
     { id: 'api-keys', label: 'API Keys', icon: 'vpn-key' },
@@ -48,24 +48,27 @@ interface ProfileMenuSheetProps {
   visible: boolean;
   display: ProfileDisplay;
   accountType: AccountType | null;
-  walletConnected: boolean;
+  walletTag: string;
   onClose: () => void;
   onSelect: (itemId: ProfileMenuItemId) => void;
   onLogout: () => void;
+  /** iOS: fires after the sheet finishes dismissing. Used to defer navigation. */
+  onDismiss?: () => void;
 }
 
 export function ProfileMenuSheet({
   visible,
   display,
   accountType,
-  walletConnected,
+  walletTag,
   onClose,
   onSelect,
   onLogout,
+  onDismiss,
 }: ProfileMenuSheetProps) {
   const menuItems = useMemo(
-    () => buildMenuItems(accountType, walletConnected),
-    [accountType, walletConnected],
+    () => buildMenuItems(accountType, walletTag),
+    [accountType, walletTag],
   );
   const insets = useSafeAreaInsets();
 
@@ -75,6 +78,7 @@ export function ProfileMenuSheet({
       transparent
       animationType="slide"
       onRequestClose={onClose}
+      onDismiss={onDismiss}
       statusBarTranslucent>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable

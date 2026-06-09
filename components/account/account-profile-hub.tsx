@@ -1,7 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Platform, Pressable, StyleSheet } from 'react-native';
 
 import { getProfileDisplay } from '@/components/account/profile-display-utils';
 import {
@@ -12,6 +12,10 @@ import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
 import { HachisuColors } from '@/constants/hachisu-colors';
 import { useAuth } from '@/contexts/auth-context';
 import type { AccountType } from '@/types/user-profile';
+import {
+  walletMenuTag,
+  walletStoreStatusFromProfile,
+} from '@/types/wallet-store';
 
 function resolveRoute(id: ProfileMenuItemId, accountType: AccountType | null): string {
   // TODO: replace stubs in app/account/* with real screens once they exist.
@@ -40,10 +44,24 @@ export function AccountProfileHub() {
   const router = useRouter();
   const { profile, user, signOut } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  // Route to navigate to once the sheet has finished dismissing. iOS cannot
+  // present the account fullScreenModal while this RN Modal is still dismissing,
+  // so we defer the push instead of firing it in the same tick as the close.
+  const pendingRouteRef = useRef<string | null>(null);
+
+  const navigatePending = useCallback(() => {
+    const route = pendingRouteRef.current;
+    if (!route) return;
+    pendingRouteRef.current = null;
+    router.push(route as never);
+  }, [router]);
 
   const display = useMemo(() => getProfileDisplay(profile, user), [profile, user]);
   const accountType = useMemo(() => toAccountType(profile?.account_type), [profile?.account_type]);
-  const walletConnected = profile?.wallet_connected === true;
+  const walletTag = useMemo(
+    () => walletMenuTag(walletStoreStatusFromProfile(profile), profile != null),
+    [profile],
+  );
 
   function handleOpen() {
     setIsOpen(true);
@@ -54,8 +72,18 @@ export function AccountProfileHub() {
   }
 
   function handleSelect(itemId: ProfileMenuItemId) {
+    pendingRouteRef.current = resolveRoute(itemId, accountType);
     setIsOpen(false);
-    router.push(resolveRoute(itemId, accountType) as never);
+
+    if (Platform.OS === 'ios') {
+      // Primary signal is the Modal's onDismiss; this timeout is a fallback in
+      // case onDismiss doesn't fire. navigatePending is idempotent (clears the
+      // ref), so whichever runs first wins and the other is a no-op.
+      setTimeout(navigatePending, 400);
+    } else {
+      // Android Modal has no onDismiss and no present-while-dismissing limit.
+      requestAnimationFrame(navigatePending);
+    }
   }
 
   async function handleLogout() {
@@ -84,10 +112,11 @@ export function AccountProfileHub() {
         visible={isOpen}
         display={display}
         accountType={accountType}
-        walletConnected={walletConnected}
+        walletTag={walletTag}
         onClose={handleClose}
         onSelect={handleSelect}
         onLogout={handleLogout}
+        onDismiss={navigatePending}
       />
     </>
   );
