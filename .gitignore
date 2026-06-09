@@ -56,3 +56,8 @@ app-example
 
 # cursor debug logs
 .cursor/debug-*.log
+
+# supabase cli local state (keep migrations/functions, ignore temp + local secrets)
+supabase/.temp/
+supabase/.branches/
+supabase/functions/.env
