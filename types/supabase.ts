@@ -47,9 +47,56 @@ export type Database = {
         };
         Relationships: [];
       };
+      btcpay_store_provisioning_events: {
+        Row: {
+          btcpay_store_id: string | null;
+          business_id: string | null;
+          created_at: string;
+          event_type: string;
+          id: string;
+          message: string | null;
+          raw_error: Json | null;
+          status: string;
+          user_id: string;
+        };
+        Insert: {
+          btcpay_store_id?: string | null;
+          business_id?: string | null;
+          created_at?: string;
+          event_type: string;
+          id?: string;
+          message?: string | null;
+          raw_error?: Json | null;
+          status: string;
+          user_id: string;
+        };
+        Update: {
+          btcpay_store_id?: string | null;
+          business_id?: string | null;
+          created_at?: string;
+          event_type?: string;
+          id?: string;
+          message?: string | null;
+          raw_error?: Json | null;
+          status?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'btcpay_store_provisioning_events_business_id_fkey';
+            columns: ['business_id'];
+            isOneToOne: false;
+            referencedRelation: 'user_profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       user_profiles: {
         Row: {
           account_type: string;
+          btcpay_store_id: string | null;
+          btcpay_store_name: string | null;
+          btcpay_user_id: string | null;
           business_address: string | null;
           business_country: string | null;
           business_description: string | null;
@@ -57,21 +104,31 @@ export type Database = {
           business_website: string | null;
           country: string | null;
           created_at: string;
+          display_name: string | null;
           email: string;
           expected_monthly_volume: string | null;
           full_name: string | null;
           id: string;
+          lightning_provider: string | null;
+          lightning_status: string;
           onboarding_completed: boolean;
           onboarding_status: string;
+          onchain_provider: string | null;
+          onchain_status: string;
           personal_address: string | null;
           phone: string | null;
+          store_provisioning_status: string;
           updated_at: string;
           username: string | null;
           wallet_address: string | null;
           wallet_connected: boolean;
+          wallet_status: string;
         };
         Insert: {
           account_type: string;
+          btcpay_store_id?: string | null;
+          btcpay_store_name?: string | null;
+          btcpay_user_id?: string | null;
           business_address?: string | null;
           business_country?: string | null;
           business_description?: string | null;
@@ -79,21 +136,31 @@ export type Database = {
           business_website?: string | null;
           country?: string | null;
           created_at?: string;
+          display_name?: string | null;
           email: string;
           expected_monthly_volume?: string | null;
           full_name?: string | null;
           id: string;
+          lightning_provider?: string | null;
+          lightning_status?: string;
           onboarding_completed?: boolean;
           onboarding_status?: string;
+          onchain_provider?: string | null;
+          onchain_status?: string;
           personal_address?: string | null;
           phone?: string | null;
+          store_provisioning_status?: string;
           updated_at?: string;
           username?: string | null;
           wallet_address?: string | null;
           wallet_connected?: boolean;
+          wallet_status?: string;
         };
         Update: {
           account_type?: string;
+          btcpay_store_id?: string | null;
+          btcpay_store_name?: string | null;
+          btcpay_user_id?: string | null;
           business_address?: string | null;
           business_country?: string | null;
           business_description?: string | null;
@@ -101,18 +168,25 @@ export type Database = {
           business_website?: string | null;
           country?: string | null;
           created_at?: string;
+          display_name?: string | null;
           email?: string;
           expected_monthly_volume?: string | null;
           full_name?: string | null;
           id?: string;
+          lightning_provider?: string | null;
+          lightning_status?: string;
           onboarding_completed?: boolean;
           onboarding_status?: string;
+          onchain_provider?: string | null;
+          onchain_status?: string;
           personal_address?: string | null;
           phone?: string | null;
+          store_provisioning_status?: string;
           updated_at?: string;
           username?: string | null;
           wallet_address?: string | null;
           wallet_connected?: boolean;
+          wallet_status?: string;
         };
         Relationships: [];
       };

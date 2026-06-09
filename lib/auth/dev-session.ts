@@ -89,6 +89,16 @@ export function createInitialDevProfile(
     wallet_address: null,
     wallet_connected: false,
     onboarding_completed: onboardingStatus === 'onboarding_complete',
+    display_name: null,
+    btcpay_user_id: null,
+    btcpay_store_id: null,
+    btcpay_store_name: null,
+    store_provisioning_status: 'not_started',
+    wallet_status: 'not_connected',
+    lightning_status: 'not_connected',
+    lightning_provider: null,
+    onchain_status: 'not_connected',
+    onchain_provider: null,
   };
 }
 
