@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AccountProfileHub } from '@/components/account/account-profile-hub';
 import { CurrencySelect } from '@/components/account/currency-select';
 import { COLORS } from '@/constants/colors';
 import { DEFAULT_CURRENCY } from '@/constants/currencies';
@@ -70,6 +71,7 @@ export default function CreateStoreScreen() {
           <MaterialIcons name="chevron-left" size={24} color={COLORS.primaryText} />
           <Text style={styles.backLabel}>Back</Text>
         </Pressable>
+        <AccountProfileHub />
       </View>
 
       <KeyboardAvoidingView
@@ -147,6 +149,7 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 12,
     paddingTop: 8,
     paddingBottom: 8,

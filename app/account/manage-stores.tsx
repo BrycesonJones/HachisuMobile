@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AccountProfileHub } from '@/components/account/account-profile-hub';
 import { COLORS } from '@/constants/colors';
 import { useMerchantStores } from '@/hooks/use-merchant-stores';
 import { merchantStoreStatusLabel, type MerchantStore } from '@/types/merchant-store';
@@ -45,6 +46,7 @@ export default function ManageStoresScreen() {
           <MaterialIcons name="chevron-left" size={24} color={COLORS.primaryText} />
           <Text style={styles.backLabel}>Back</Text>
         </Pressable>
+        <AccountProfileHub />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -124,6 +126,7 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 12,
     paddingTop: 8,
     paddingBottom: 8,
