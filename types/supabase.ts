@@ -165,6 +165,9 @@ export type Database = {
       user_profiles: {
         Row: {
           account_type: string;
+          default_merchant_store_id: string | null;
+          has_stores: boolean;
+          store_count: number;
           btcpay_store_id: string | null;
           btcpay_store_name: string | null;
           btcpay_user_id: string | null;
@@ -197,6 +200,9 @@ export type Database = {
         };
         Insert: {
           account_type: string;
+          default_merchant_store_id?: string | null;
+          has_stores?: boolean;
+          store_count?: number;
           btcpay_store_id?: string | null;
           btcpay_store_name?: string | null;
           btcpay_user_id?: string | null;
@@ -229,6 +235,9 @@ export type Database = {
         };
         Update: {
           account_type?: string;
+          default_merchant_store_id?: string | null;
+          has_stores?: boolean;
+          store_count?: number;
           btcpay_store_id?: string | null;
           btcpay_store_name?: string | null;
           btcpay_user_id?: string | null;
@@ -259,7 +268,15 @@ export type Database = {
           wallet_connected?: boolean;
           wallet_status?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: 'user_profiles_default_merchant_store_id_fkey';
+            columns: ['default_merchant_store_id'];
+            isOneToOne: false;
+            referencedRelation: 'merchant_stores';
+            referencedColumns: ['id'];
+          },
+        ];
       };
     };
     Views: {

@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CurrencySelect } from '@/components/account/currency-select';
 import { COLORS } from '@/constants/colors';
 import { DEFAULT_CURRENCY } from '@/constants/currencies';
+import { useAuth } from '@/contexts/auth-context';
 import { createMerchantStore } from '@/lib/btcpay/stores';
 
 const NAME_MAX = 50;
@@ -26,6 +27,7 @@ const NAME_MAX = 50;
 // here; the BTCPay store is only provisioned once the merchant submits.
 export default function CreateStoreScreen() {
   const router = useRouter();
+  const { refreshProfile } = useAuth();
   const [name, setName] = useState('');
   const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
   const [submitting, setSubmitting] = useState(false);
@@ -46,7 +48,10 @@ export default function CreateStoreScreen() {
       setSubmitting(false);
       return;
     }
-    // Success — go back; the previous screen refetches its store list on focus.
+    // Refresh the cached profile so the profile-menu Wallet tag (driven by the
+    // user_profiles summary) reflects the new store; the previous screen also
+    // refetches its store list on focus.
+    await refreshProfile();
     setSubmitting(false);
     router.back();
   }

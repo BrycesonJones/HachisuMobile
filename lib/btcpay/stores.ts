@@ -13,6 +13,29 @@ export interface CreateMerchantStoreResult {
   error: string | null;
 }
 
+// Dev-mode mirror of the backend syncUserStoreSummary: recompute the dev
+// profile's summary fields from the in-memory dev store registry.
+function syncDevProfileSummary(): void {
+  const all = getDevStores();
+  const defaultStore = all.find((s) => s.is_default) ?? all[0] ?? null;
+  const hasStores = all.length > 0;
+  const hasDest = all.some((s) => s.wallet_status === 'payment_destination_connected');
+
+  updateDevProfile({
+    store_count: all.length,
+    has_stores: hasStores,
+    default_merchant_store_id: defaultStore?.id ?? null,
+    btcpay_store_id: defaultStore?.btcpay_store_id ?? null,
+    btcpay_store_name: defaultStore?.btcpay_store_name ?? defaultStore?.name ?? null,
+    store_provisioning_status: hasStores ? 'active' : 'not_started',
+    wallet_status: !hasStores
+      ? 'not_connected'
+      : hasDest
+        ? 'payment_destination_connected'
+        : 'store_created',
+  });
+}
+
 /** Fetches the authenticated merchant's stores (default first, then oldest). */
 export async function fetchMerchantStores(): Promise<MerchantStore[]> {
   if (isDevAuthActive()) {
@@ -75,15 +98,9 @@ export async function createMerchantStore(
       updated_at: now,
     });
 
-    if (isDefault) {
-      updateDevProfile({
-        btcpay_store_id: `dev-btcpay-${seq}`,
-        btcpay_store_name: name,
-        store_provisioning_status: 'active',
-        wallet_status: 'store_created',
-      });
-    }
-
+    // Recompute the dev profile summary from all dev stores (mirrors the
+    // backend syncUserStoreSummary), so store_count updates for the 2nd+ store.
+    syncDevProfileSummary();
     return { error: null };
   }
 

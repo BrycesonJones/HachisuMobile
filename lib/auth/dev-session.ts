@@ -99,6 +99,9 @@ export function createInitialDevProfile(
     lightning_provider: null,
     onchain_status: 'not_connected',
     onchain_provider: null,
+    store_count: 0,
+    has_stores: false,
+    default_merchant_store_id: null,
   };
 }
 
