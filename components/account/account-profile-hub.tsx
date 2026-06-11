@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet } from 'react-native';
 
@@ -42,6 +42,7 @@ function toAccountType(value: string | null | undefined): AccountType | null {
 
 export function AccountProfileHub() {
   const router = useRouter();
+  const pathname = usePathname();
   const { profile, user, signOut } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   // Route to navigate to once the sheet has finished dismissing. iOS cannot
@@ -72,8 +73,14 @@ export function AccountProfileHub() {
   }
 
   function handleSelect(itemId: ProfileMenuItemId) {
-    pendingRouteRef.current = resolveRoute(itemId, accountType);
+    const route = resolveRoute(itemId, accountType);
     setIsOpen(false);
+
+    // Already on the selected screen — just close the menu, don't push a
+    // duplicate (the hub now lives on the store screens too).
+    if (route === pathname) return;
+
+    pendingRouteRef.current = route;
 
     if (Platform.OS === 'ios') {
       // Primary signal is the Modal's onDismiss; this timeout is a fallback in
