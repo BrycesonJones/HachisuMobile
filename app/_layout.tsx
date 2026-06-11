@@ -27,9 +27,13 @@ export default function RootLayout() {
           <Stack.Screen
             name="account"
             options={{
-              presentation: 'fullScreenModal',
+              // Standard push (slide-from-right) rather than a fullScreenModal:
+              // iOS reports a 0 top safe-area inset inside a fullScreenModal,
+              // which pushes screen headers under the status bar / Dynamic Island
+              // and makes their back buttons untappable. A push also restores the
+              // native swipe-back gesture.
               headerShown: false,
-              animation: 'slide_from_bottom',
+              animation: 'slide_from_right',
             }}
           />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
