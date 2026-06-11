@@ -2,8 +2,8 @@
 //
 // Phase 1.5: configurable, multi-store creation. The merchant supplies a store
 // name + default currency; we create a BTCPay store via Greenfield, persist it
-// to public.merchant_stores, and (for the user's first store) mirror it into the
-// user_profiles "default store summary" columns for backward compatibility.
+// to public.merchant_stores, then recompute the user_profiles "default store
+// summary" (store_count, default store fields) via syncUserStoreSummary.
 //
 // BTCPay auto-selects the recommended price source (Kraken) from the default
 // currency — there is no Greenfield field for it — so we only send name +
@@ -24,6 +24,7 @@ import {
   createStore,
   getBtcpayConfig,
 } from '../_shared/btcpay-client.ts';
+import { syncUserStoreSummary } from '../_shared/store-summary.ts';
 
 // Supported default currencies. UI currently offers USD only; this list is the
 // backend allow-list and is intentionally easy to extend as the UI grows.
@@ -213,19 +214,13 @@ Deno.serve(async (req) => {
     );
   }
 
-  // 8. First store mirrors into user_profiles summary (backward compatibility).
-  if (isDefault) {
-    await admin
-      .from('user_profiles')
-      .update({
-        btcpay_store_id: store.id,
-        btcpay_store_name: store.name ?? name,
-        store_provisioning_status: 'active',
-        wallet_status: 'store_created',
-        lightning_status: 'not_connected',
-        onchain_status: 'not_connected',
-      })
-      .eq('id', user.id);
+  // 8. Recompute the user_profiles default-store summary from merchant_stores
+  // after EVERY store creation (so store_count etc. update for the 2nd+ store,
+  // without overwriting the default summary unless the default actually changed).
+  try {
+    await syncUserStoreSummary(admin, user.id);
+  } catch (err) {
+    console.error('[create-store] summary sync failed:', String(err));
   }
 
   await logEvent({
