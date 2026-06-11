@@ -91,6 +91,77 @@ export type Database = {
           },
         ];
       };
+      merchant_stores: {
+        Row: {
+          btcpay_store_id: string;
+          btcpay_store_name: string | null;
+          created_at: string;
+          default_currency: string;
+          display_name: string | null;
+          id: string;
+          is_default: boolean;
+          lightning_provider: string | null;
+          lightning_status: string;
+          name: string;
+          onchain_provider: string | null;
+          onchain_status: string;
+          preferred_price_source: string;
+          profile_id: string | null;
+          store_provisioning_status: string;
+          updated_at: string;
+          user_id: string;
+          wallet_status: string;
+        };
+        Insert: {
+          btcpay_store_id: string;
+          btcpay_store_name?: string | null;
+          created_at?: string;
+          default_currency?: string;
+          display_name?: string | null;
+          id?: string;
+          is_default?: boolean;
+          lightning_provider?: string | null;
+          lightning_status?: string;
+          name: string;
+          onchain_provider?: string | null;
+          onchain_status?: string;
+          preferred_price_source?: string;
+          profile_id?: string | null;
+          store_provisioning_status?: string;
+          updated_at?: string;
+          user_id: string;
+          wallet_status?: string;
+        };
+        Update: {
+          btcpay_store_id?: string;
+          btcpay_store_name?: string | null;
+          created_at?: string;
+          default_currency?: string;
+          display_name?: string | null;
+          id?: string;
+          is_default?: boolean;
+          lightning_provider?: string | null;
+          lightning_status?: string;
+          name?: string;
+          onchain_provider?: string | null;
+          onchain_status?: string;
+          preferred_price_source?: string;
+          profile_id?: string | null;
+          store_provisioning_status?: string;
+          updated_at?: string;
+          user_id?: string;
+          wallet_status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'merchant_stores_profile_id_fkey';
+            columns: ['profile_id'];
+            isOneToOne: false;
+            referencedRelation: 'user_profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       user_profiles: {
         Row: {
           account_type: string;

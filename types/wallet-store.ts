@@ -83,7 +83,7 @@ export function walletMenuTag(
       return 'Store ready';
     case 'not_started':
     default:
-      return 'Not set up';
+      return 'Set up store';
   }
 }
 
