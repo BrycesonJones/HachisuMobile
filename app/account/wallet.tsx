@@ -1,8 +1,8 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useCallback } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StatusBar,
@@ -13,44 +13,30 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { COLORS } from '@/constants/colors';
-import { useAuth } from '@/contexts/auth-context';
-import { provisionBtcpayStore } from '@/lib/btcpay/provision-store';
-import {
-  storeStatusLabel,
-  walletStoreStatusFromProfile,
-} from '@/types/wallet-store';
+import { useMerchantStores } from '@/hooks/use-merchant-stores';
+import { storeCountLabel } from '@/types/merchant-store';
 
-// Phase 1: store provisioning + status only. Lightning / on-chain destination
-// connection ships in a later phase — those actions are intentionally disabled.
+// Phase 1.5: multi-store. The Store section reflects how many stores exist and
+// the default store. Lightning / on-chain destinations ship in a later phase.
 export default function WalletScreen() {
   const router = useRouter();
-  const { profile, refreshProfile } = useAuth();
-  const [isProvisioning, setIsProvisioning] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { summary, loading, error, refetch } = useMerchantStores();
 
-  const status = useMemo(
-    () => walletStoreStatusFromProfile(profile),
-    [profile],
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch]),
   );
 
-  const storeReady = status.storeProvisioningStatus === 'active' && !!status.btcpayStoreId;
-  const isProvisioningState = status.storeProvisioningStatus === 'provisioning';
-  const showCreateButton = !storeReady && !isProvisioningState;
-
-  async function handleCreateStore() {
-    if (isProvisioning) return;
-    setIsProvisioning(true);
-    setErrorMessage(null);
-
-    const result = await provisionBtcpayStore();
-
-    if (result.error) {
-      setErrorMessage(result.error);
+  function handleBack() {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/home');
     }
-    // Re-sync the profile so the Store status + Wallet row reflect the new state.
-    await refreshProfile();
-    setIsProvisioning(false);
   }
+
+  const { defaultStore, hasAnyStore } = summary;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -58,7 +44,7 @@ export default function WalletScreen() {
 
       <View style={styles.headerRow}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={handleBack}
           style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
           accessibilityRole="button"
           accessibilityLabel="Go back"
@@ -74,85 +60,76 @@ export default function WalletScreen() {
           Choose where your customer payments should settle.
         </Text>
 
-        {/* Store */}
-        <Section
-          icon="storefront"
-          title="Store"
-          statusLabel={isProvisioning ? 'Creating store…' : storeStatusLabel(status)}
-          statusTone={storeReady ? 'ready' : status.storeProvisioningStatus === 'failed' ? 'error' : 'neutral'}>
-          {storeReady ? (
-            <Text style={styles.readyText}>
-              BTCPay store is ready.{'\n'}Next: connect a payment destination.
+        {/* Stores */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <MaterialIcons name="storefront" size={20} color={COLORS.primaryText} />
+            <Text style={styles.cardTitle}>Stores</Text>
+          </View>
+
+          <Text style={styles.statusLine}>
+            Status:{' '}
+            <Text style={[styles.statusValue, hasAnyStore && styles.statusReady]}>
+              {loading && !hasAnyStore ? 'Loading…' : storeCountLabel(summary)}
             </Text>
+          </Text>
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+          {defaultStore ? (
+            <View style={styles.defaultStoreBox}>
+              <Text style={styles.defaultStoreLabel}>Default Store</Text>
+              <Text style={styles.defaultStoreName}>{defaultStore.name}</Text>
+              <Text style={styles.defaultStoreMeta}>
+                Currency: {defaultStore.default_currency}
+              </Text>
+            </View>
           ) : null}
 
-          {showCreateButton ? (
+          <Pressable
+            onPress={() => router.push('/account/create-store')}
+            style={({ pressed }) => [styles.primaryButton, pressed && styles.primaryButtonPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Create Store">
+            <Text style={styles.primaryButtonText}>Create Store</Text>
+          </Pressable>
+
+          {hasAnyStore ? (
             <Pressable
-              onPress={handleCreateStore}
-              disabled={isProvisioning}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                (pressed || isProvisioning) && styles.primaryButtonPressed,
-              ]}
+              onPress={() => router.push('/account/manage-stores')}
+              style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
               accessibilityRole="button"
-              accessibilityLabel="Create Bitcoin Store">
-              {isProvisioning ? (
-                <ActivityIndicator color={COLORS.background} />
-              ) : (
-                <Text style={styles.primaryButtonText}>Create Bitcoin Store</Text>
-              )}
+              accessibilityLabel="Manage Stores">
+              <Text style={styles.secondaryButtonText}>Manage Stores</Text>
             </Pressable>
           ) : null}
-
-          {isProvisioningState && !isProvisioning ? (
-            <Text style={styles.hintText}>Your store is being created…</Text>
-          ) : null}
-
-          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
-        </Section>
+        </View>
 
         {/* Lightning — Phase 2 */}
-        <Section
+        <ComingSoonSection
           icon="bolt"
           title="Lightning"
-          statusLabel="Not connected"
-          statusTone="neutral">
-          <DisabledAction label="Connect Strike" />
-          <Text style={styles.comingSoon}>Coming soon</Text>
-        </Section>
+          actionLabel="Connect Strike"
+        />
 
         {/* On-chain — Phase 2 */}
-        <Section
+        <ComingSoonSection
           icon="link"
           title="On-chain Bitcoin"
-          statusLabel="Not connected"
-          statusTone="neutral">
-          <DisabledAction label="Connect BTC Wallet" />
-          <Text style={styles.comingSoon}>Coming soon</Text>
-        </Section>
+          actionLabel="Connect BTC Wallet"
+        />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-type StatusTone = 'ready' | 'error' | 'neutral';
-
-interface SectionProps {
+interface ComingSoonSectionProps {
   icon: keyof typeof MaterialIcons.glyphMap;
   title: string;
-  statusLabel: string;
-  statusTone: StatusTone;
-  children?: React.ReactNode;
+  actionLabel: string;
 }
 
-function Section({ icon, title, statusLabel, statusTone, children }: SectionProps) {
-  const toneColor =
-    statusTone === 'ready'
-      ? COLORS.primary
-      : statusTone === 'error'
-        ? ERROR_COLOR
-        : COLORS.secondaryText;
-
+function ComingSoonSection({ icon, title, actionLabel }: ComingSoonSectionProps) {
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -160,21 +137,16 @@ function Section({ icon, title, statusLabel, statusTone, children }: SectionProp
         <Text style={styles.cardTitle}>{title}</Text>
       </View>
       <Text style={styles.statusLine}>
-        Status: <Text style={[styles.statusValue, { color: toneColor }]}>{statusLabel}</Text>
+        Status: <Text style={styles.statusValue}>Not connected</Text>
       </Text>
-      {children}
-    </View>
-  );
-}
-
-function DisabledAction({ label }: { label: string }) {
-  return (
-    <View
-      style={styles.disabledButton}
-      accessibilityRole="button"
-      accessibilityState={{ disabled: true }}
-      accessibilityLabel={`${label} (coming soon)`}>
-      <Text style={styles.disabledButtonText}>{label}</Text>
+      <View
+        style={styles.disabledButton}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: true }}
+        accessibilityLabel={`${actionLabel} (coming soon)`}>
+        <Text style={styles.disabledButtonText}>{actionLabel}</Text>
+      </View>
+      <Text style={styles.comingSoon}>Coming soon</Text>
     </View>
   );
 }
@@ -251,23 +223,40 @@ const styles = StyleSheet.create({
   },
   statusValue: {
     fontWeight: '600',
-  },
-  readyText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: COLORS.primaryText,
-    lineHeight: 20,
-  },
-  hintText: {
-    marginTop: 12,
-    fontSize: 13,
     color: COLORS.secondaryText,
+  },
+  statusReady: {
+    color: COLORS.primary,
   },
   errorText: {
     marginTop: 12,
     fontSize: 13,
     color: ERROR_COLOR,
     lineHeight: 18,
+  },
+  defaultStoreBox: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: COLORS.cardAlt,
+  },
+  defaultStoreLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.secondaryText,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  defaultStoreName: {
+    marginTop: 4,
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.primaryText,
+  },
+  defaultStoreMeta: {
+    marginTop: 2,
+    fontSize: 13,
+    color: COLORS.secondaryText,
   },
   primaryButton: {
     marginTop: 16,
@@ -278,12 +267,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryButtonPressed: {
-    opacity: 0.8,
+    opacity: 0.85,
   },
   primaryButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.background,
+  },
+  secondaryButton: {
+    marginTop: 10,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryButtonPressed: {
+    opacity: 0.7,
+  },
+  secondaryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.primary,
   },
   disabledButton: {
     marginTop: 14,
