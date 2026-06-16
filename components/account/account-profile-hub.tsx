@@ -24,10 +24,10 @@ function resolveRoute(id: ProfileMenuItemId, accountType: AccountType | null): s
       return accountType === 'business'
         ? '/account/business-profile'
         : '/account/personal-profile';
-    case 'payment-settings':
-      return '/account/payment-settings';
-    case 'wallet':
-      return '/account/wallet';
+    case 'wallets':
+      return '/account/wallets';
+    case 'stores':
+      return '/account/stores';
     case 'documents':
       return '/account/documents';
     case 'api-keys':
@@ -59,7 +59,7 @@ export function AccountProfileHub() {
 
   const display = useMemo(() => getProfileDisplay(profile, user), [profile, user]);
   const accountType = useMemo(() => toAccountType(profile?.account_type), [profile?.account_type]);
-  const walletTag = useMemo(
+  const storesTag = useMemo(
     () => walletMenuTag(walletStoreStatusFromProfile(profile), profile != null),
     [profile],
   );
@@ -119,7 +119,7 @@ export function AccountProfileHub() {
         visible={isOpen}
         display={display}
         accountType={accountType}
-        walletTag={walletTag}
+        storesTag={storesTag}
         onClose={handleClose}
         onSelect={handleSelect}
         onLogout={handleLogout}

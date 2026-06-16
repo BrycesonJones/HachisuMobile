@@ -19,7 +19,7 @@ import { storeCountLabel } from '@/types/merchant-store';
 
 // Phase 1.5: multi-store. The Store section reflects how many stores exist and
 // the default store. Lightning / on-chain destinations ship in a later phase.
-export default function WalletScreen() {
+export default function StoresScreen() {
   const router = useRouter();
   const { summary, loading, error, refetch } = useMerchantStores();
 
@@ -107,49 +107,8 @@ export default function WalletScreen() {
           ) : null}
         </View>
 
-        {/* Lightning — Phase 2 */}
-        <ComingSoonSection
-          icon="bolt"
-          title="Lightning"
-          actionLabel="Connect Strike"
-        />
-
-        {/* On-chain — Phase 2 */}
-        <ComingSoonSection
-          icon="link"
-          title="On-chain Bitcoin"
-          actionLabel="Connect BTC Wallet"
-        />
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-interface ComingSoonSectionProps {
-  icon: keyof typeof MaterialIcons.glyphMap;
-  title: string;
-  actionLabel: string;
-}
-
-function ComingSoonSection({ icon, title, actionLabel }: ComingSoonSectionProps) {
-  return (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <MaterialIcons name={icon} size={20} color={COLORS.primaryText} />
-        <Text style={styles.cardTitle}>{title}</Text>
-      </View>
-      <Text style={styles.statusLine}>
-        Status: <Text style={styles.statusValue}>Not connected</Text>
-      </Text>
-      <View
-        style={styles.disabledButton}
-        accessibilityRole="button"
-        accessibilityState={{ disabled: true }}
-        accessibilityLabel={`${actionLabel} (coming soon)`}>
-        <Text style={styles.disabledButtonText}>{actionLabel}</Text>
-      </View>
-      <Text style={styles.comingSoon}>Coming soon</Text>
-    </View>
   );
 }
 
@@ -293,26 +252,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.primary,
-  },
-  disabledButton: {
-    marginTop: 14,
-    height: 46,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: COLORS.cardBorder,
-    backgroundColor: COLORS.cardAlt,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  disabledButtonText: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: COLORS.mutedText,
-  },
-  comingSoon: {
-    marginTop: 8,
-    fontSize: 12,
-    color: COLORS.mutedText,
-    fontStyle: 'italic',
   },
 });
