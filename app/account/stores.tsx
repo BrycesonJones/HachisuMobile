@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     height: 50,
     borderRadius: 12,
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.cream,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -251,6 +251,6 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: COLORS.primary,
+    color: COLORS.cream,
   },
 });

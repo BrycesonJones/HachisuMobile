@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
     marginTop: 28,
     height: 52,
     borderRadius: 12,
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.cream,
   },
   createButtonPressed: {
     opacity: 0.85,
