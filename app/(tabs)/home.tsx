@@ -1,4 +1,6 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import { useCallback } from 'react';
 import { StatusBar, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,12 +9,22 @@ import { ActivityDashboardView } from '@/components/dashboard/activity-dashboard
 import { BitcoinDashboardView } from '@/components/dashboard/bitcoin-dashboard-view';
 import { useDashboardTab } from '@/components/dashboard/dashboard-tab-context';
 import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
+import { useActiveStore } from '@/contexts/active-store-context';
 import { bitcoinBalance } from '@/data/bitcoin-balance';
 import type { Transaction } from '@/types/transaction';
 
 export default function MerchantDashboardScreen() {
   const router = useRouter();
   const { activeTab } = useDashboardTab();
+  const { refetch } = useActiveStore();
+
+  // Refetch stores whenever the dashboard regains focus, so wallet status
+  // reflects changes made in the setup flow (which returns here on completion).
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch]),
+  );
 
   function handleTransactionPress(transaction: Transaction) {
     router.push({

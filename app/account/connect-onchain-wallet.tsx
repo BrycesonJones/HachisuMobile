@@ -3,11 +3,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CloseFlowButton } from '@/components/account/close-flow-button';
-import { BackButton } from '@/components/auth/back-button';
 import { COLORS } from '@/constants/colors';
 
-export default function ImportWalletScreen() {
+// Front of the per-store on-chain wallet setup flow:
+//   Let's get started → Choose your import method → Enter xpub → Confirm addresses
+// Always store-scoped: storeId / storeName are threaded through every step.
+export default function ConnectOnchainWalletScreen() {
   const router = useRouter();
   const { storeId, storeName } = useLocalSearchParams<{
     storeId?: string;
@@ -19,54 +20,44 @@ export default function ImportWalletScreen() {
       <StatusBar barStyle="light-content" />
 
       <View style={styles.headerRow}>
-        <BackButton />
-        <CloseFlowButton />
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+          hitSlop={8}>
+          <MaterialIcons name="close" size={24} color={COLORS.primaryText} />
+        </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.title}>Choose your import method</Text>
-        <Text style={styles.subtitle}>
-          The following methods assume that you already have an existing wallet created and
-          backed up.
-        </Text>
+        <Text style={styles.title}>Let&apos;s get started</Text>
 
-        <MethodRow
-          icon="vpn-key"
-          title="Enter extended public key"
-          subtitle="Input the key string manually"
+        <Pressable
           onPress={() =>
             router.push({
-              pathname: '/account/import-xpub',
+              pathname: '/account/import-wallet',
               params: { storeId: storeId ?? '', storeName: storeName ?? '' },
             })
           }
-        />
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Connect an existing wallet">
+          <MaterialIcons
+            name="account-balance-wallet"
+            size={24}
+            color={COLORS.primaryText}
+          />
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>Connect an existing wallet</Text>
+            <Text style={styles.rowSubtitle}>
+              Import an existing hardware or software wallet
+            </Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={24} color={COLORS.secondaryText} />
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-interface MethodRowProps {
-  icon: keyof typeof MaterialIcons.glyphMap;
-  title: string;
-  subtitle: string;
-  onPress: () => void;
-}
-
-function MethodRow({ icon, title, subtitle, onPress }: MethodRowProps) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-      accessibilityRole="button"
-      accessibilityLabel={title}>
-      <MaterialIcons name={icon} size={24} color={COLORS.primaryText} />
-      <View style={styles.rowText}>
-        <Text style={styles.rowTitle}>{title}</Text>
-        <Text style={styles.rowSubtitle}>{subtitle}</Text>
-      </View>
-      <MaterialIcons name="chevron-right" size={24} color={COLORS.secondaryText} />
-    </Pressable>
   );
 }
 
@@ -77,27 +68,31 @@ const styles = StyleSheet.create({
   },
   headerRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 8,
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pressed: {
+    opacity: 0.7,
   },
   scrollContent: {
     paddingHorizontal: 16,
     paddingBottom: 32,
   },
   title: {
+    marginTop: 24,
+    marginBottom: 40,
     fontSize: 28,
-    fontWeight: '600',
+    fontWeight: '700',
     color: COLORS.primaryText,
-  },
-  subtitle: {
-    marginTop: 8,
-    marginBottom: 20,
-    fontSize: 15,
-    color: COLORS.secondaryText,
-    lineHeight: 20,
+    textAlign: 'center',
   },
   row: {
     flexDirection: 'row',
@@ -108,7 +103,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: COLORS.cardBorder,
     padding: 16,
-    marginBottom: 14,
   },
   rowPressed: {
     opacity: 0.7,

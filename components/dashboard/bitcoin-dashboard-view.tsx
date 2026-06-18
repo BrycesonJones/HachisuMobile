@@ -1,6 +1,10 @@
-import { StyleSheet, Text, View } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useRouter } from 'expo-router';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AccountProfileHub } from '@/components/account/account-profile-hub';
+import { StoreSelector } from '@/components/dashboard/store-selector';
+import { WalletIndicator } from '@/components/dashboard/wallet-indicator';
 import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
 import type { BitcoinBalance } from '@/data/bitcoin-balance';
 
@@ -20,11 +24,30 @@ function formatBtc(value: number): string {
 }
 
 export function BitcoinDashboardView({ balance }: BitcoinDashboardViewProps) {
+  const router = useRouter();
+
   return (
     <View style={styles.root}>
       <View style={styles.header}>
+        <Pressable
+          onPress={() => router.push('/account/dashboard-settings')}
+          style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Open settings"
+          hitSlop={6}>
+          <MaterialIcons
+            name="settings"
+            size={24}
+            color={DASHBOARD_COLORS.primaryText}
+          />
+        </Pressable>
+
         <AccountProfileHub />
       </View>
+
+      <StoreSelector />
+
+      <WalletIndicator />
 
       <View style={styles.balance}>
         <Text style={styles.usdValue}>{formatUsd(balance.usdValue)}</Text>
@@ -43,10 +66,19 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 12,
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pressed: {
+    opacity: 0.6,
   },
   balance: {
     flex: 1,

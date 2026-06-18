@@ -1,4 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AccountProfileHub } from '@/components/account/account-profile-hub';
@@ -9,17 +10,30 @@ interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({ onSearchPress }: DashboardHeaderProps) {
+  const router = useRouter();
+
   return (
     <View style={styles.container}>
       <Pressable
-        onPress={onSearchPress}
+        onPress={() => router.push('/account/dashboard-settings')}
         style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
         accessibilityRole="button"
-        accessibilityLabel="Search transactions">
-        <MaterialIcons name="search" size={24} color={DASHBOARD_COLORS.primaryText} />
+        accessibilityLabel="Open settings"
+        hitSlop={6}>
+        <MaterialIcons name="settings" size={24} color={DASHBOARD_COLORS.primaryText} />
       </Pressable>
 
-      <AccountProfileHub />
+      <View style={styles.rightGroup}>
+        <Pressable
+          onPress={onSearchPress}
+          style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Search transactions">
+          <MaterialIcons name="search" size={24} color={DASHBOARD_COLORS.primaryText} />
+        </Pressable>
+
+        <AccountProfileHub />
+      </View>
     </View>
   );
 }
@@ -28,11 +42,15 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 8,
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 12,
+  },
+  rightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   iconButton: {
     width: 40,

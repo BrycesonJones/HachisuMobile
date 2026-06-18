@@ -1,6 +1,8 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -13,8 +15,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CloseFlowButton } from '@/components/account/close-flow-button';
 import { BackButton } from '@/components/auth/back-button';
 import { COLORS } from '@/constants/colors';
+import { previewOnchainWallet } from '@/lib/btcpay/onchain-wallet';
 
 interface AddressType {
   type: string;
@@ -56,14 +60,49 @@ const MULTISIG_TYPES: AddressType[] = [
 ];
 
 export default function ImportXpubScreen() {
+  const router = useRouter();
+  const { storeId, storeName } = useLocalSearchParams<{
+    storeId?: string;
+    storeName?: string;
+  }>();
+
   const [xpub, setXpub] = useState('');
   const [showMultisig, setShowMultisig] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const canContinue = xpub.trim().length > 0;
+  const trimmed = xpub.trim();
+  // Minimal "valid-looking" gate: an extended key prefix or a descriptor.
+  const looksValid = /^[xyztuv]pub[1-9A-HJ-NP-Za-km-z]{20,}$/.test(trimmed) || trimmed.includes('(');
+  const canContinue = !loading && trimmed.length > 0 && looksValid;
 
-  function handleContinue() {
-    if (!canContinue) return;
-    // TODO: validate the derivation scheme and proceed to the next step.
+  async function handleContinue() {
+    if (!canContinue || !storeId) return;
+    setLoading(true);
+    setError(null);
+
+    const result = await previewOnchainWallet({
+      merchantStoreId: storeId,
+      extendedPublicKey: trimmed,
+    });
+
+    setLoading(false);
+
+    if (!result.ok) {
+      setError(result.error ?? 'Could not read that key. Please check it and try again.');
+      return;
+    }
+
+    router.push({
+      pathname: '/account/confirm-addresses',
+      params: {
+        storeId,
+        storeName: storeName ?? '',
+        extendedPublicKey: trimmed,
+        addressType: result.addressType ?? '',
+        addresses: JSON.stringify(result.addresses),
+      },
+    });
   }
 
   return (
@@ -72,6 +111,7 @@ export default function ImportXpubScreen() {
 
       <View style={styles.headerRow}>
         <BackButton />
+        <CloseFlowButton />
       </View>
 
       <KeyboardAvoidingView
@@ -85,10 +125,21 @@ export default function ImportXpubScreen() {
             <MaterialIcons name="info-outline" size={14} color={COLORS.secondaryText} />
           </Text>
 
+          {storeName ? (
+            <Text style={styles.storeContext}>
+              Connecting wallet for{' '}
+              <Text style={styles.storeContextName}>{storeName}</Text>
+            </Text>
+          ) : null}
+
           <Text style={styles.label}>Extended public key</Text>
           <TextInput
             value={xpub}
-            onChangeText={setXpub}
+            onChangeText={(text) => {
+              setXpub(text);
+              if (error) setError(null);
+            }}
+            editable={!loading}
             style={styles.input}
             multiline
             numberOfLines={4}
@@ -98,6 +149,8 @@ export default function ImportXpubScreen() {
             autoComplete="off"
             spellCheck={false}
           />
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
           <Pressable
             onPress={handleContinue}
@@ -109,7 +162,14 @@ export default function ImportXpubScreen() {
             ]}
             accessibilityRole="button"
             accessibilityLabel="Continue">
-            <Text style={styles.continueText}>Continue</Text>
+            {loading ? (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator color={COLORS.background} size="small" />
+                <Text style={styles.continueText}>Checking…</Text>
+              </View>
+            ) : (
+              <Text style={styles.continueText}>Continue</Text>
+            )}
           </Pressable>
 
           <View style={styles.tableHeader}>
@@ -171,6 +231,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 12,
     paddingTop: 8,
     paddingBottom: 8,
@@ -191,11 +254,31 @@ const styles = StyleSheet.create({
     color: COLORS.secondaryText,
     lineHeight: 20,
   },
+  storeContext: {
+    marginBottom: 16,
+    fontSize: 14,
+    color: COLORS.secondaryText,
+  },
+  storeContextName: {
+    fontWeight: '600',
+    color: COLORS.primaryText,
+  },
   label: {
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.primaryText,
     marginBottom: 8,
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 13,
+    color: '#F87171',
+    lineHeight: 18,
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   input: {
     minHeight: 96,
