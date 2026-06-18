@@ -131,3 +131,212 @@ export async function createStore(
 
   return store as BtcpayStore;
 }
+
+// ---------------------------------------------------------------------------
+// On-chain (Bitcoin) wallet configuration
+// ---------------------------------------------------------------------------
+//
+// A merchant connects a store's on-chain wallet by submitting an extended public
+// key (xpub/ypub/zpub/vpub/tpub) or an output descriptor. BTCPay (via NBXplorer)
+// treats this as a "derivation scheme" and derives receive addresses from it — it
+// is public-key material, never a private key or seed.
+//
+// Greenfield endpoints used:
+//   POST /api/v1/stores/{storeId}/payment-methods/{pmId}/wallet/preview
+//        body { derivationScheme }  -> { addresses: [{ keyPath, address }] }
+//   PUT  /api/v1/stores/{storeId}/payment-methods/{pmId}
+//        body { enabled, config: { derivationScheme, label } } -> GenericPaymentMethodData
+//
+// Payment method id: newer BTCPay uses "BTC-CHAIN"; older uses "BTC-OnChain". We
+// try the modern id first and fall back so this works across instance versions.
+
+const ONCHAIN_PAYMENT_METHOD_IDS = ['BTC-CHAIN', 'BTC-OnChain'] as const;
+
+export interface PreviewAddress {
+  keyPath: string;
+  address: string;
+}
+
+/**
+ * Masks an extended public key / descriptor for safe logging. Never log the
+ * full value — it reveals a wallet's entire address history.
+ * e.g. "zpub6r...wxyz" (first 6 + last 4).
+ */
+export function maskExtendedKey(value: string): string {
+  const v = (value ?? '').trim();
+  if (v.length <= 12) return '***';
+  return `${v.slice(0, 6)}…${v.slice(-4)}`;
+}
+
+export interface DerivationClassification {
+  /** merchant_stores.onchain_provider value ('xpub' | 'descriptor'). */
+  provider: 'xpub' | 'descriptor';
+  /** Non-sensitive human label for merchant_stores.onchain_address_type. */
+  addressType: string;
+}
+
+/**
+ * Best-effort classification of the supplied derivation input for non-sensitive
+ * metadata only. Never throws; BTCPay remains the source of truth for validity.
+ */
+export function classifyDerivation(input: string): DerivationClassification {
+  const v = (input ?? '').trim();
+  const lower = v.toLowerCase();
+
+  // Output descriptors contain a script-function call, e.g. wpkh(...), sh(wpkh(...)).
+  if (v.includes('(')) {
+    let addressType = 'Descriptor';
+    if (lower.startsWith('tr(')) addressType = 'P2TR (Taproot)';
+    else if (lower.startsWith('wpkh(')) addressType = 'P2WPKH (SegWit)';
+    else if (lower.startsWith('sh(wpkh(')) addressType = 'P2SH-P2WPKH';
+    else if (lower.startsWith('wsh(multi') || lower.startsWith('wsh(sortedmulti'))
+      addressType = 'Multi-sig P2WSH';
+    else if (lower.startsWith('sh(wsh(')) addressType = 'Multi-sig P2SH-P2WSH';
+    else if (lower.startsWith('sh(multi') || lower.startsWith('sh(sortedmulti'))
+      addressType = 'Multi-sig P2SH';
+    else if (lower.startsWith('pkh(')) addressType = 'P2PKH (Legacy)';
+    return { provider: 'descriptor', addressType };
+  }
+
+  // Bare extended keys: classify by SLIP-132 version prefix.
+  const prefix = v.slice(0, 4).toLowerCase();
+  let addressType = 'P2PKH (Legacy)';
+  if (prefix === 'zpub' || prefix === 'vpub') addressType = 'P2WPKH (SegWit)';
+  else if (prefix === 'ypub' || prefix === 'upub') addressType = 'P2SH-P2WPKH';
+  // xpub / tpub default to legacy unless BTCPay reports otherwise.
+  return { provider: 'xpub', addressType };
+}
+
+/**
+ * Internal: call a wallet endpoint, trying each on-chain payment-method id until
+ * one is accepted. Returns the parsed body of the first 2xx response. Throws the
+ * last BtcpayApiError if every id fails.
+ */
+async function callOnChain(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  method: 'POST' | 'PUT',
+  pathSuffix: string,
+  body: Record<string, unknown>,
+  query = '',
+): Promise<unknown> {
+  let lastError: BtcpayApiError | null = null;
+
+  for (const pmId of ONCHAIN_PAYMENT_METHOD_IDS) {
+    const url =
+      `${config.serverUrl}/api/v1/stores/${encodeURIComponent(btcpayStoreId)}` +
+      `/payment-methods/${pmId}${pathSuffix}${query}`;
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method,
+        headers: {
+          Authorization: `token ${config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (cause) {
+      throw new BtcpayApiError(
+        `Could not reach BTCPay Server at ${config.serverUrl}.`,
+        0,
+        { cause: String(cause) },
+      );
+    }
+
+    const rawText = await response.text();
+    let parsed: unknown = rawText;
+    try {
+      parsed = rawText ? JSON.parse(rawText) : null;
+    } catch {
+      // Leave parsed as raw text.
+    }
+
+    if (response.ok) return parsed;
+
+    // 404 (unknown payment method id) -> try the next id. Other 4xx (e.g. the
+    // derivation scheme is invalid) are real errors; surface immediately.
+    lastError = new BtcpayApiError(
+      `BTCPay on-chain request failed (HTTP ${response.status}).`,
+      response.status,
+      parsed,
+    );
+    if (response.status !== 404) break;
+  }
+
+  throw lastError ??
+    new BtcpayApiError('BTCPay on-chain request failed.', 0, null);
+}
+
+/**
+ * Previews receive addresses BTCPay would derive from a proposed derivation
+ * scheme WITHOUT saving it to the store. Used to let the merchant confirm their
+ * wallet generates the same addresses.
+ */
+export async function previewOnChainWallet(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  derivationScheme: string,
+  opts: { offset?: number; count?: number } = {},
+): Promise<PreviewAddress[]> {
+  const offset = opts.offset ?? 0;
+  const count = opts.count ?? 10;
+  const parsed = await callOnChain(
+    config,
+    btcpayStoreId,
+    'POST',
+    '/wallet/preview',
+    { derivationScheme },
+    `?offset=${offset}&count=${count}`,
+  );
+
+  const addresses = (parsed as { addresses?: unknown })?.addresses;
+  if (!Array.isArray(addresses)) {
+    throw new BtcpayApiError(
+      'BTCPay returned an unexpected preview payload (no addresses).',
+      200,
+      parsed,
+    );
+  }
+
+  return addresses.map((a) => ({
+    keyPath: String((a as PreviewAddress)?.keyPath ?? ''),
+    address: String((a as PreviewAddress)?.address ?? ''),
+  }));
+}
+
+export interface OnChainConfigResult {
+  enabled: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * Saves (enables) the on-chain payment method for a store using the supplied
+ * derivation scheme. Returns BTCPay's payment-method payload so the caller can
+ * confirm it reports the wallet as enabled before persisting Supabase state.
+ */
+export async function setOnChainWallet(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  derivationScheme: string,
+  opts: { label?: string } = {},
+): Promise<OnChainConfigResult> {
+  const configBody: Record<string, unknown> = { derivationScheme };
+  if (opts.label) configBody.label = opts.label;
+
+  const parsed = await callOnChain(config, btcpayStoreId, 'PUT', '', {
+    enabled: true,
+    config: configBody,
+  });
+
+  const result = parsed as Partial<OnChainConfigResult> | null;
+  if (!result || typeof result !== 'object') {
+    throw new BtcpayApiError(
+      'BTCPay returned an unexpected payment-method payload.',
+      200,
+      parsed,
+    );
+  }
+  return result as OnChainConfigResult;
+}

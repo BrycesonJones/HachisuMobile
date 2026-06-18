@@ -103,8 +103,10 @@ export type Database = {
           lightning_provider: string | null;
           lightning_status: string;
           name: string;
+          onchain_address_type: string | null;
           onchain_provider: string | null;
           onchain_status: string;
+          onchain_wallet_configured_at: string | null;
           preferred_price_source: string;
           profile_id: string | null;
           store_provisioning_status: string;
@@ -123,8 +125,10 @@ export type Database = {
           lightning_provider?: string | null;
           lightning_status?: string;
           name: string;
+          onchain_address_type?: string | null;
           onchain_provider?: string | null;
           onchain_status?: string;
+          onchain_wallet_configured_at?: string | null;
           preferred_price_source?: string;
           profile_id?: string | null;
           store_provisioning_status?: string;
@@ -143,8 +147,10 @@ export type Database = {
           lightning_provider?: string | null;
           lightning_status?: string;
           name?: string;
+          onchain_address_type?: string | null;
           onchain_provider?: string | null;
           onchain_status?: string;
+          onchain_wallet_configured_at?: string | null;
           preferred_price_source?: string;
           profile_id?: string | null;
           store_provisioning_status?: string;

@@ -15,6 +15,20 @@ export function addDevStore(store: MerchantStore): MerchantStore {
   return store;
 }
 
+/** Patches a single dev store by id (used to simulate wallet connection). */
+export function updateDevStore(
+  id: string,
+  updates: Partial<MerchantStore>,
+): MerchantStore | null {
+  let updated: MerchantStore | null = null;
+  devStores = devStores.map((s) => {
+    if (s.id !== id) return s;
+    updated = { ...s, ...updates, updated_at: new Date().toISOString() };
+    return updated;
+  });
+  return updated;
+}
+
 export function clearDevStores(): void {
   devStores = [];
 }

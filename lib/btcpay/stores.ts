@@ -15,7 +15,7 @@ export interface CreateMerchantStoreResult {
 
 // Dev-mode mirror of the backend syncUserStoreSummary: recompute the dev
 // profile's summary fields from the in-memory dev store registry.
-function syncDevProfileSummary(): void {
+export function syncDevProfileSummary(): void {
   const all = getDevStores();
   const defaultStore = all.find((s) => s.is_default) ?? all[0] ?? null;
   const hasStores = all.length > 0;
@@ -93,6 +93,8 @@ export async function createMerchantStore(
       lightning_provider: null,
       onchain_status: 'not_connected',
       onchain_provider: null,
+      onchain_address_type: null,
+      onchain_wallet_configured_at: null,
       is_default: isDefault,
       created_at: now,
       updated_at: now,

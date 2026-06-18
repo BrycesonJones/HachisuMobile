@@ -36,6 +36,26 @@ export function storeCountLabel(summary: StoreSummary): string {
   return `${summary.storeCount} ${noun} ready`;
 }
 
+/** Bitcoin on-chain wallet status label for a single store. */
+export function onchainStatusLabel(store: MerchantStore): string {
+  switch (store.onchain_status) {
+    case 'connected':
+      return 'Connected';
+    case 'pending_confirmation':
+      return 'Pending…';
+    case 'error':
+      return 'Error';
+    case 'not_connected':
+    default:
+      return 'Not connected';
+  }
+}
+
+/** True when the store's Bitcoin on-chain wallet is connected. */
+export function isOnchainConnected(store: MerchantStore): boolean {
+  return store.onchain_status === 'connected';
+}
+
 /** Wallet/payment-destination status label for a single store row. */
 export function merchantStoreStatusLabel(store: MerchantStore): string {
   if (storeHasPaymentDestination(store)) return 'Connected';
