@@ -9,8 +9,6 @@ import type { AccountType } from '@/types/user-profile';
 
 export type ProfileMenuItemId =
   | 'profile'
-  | 'wallets'
-  | 'stores'
   | 'documents'
   | 'api-keys';
 
@@ -23,7 +21,6 @@ interface ProfileMenuItem {
 
 function buildMenuItems(
   accountType: AccountType | null,
-  storesTag: string,
 ): readonly ProfileMenuItem[] {
   const profileItem: ProfileMenuItem =
     accountType === 'business'
@@ -32,13 +29,6 @@ function buildMenuItems(
 
   return [
     profileItem,
-    { id: 'wallets', label: 'Wallets', icon: 'account-balance-wallet' },
-    {
-      id: 'stores',
-      label: 'Create Store',
-      icon: 'storefront',
-      tag: storesTag,
-    },
     { id: 'documents', label: 'Documents', icon: 'description' },
     { id: 'api-keys', label: 'API Keys', icon: 'vpn-key' },
   ];
@@ -48,7 +38,6 @@ interface ProfileMenuSheetProps {
   visible: boolean;
   display: ProfileDisplay;
   accountType: AccountType | null;
-  storesTag: string;
   onClose: () => void;
   onSelect: (itemId: ProfileMenuItemId) => void;
   onLogout: () => void;
@@ -60,16 +49,12 @@ export function ProfileMenuSheet({
   visible,
   display,
   accountType,
-  storesTag,
   onClose,
   onSelect,
   onLogout,
   onDismiss,
 }: ProfileMenuSheetProps) {
-  const menuItems = useMemo(
-    () => buildMenuItems(accountType, storesTag),
-    [accountType, storesTag],
-  );
+  const menuItems = useMemo(() => buildMenuItems(accountType), [accountType]);
   const insets = useSafeAreaInsets();
 
   return (

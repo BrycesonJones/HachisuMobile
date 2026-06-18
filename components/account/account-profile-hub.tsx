@@ -12,10 +12,6 @@ import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
 import { HachisuColors } from '@/constants/hachisu-colors';
 import { useAuth } from '@/contexts/auth-context';
 import type { AccountType } from '@/types/user-profile';
-import {
-  walletMenuTag,
-  walletStoreStatusFromProfile,
-} from '@/types/wallet-store';
 
 function resolveRoute(id: ProfileMenuItemId, accountType: AccountType | null): string {
   // TODO: replace stubs in app/account/* with real screens once they exist.
@@ -24,10 +20,6 @@ function resolveRoute(id: ProfileMenuItemId, accountType: AccountType | null): s
       return accountType === 'business'
         ? '/account/business-profile'
         : '/account/personal-profile';
-    case 'wallets':
-      return '/account/wallets';
-    case 'stores':
-      return '/account/stores';
     case 'documents':
       return '/account/documents';
     case 'api-keys':
@@ -59,10 +51,6 @@ export function AccountProfileHub() {
 
   const display = useMemo(() => getProfileDisplay(profile, user), [profile, user]);
   const accountType = useMemo(() => toAccountType(profile?.account_type), [profile?.account_type]);
-  const storesTag = useMemo(
-    () => walletMenuTag(walletStoreStatusFromProfile(profile), profile != null),
-    [profile],
-  );
 
   function handleOpen() {
     setIsOpen(true);
@@ -119,7 +107,6 @@ export function AccountProfileHub() {
         visible={isOpen}
         display={display}
         accountType={accountType}
-        storesTag={storesTag}
         onClose={handleClose}
         onSelect={handleSelect}
         onLogout={handleLogout}
