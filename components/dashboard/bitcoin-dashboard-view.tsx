@@ -1,8 +1,9 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AccountProfileHub } from '@/components/account/account-profile-hub';
+import { PaymentFeaturesSection } from '@/components/dashboard/payment-features-section';
 import { StoreSelector } from '@/components/dashboard/store-selector';
 import { WalletIndicator } from '@/components/dashboard/wallet-indicator';
 import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
@@ -45,16 +46,23 @@ export function BitcoinDashboardView({ balance }: BitcoinDashboardViewProps) {
         <AccountProfileHub />
       </View>
 
-      <StoreSelector />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}>
+        <StoreSelector />
 
-      <WalletIndicator />
+        <WalletIndicator />
 
-      <View style={styles.balance}>
-        <Text style={styles.usdValue}>{formatUsd(balance.usdValue)}</Text>
-        <Text style={styles.btcAmount} numberOfLines={1} adjustsFontSizeToFit>
-          {formatBtc(balance.btcAmount)}
-        </Text>
-      </View>
+        <View style={styles.balance}>
+          <Text style={styles.usdValue}>{formatUsd(balance.usdValue)}</Text>
+          <Text style={styles.btcAmount} numberOfLines={1} adjustsFontSizeToFit>
+            {formatBtc(balance.btcAmount)}
+          </Text>
+        </View>
+
+        <PaymentFeaturesSection />
+      </ScrollView>
     </View>
   );
 }
@@ -80,11 +88,19 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.6,
   },
-  balance: {
+  scroll: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 24,
+  },
+  balance: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
+    paddingTop: 44,
+    paddingBottom: 52,
     gap: 10,
   },
   usdValue: {

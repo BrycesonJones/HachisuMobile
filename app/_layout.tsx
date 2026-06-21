@@ -38,6 +38,16 @@ export default function RootLayout() {
                 animation: 'slide_from_right',
               }}
             />
+            <Stack.Screen
+              name="payments"
+              options={{
+                // Match the account stack: a standard slide-from-right push so the
+                // placeholder screens get correct top safe-area insets and the
+                // native swipe-back gesture.
+                headerShown: false,
+                animation: 'slide_from_right',
+              }}
+            />
             <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
           </Stack>
           <StatusBar style="light" />
