@@ -44,7 +44,7 @@ export const PAYMENT_FEATURES: readonly PaymentFeature[] = [
   {
     id: 'pay-button',
     title: 'Pay Button',
-    subtitle: 'Embed or share',
+    subtitle: 'Tips & simple payments',
     icon: 'link',
     route: '/payments/pay-button',
     accessibilityHint: 'Opens Pay Button',
