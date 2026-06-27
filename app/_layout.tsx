@@ -1,3 +1,10 @@
+// Polyfill the WHATWG URL API before anything else. Hermes ships only a partial
+// URL implementation, and @supabase/functions-js builds request URLs with
+// `new URL(...)` — without this, every supabase.functions.invoke() throws
+// "Failed to send a request to the Edge Function" even though the REST client
+// (which concatenates URLs) works fine.
+import 'react-native-url-polyfill/auto';
+
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
