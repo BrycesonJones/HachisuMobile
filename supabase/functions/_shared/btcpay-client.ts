@@ -222,6 +222,68 @@ export async function createPosApp(
   return app as BtcpayPosApp;
 }
 
+export interface UpdatePosAppInput {
+  title?: string;
+  currency?: string;
+  defaultView?: PosDefaultView;
+  description?: string;
+  /** BTCPay POS app template (JSON string of items). */
+  template?: string;
+}
+
+/**
+ * Updates a Point of Sale app (Greenfield: PUT /api/v1/apps/pos/{appId}). Only
+ * the provided fields are sent. Throws BtcpayApiError on a non-2xx response.
+ */
+export async function updatePosApp(
+  config: BtcpayConfig,
+  btcpayAppId: string,
+  input: UpdatePosAppInput,
+): Promise<void> {
+  const body: Record<string, unknown> = {};
+  if (input.title !== undefined) body.title = input.title;
+  if (input.currency) body.currency = input.currency;
+  if (input.defaultView) body.defaultView = input.defaultView;
+  if (input.description !== undefined) body.description = input.description;
+  if (input.template !== undefined) body.template = input.template;
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `${config.serverUrl}/api/v1/apps/pos/${encodeURIComponent(btcpayAppId)}`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `token ${config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      },
+    );
+  } catch (cause) {
+    throw new BtcpayApiError(
+      `Could not reach BTCPay Server at ${config.serverUrl}.`,
+      0,
+      { cause: String(cause) },
+    );
+  }
+
+  if (response.ok) return;
+
+  const rawText = await response.text();
+  let parsed: unknown = rawText;
+  try {
+    parsed = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    // Leave parsed as the raw text.
+  }
+  throw new BtcpayApiError(
+    `BTCPay POS app update failed (HTTP ${response.status}).`,
+    response.status,
+    parsed,
+  );
+}
+
 /**
  * Deletes a BTCPay app by id (Greenfield: DELETE /api/v1/apps/{appId}). A 404
  * is treated as success so the operation is idempotent (the app may already be

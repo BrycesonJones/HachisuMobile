@@ -71,6 +71,7 @@ export type Database = {
           merchant_store_id: string
           metadata: Json
           pos_style: string
+          products: Json
           status: string
           updated_at: string
           user_id: string
@@ -87,6 +88,7 @@ export type Database = {
           merchant_store_id: string
           metadata?: Json
           pos_style: string
+          products?: Json
           status?: string
           updated_at?: string
           user_id: string
@@ -103,6 +105,7 @@ export type Database = {
           merchant_store_id?: string
           metadata?: Json
           pos_style?: string
+          products?: Json
           status?: string
           updated_at?: string
           user_id?: string
