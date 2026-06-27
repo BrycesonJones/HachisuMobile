@@ -3,6 +3,7 @@ import {
   addDevPosApp,
   getDevPosApp,
   getDevPosApps,
+  removeDevPosApp,
   updateDevPosApp,
 } from '@/lib/btcpay/dev-pos-apps';
 import { supabase } from '@/lib/supabase';
@@ -152,4 +153,38 @@ export async function updatePosApp(
 
   if (error) return { error: error.message };
   return { posApp: data, error: null };
+}
+
+/**
+ * Deletes a POS app via the delete-btcpay-pos-app Edge Function, which removes
+ * it from BTCPay and Supabase. Dev-bypass mode removes it from the in-memory
+ * registry.
+ */
+export async function deletePosApp(posAppId: string): Promise<{ error: string | null }> {
+  if (isDevAuthActive()) {
+    removeDevPosApp(posAppId);
+    return { error: null };
+  }
+
+  const { data, error } = await supabase.functions.invoke<{
+    success?: boolean;
+    error?: string;
+  }>('delete-btcpay-pos-app', {
+    method: 'POST',
+    body: { posAppId },
+  });
+
+  if (error) {
+    const serverError = await readFunctionError(error);
+    const context = (error as { context?: unknown }).context;
+    const causeMessage =
+      context instanceof Error
+        ? context.message
+        : typeof context === 'string'
+          ? context
+          : undefined;
+    return { error: serverError ?? causeMessage ?? error.message };
+  }
+  if (data?.error) return { error: data.error };
+  return { error: null };
 }

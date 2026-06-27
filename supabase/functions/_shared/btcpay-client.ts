@@ -222,6 +222,45 @@ export async function createPosApp(
   return app as BtcpayPosApp;
 }
 
+/**
+ * Deletes a BTCPay app by id (Greenfield: DELETE /api/v1/apps/{appId}). A 404
+ * is treated as success so the operation is idempotent (the app may already be
+ * gone). Throws BtcpayApiError on other non-2xx responses.
+ */
+export async function deleteApp(config: BtcpayConfig, appId: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(
+      `${config.serverUrl}/api/v1/apps/${encodeURIComponent(appId)}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `token ${config.apiKey}` },
+      },
+    );
+  } catch (cause) {
+    throw new BtcpayApiError(
+      `Could not reach BTCPay Server at ${config.serverUrl}.`,
+      0,
+      { cause: String(cause) },
+    );
+  }
+
+  if (response.ok || response.status === 404) return;
+
+  const rawText = await response.text();
+  let parsed: unknown = rawText;
+  try {
+    parsed = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    // Leave parsed as the raw text.
+  }
+  throw new BtcpayApiError(
+    `BTCPay app deletion failed (HTTP ${response.status}).`,
+    response.status,
+    parsed,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // On-chain (Bitcoin) wallet configuration
 // ---------------------------------------------------------------------------

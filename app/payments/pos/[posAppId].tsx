@@ -18,6 +18,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { CurrencySelect } from '@/components/account/currency-select';
 import { PrimaryButton } from '@/components/auth/primary-button';
+import { DeleteAppModal } from '@/components/payments/pos/delete-app-modal';
 import { InvoiceFormField } from '@/components/payments/invoices/create/invoice-form-field';
 import { PosDescriptionField } from '@/components/payments/pos/pos-description-field';
 import {
@@ -29,7 +30,7 @@ import { ProductRow } from '@/components/payments/pos/products/product-row';
 import type { PosProduct } from '@/components/payments/pos/products/product-types';
 import { COLORS } from '@/constants/colors';
 import { useActiveStore } from '@/contexts/active-store-context';
-import { fetchPosApp, updatePosApp } from '@/lib/btcpay/pos-apps';
+import { deletePosApp, fetchPosApp, updatePosApp } from '@/lib/btcpay/pos-apps';
 import type { PosApp } from '@/types/pos-app';
 
 function toPosStyle(value: string): PosStyle {
@@ -61,6 +62,10 @@ export default function UpdatePosScreen() {
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const [deleteVisible, setDeleteVisible] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,6 +120,21 @@ export default function UpdatePosScreen() {
       setSaveError(error);
       return;
     }
+    router.back();
+  }
+
+  async function handleDelete() {
+    if (!app || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    const { error } = await deletePosApp(app.id);
+    if (error) {
+      setDeleteError(error);
+      setDeleting(false);
+      return;
+    }
+    setDeleting(false);
+    setDeleteVisible(false);
     router.back();
   }
 
@@ -280,6 +300,18 @@ export default function UpdatePosScreen() {
                 />
               )}
             </View>
+
+            <Pressable
+              onPress={() => {
+                setDeleteError(null);
+                setDeleteVisible(true);
+              }}
+              style={({ pressed }) => [styles.deleteButton, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Delete this app">
+              <MaterialIcons name="delete-outline" size={20} color={DESTRUCTIVE_COLOR} />
+              <Text style={styles.deleteLabel}>Delete this app</Text>
+            </Pressable>
           </ScrollView>
         </KeyboardAvoidingView>
       )}
@@ -299,9 +331,22 @@ export default function UpdatePosScreen() {
           />
         </SafeAreaProvider>
       </Modal>
+
+      <DeleteAppModal
+        visible={deleteVisible}
+        appName={app?.display_title ?? app?.app_name ?? 'this app'}
+        deleting={deleting}
+        error={deleteError}
+        onCancel={() => {
+          if (!deleting) setDeleteVisible(false);
+        }}
+        onConfirm={handleDelete}
+      />
     </SafeAreaView>
   );
 }
+
+const DESTRUCTIVE_COLOR = '#F87171';
 
 const styles = StyleSheet.create({
   container: {
@@ -422,6 +467,23 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     marginTop: 28,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 16,
+    height: 52,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(248, 113, 113, 0.5)',
+    backgroundColor: 'rgba(248, 113, 113, 0.08)',
+  },
+  deleteLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#F87171',
   },
   submittingButton: {
     flexDirection: 'row',

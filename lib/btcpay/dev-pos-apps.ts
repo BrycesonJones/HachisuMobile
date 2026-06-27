@@ -29,6 +29,10 @@ export function updateDevPosApp(id: string, updates: Partial<PosApp>): PosApp | 
   return updated;
 }
 
+export function removeDevPosApp(id: string): void {
+  devPosApps = devPosApps.filter((a) => a.id !== id);
+}
+
 export function clearDevPosApps(): void {
   devPosApps = [];
 }
