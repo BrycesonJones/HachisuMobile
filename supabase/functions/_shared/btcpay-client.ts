@@ -133,6 +133,96 @@ export async function createStore(
 }
 
 // ---------------------------------------------------------------------------
+// Point of Sale apps
+// ---------------------------------------------------------------------------
+//
+// Greenfield: POST /api/v1/stores/{storeId}/apps/pos
+//   body (min): { appName }  (+ optional title, currency, defaultView, description)
+//   defaultView enum: Static | Cart | Light | Print
+//   Response (PointOfSaleAppData): { id, name, storeId, appType, ... }
+
+export type PosDefaultView = 'Static' | 'Cart' | 'Light' | 'Print';
+
+export interface CreatePosAppInput {
+  appName: string;
+  title?: string;
+  currency?: string;
+  defaultView?: PosDefaultView;
+  description?: string;
+}
+
+export interface BtcpayPosApp {
+  id: string;
+  name?: string;
+  storeId?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Creates a Point of Sale app under a BTCPay store. Throws BtcpayApiError on a
+ * non-2xx response (body captured for diagnostics).
+ */
+export async function createPosApp(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  input: CreatePosAppInput,
+): Promise<BtcpayPosApp> {
+  const body: Record<string, unknown> = { appName: input.appName };
+  if (input.title) body.title = input.title;
+  if (input.currency) body.currency = input.currency;
+  if (input.defaultView) body.defaultView = input.defaultView;
+  if (input.description) body.description = input.description;
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `${config.serverUrl}/api/v1/stores/${encodeURIComponent(btcpayStoreId)}/apps/pos`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `token ${config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      },
+    );
+  } catch (cause) {
+    throw new BtcpayApiError(
+      `Could not reach BTCPay Server at ${config.serverUrl}.`,
+      0,
+      { cause: String(cause) },
+    );
+  }
+
+  const rawText = await response.text();
+  let parsed: unknown = rawText;
+  try {
+    parsed = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    // Leave parsed as the raw text.
+  }
+
+  if (!response.ok) {
+    throw new BtcpayApiError(
+      `BTCPay POS app creation failed (HTTP ${response.status}).`,
+      response.status,
+      parsed,
+    );
+  }
+
+  const app = parsed as Partial<BtcpayPosApp> | null;
+  if (!app || typeof app.id !== 'string') {
+    throw new BtcpayApiError(
+      'BTCPay returned an unexpected POS app payload (no id).',
+      response.status,
+      parsed,
+    );
+  }
+
+  return app as BtcpayPosApp;
+}
+
+// ---------------------------------------------------------------------------
 // On-chain (Bitcoin) wallet configuration
 // ---------------------------------------------------------------------------
 //
