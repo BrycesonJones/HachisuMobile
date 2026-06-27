@@ -1,7 +1,11 @@
+import { useFocusEffect } from '@react-navigation/native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
+import { useCallback } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -11,18 +15,29 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/auth/primary-button';
+import { PosAppRow } from '@/components/payments/pos/pos-app-row';
 import { COLORS } from '@/constants/colors';
+import { HachisuColors } from '@/constants/hachisu-colors';
 import { useActiveStore } from '@/contexts/active-store-context';
-
-const CREATE_POS_ROUTE = '/payments/pos/create';
+import { usePosApps } from '@/hooks/use-pos-apps';
 
 export default function PointOfSaleScreen() {
   const router = useRouter();
-  const { activeStore } = useActiveStore();
+  const { activeStore, activeMerchantStoreId } = useActiveStore();
+  const { posApps, loading, error, refetch } = usePosApps(activeMerchantStoreId);
+
+  // Refresh when returning from create/update so new or edited apps show.
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch]),
+  );
 
   function goToCreate() {
-    router.push(CREATE_POS_ROUTE as never);
+    router.push('/payments/pos/create' as never);
   }
+
+  const isEmpty = !loading && !error && posApps.length === 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -42,7 +57,14 @@ export default function PointOfSaleScreen() {
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading && posApps.length > 0}
+            onRefresh={refetch}
+            tintColor={COLORS.secondaryText}
+          />
+        }>
         <Text style={styles.title}>Point of Sale</Text>
         {activeStore ? (
           <View style={styles.storeRow}>
@@ -57,14 +79,40 @@ export default function PointOfSaleScreen() {
           <PrimaryButton label="Create POS" onPress={goToCreate} />
         </View>
 
-        {/* No POS apps are fetched yet — the list is always empty for now. */}
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>No point of sale apps yet</Text>
-          <Text style={styles.emptyBody}>
-            Create a product-based checkout for in-person sales, pop-ups, events, or
-            simple storefront payments.
-          </Text>
-        </View>
+        {loading && posApps.length === 0 ? (
+          <View style={styles.centerState}>
+            <ActivityIndicator color={HachisuColors.cream} />
+          </View>
+        ) : error ? (
+          <View style={styles.centerState}>
+            <Text style={styles.errorText}>{error}</Text>
+            <Pressable
+              onPress={refetch}
+              style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Try again">
+              <Text style={styles.retryLabel}>Try again</Text>
+            </Pressable>
+          </View>
+        ) : isEmpty ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>No point of sale apps yet</Text>
+            <Text style={styles.emptyBody}>
+              Create a product-based checkout for in-person sales, pop-ups, events, or
+              simple storefront payments.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.list}>
+            {posApps.map((app) => (
+              <PosAppRow
+                key={app.id}
+                app={app}
+                onPress={() => router.push(`/payments/pos/${app.id}` as never)}
+              />
+            ))}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -122,6 +170,29 @@ const styles = StyleSheet.create({
   },
   createButton: {
     marginTop: 22,
+  },
+  list: {
+    marginTop: 28,
+    gap: 12,
+  },
+  centerState: {
+    alignItems: 'center',
+    marginTop: 48,
+    gap: 16,
+  },
+  errorText: {
+    fontSize: 15,
+    color: COLORS.secondaryText,
+    textAlign: 'center',
+  },
+  retryButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  retryLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: HachisuColors.cream,
   },
   emptyState: {
     alignItems: 'center',
