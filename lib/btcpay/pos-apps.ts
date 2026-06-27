@@ -7,6 +7,7 @@ import {
   updateDevPosApp,
 } from '@/lib/btcpay/dev-pos-apps';
 import { supabase } from '@/lib/supabase';
+import type { PosProduct } from '@/components/payments/pos/products/product-types';
 import type { PosApp } from '@/types/pos-app';
 
 export interface CreatePosAppInput {
@@ -18,6 +19,8 @@ export interface CreatePosAppResult {
   posApp?: PosApp;
   error: string | null;
 }
+
+type InvokeOptions = Parameters<typeof supabase.functions.invoke>[1];
 
 /** Best-effort extraction of the server-side `{ error }` from a non-2xx
  * functions.invoke response (supabase-js otherwise gives a generic message). */
@@ -32,6 +35,42 @@ async function readFunctionError(error: unknown): Promise<string | undefined> {
     }
   }
   return undefined;
+}
+
+/** Builds a user-facing message from an invoke error, preferring the server's
+ * `{ error }` then the underlying fetch cause then the generic message. */
+async function describeInvokeError(error: { message: string }): Promise<string> {
+  const serverError = await readFunctionError(error);
+  const context = (error as { context?: unknown }).context;
+  const causeMessage =
+    context instanceof Error
+      ? context.message
+      : typeof context === 'string'
+        ? context
+        : undefined;
+  return serverError ?? causeMessage ?? error.message;
+}
+
+/** A transient, network-level fetch failure (no HTTP response received). On the
+ * iOS simulator these happen sporadically; a single retry clears them. */
+function isTransientFetchError(error: unknown): boolean {
+  return (
+    !!error &&
+    typeof error === 'object' &&
+    (error as { name?: string }).name === 'FunctionsFetchError'
+  );
+}
+
+/**
+ * Invokes an Edge Function, retrying ONCE on a transient fetch failure. Only use
+ * for idempotent operations — a retry could otherwise duplicate side effects.
+ */
+async function invokeIdempotent<T>(name: string, options: InvokeOptions) {
+  let result = await supabase.functions.invoke<T>(name, options);
+  if (result.error && isTransientFetchError(result.error)) {
+    result = await supabase.functions.invoke<T>(name, options);
+  }
+  return result;
 }
 
 /** Fetches the POS apps for a single merchant store (newest first). */
@@ -90,6 +129,7 @@ export async function createPosApp(input: CreatePosAppInput): Promise<CreatePosA
       description: null,
       status: 'active',
       metadata: {},
+      products: [],
       created_at: now,
       updated_at: now,
     };
@@ -105,60 +145,68 @@ export async function createPosApp(input: CreatePosAppInput): Promise<CreatePosA
     body: { merchantStoreId: input.merchantStoreId, appName },
   });
 
-  if (error) {
-    const serverError = await readFunctionError(error);
-    // FunctionsFetchError wraps the original throw in `.context`; surface it so
-    // a network/URL failure is diagnosable instead of a generic message.
-    const context = (error as { context?: unknown }).context;
-    const causeMessage =
-      context instanceof Error
-        ? context.message
-        : typeof context === 'string'
-          ? context
-          : undefined;
-    return { error: serverError ?? causeMessage ?? error.message };
-  }
+  // Create is NOT idempotent (a retry could create a second app), so it is not
+  // wrapped in invokeIdempotent.
+  if (error) return { error: await describeInvokeError(error) };
   if (data?.error) return { error: data.error };
   if (!data?.posApp) return { error: 'POS app was not returned by the server.' };
   return { posApp: data.posApp, error: null };
 }
 
 export interface UpdatePosAppInput {
-  display_title: string;
-  pos_style: string;
+  displayTitle: string;
+  posStyle: string;
   currency: string;
   description: string | null;
+  products: PosProduct[];
 }
 
 /**
- * Persists editable POS app settings. Owner RLS allows this client update; it
- * does not push changes back to BTCPay yet (the app keeps serving the original
- * config there — that sync is future work).
+ * Persists POS app settings + product menu via the update-btcpay-pos-app Edge
+ * Function (which syncs to BTCPay and Supabase). Idempotent, so a transient
+ * fetch failure is retried once.
  */
 export async function updatePosApp(
   id: string,
   updates: UpdatePosAppInput,
 ): Promise<{ posApp?: PosApp; error: string | null }> {
   if (isDevAuthActive()) {
-    const updated = updateDevPosApp(id, updates);
+    const updated = updateDevPosApp(id, {
+      display_title: updates.displayTitle,
+      pos_style: updates.posStyle,
+      currency: updates.currency,
+      description: updates.description,
+      products: updates.products as unknown as PosApp['products'],
+    });
     return updated ? { posApp: updated, error: null } : { error: 'POS app not found.' };
   }
 
-  const { data, error } = await supabase
-    .from('merchant_pos_apps')
-    .update(updates)
-    .eq('id', id)
-    .select('*')
-    .single();
+  const { data, error } = await invokeIdempotent<{ posApp?: PosApp; error?: string }>(
+    'update-btcpay-pos-app',
+    {
+      method: 'POST',
+      body: {
+        posAppId: id,
+        displayTitle: updates.displayTitle,
+        posStyle: updates.posStyle,
+        currency: updates.currency,
+        description: updates.description,
+        products: updates.products,
+      },
+    },
+  );
 
-  if (error) return { error: error.message };
-  return { posApp: data, error: null };
+  if (error) return { error: await describeInvokeError(error) };
+  if (data?.error) return { error: data.error };
+  if (!data?.posApp) return { error: 'POS app was not returned by the server.' };
+  return { posApp: data.posApp, error: null };
 }
 
 /**
  * Deletes a POS app via the delete-btcpay-pos-app Edge Function, which removes
- * it from BTCPay and Supabase. Dev-bypass mode removes it from the in-memory
- * registry.
+ * it from BTCPay and Supabase. Idempotent (BTCPay 404 = success, DB delete is a
+ * no-op if gone), so a transient fetch failure is retried once. Dev-bypass mode
+ * removes it from the in-memory registry.
  */
 export async function deletePosApp(posAppId: string): Promise<{ error: string | null }> {
   if (isDevAuthActive()) {
@@ -166,25 +214,12 @@ export async function deletePosApp(posAppId: string): Promise<{ error: string | 
     return { error: null };
   }
 
-  const { data, error } = await supabase.functions.invoke<{
-    success?: boolean;
-    error?: string;
-  }>('delete-btcpay-pos-app', {
-    method: 'POST',
-    body: { posAppId },
-  });
+  const { data, error } = await invokeIdempotent<{ success?: boolean; error?: string }>(
+    'delete-btcpay-pos-app',
+    { method: 'POST', body: { posAppId } },
+  );
 
-  if (error) {
-    const serverError = await readFunctionError(error);
-    const context = (error as { context?: unknown }).context;
-    const causeMessage =
-      context instanceof Error
-        ? context.message
-        : typeof context === 'string'
-          ? context
-          : undefined;
-    return { error: serverError ?? causeMessage ?? error.message };
-  }
+  if (error) return { error: await describeInvokeError(error) };
   if (data?.error) return { error: data.error };
   return { error: null };
 }

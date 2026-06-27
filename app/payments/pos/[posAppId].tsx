@@ -88,6 +88,11 @@ export default function UpdatePosScreen() {
           setPosStyle(toPosStyle(result.pos_style));
           setCurrency(result.currency);
           setDescription(result.description ?? '');
+          setProducts(
+            Array.isArray(result.products)
+              ? (result.products as unknown as PosProduct[])
+              : [],
+          );
         }
       } catch (e) {
         if (!cancelled) {
@@ -110,10 +115,11 @@ export default function UpdatePosScreen() {
     setSaving(true);
     setSaveError(null);
     const { error } = await updatePosApp(app.id, {
-      display_title: displayTitle.trim(),
-      pos_style: posStyle,
+      displayTitle: displayTitle.trim(),
+      posStyle,
       currency,
       description: description.trim() ? description.trim() : null,
+      products,
     });
     setSaving(false);
     if (error) {
