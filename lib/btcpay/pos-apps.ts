@@ -106,7 +106,16 @@ export async function createPosApp(input: CreatePosAppInput): Promise<CreatePosA
 
   if (error) {
     const serverError = await readFunctionError(error);
-    return { error: serverError ?? error.message };
+    // FunctionsFetchError wraps the original throw in `.context`; surface it so
+    // a network/URL failure is diagnosable instead of a generic message.
+    const context = (error as { context?: unknown }).context;
+    const causeMessage =
+      context instanceof Error
+        ? context.message
+        : typeof context === 'string'
+          ? context
+          : undefined;
+    return { error: serverError ?? causeMessage ?? error.message };
   }
   if (data?.error) return { error: data.error };
   if (!data?.posApp) return { error: 'POS app was not returned by the server.' };

@@ -1,3 +1,10 @@
+// Must load before the Supabase client: @supabase/functions-js builds request
+// URLs with `new URL(...)`, which Hermes only partially implements. Without this
+// polyfill every functions.invoke() throws "Failed to send a request to the
+// Edge Function". Imported here too (not only at the app entry) so it is always
+// present before this module constructs/uses the client.
+import 'react-native-url-polyfill/auto';
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
