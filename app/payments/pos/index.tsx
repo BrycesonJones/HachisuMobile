@@ -155,11 +155,7 @@ export default function PointOfSaleScreen() {
                 <Text style={styles.retryLabel}>Try again</Text>
               </Pressable>
             </View>
-          ) : posApps.length === 0 ? (
-            <Text style={styles.emptyHint}>
-              Your point of sale apps will appear here.
-            </Text>
-          ) : (
+          ) : posApps.length === 0 ? null : (
             <View style={styles.list}>
               <Text style={styles.sectionLabel}>YOUR POS APPS</Text>
               {posApps.map((app) => (
@@ -274,12 +270,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: HachisuColors.cream,
-  },
-  emptyHint: {
-    marginTop: 28,
-    fontSize: 14,
-    color: COLORS.mutedText,
-    textAlign: 'center',
   },
   list: {
     marginTop: 32,
