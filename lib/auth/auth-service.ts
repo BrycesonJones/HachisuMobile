@@ -6,6 +6,7 @@ import {
   updateDevProfile,
   type DevProfileUpdates,
 } from '@/lib/auth/dev-session';
+import { createMerchantStore } from '@/lib/btcpay/stores';
 import { supabase } from '@/lib/supabase';
 import type { AccountType, OnboardingStatus, UserProfile } from '@/types/user-profile';
 
@@ -265,16 +266,54 @@ export async function upsertUserProfile(
 }
 
 /**
- * Marks onboarding as complete and writes any final profile fields in one upsert.
+ * Picks a sensible default store name from the freshly-onboarded profile:
+ * business name for business accounts, the person's name otherwise, with
+ * fallbacks. Capped at the BTCPay store-name length limit (50).
+ */
+function deriveFirstStoreName(profile: UserProfile): string {
+  const base =
+    profile.account_type === 'business' ? profile.business_name : profile.full_name;
+  const name = (base || profile.display_name || profile.username || 'My Store').trim();
+  return (name || 'My Store').slice(0, 50);
+}
+
+/**
+ * Provisions the merchant's first store right after onboarding so they land on
+ * a ready dashboard (POS / Invoices / etc. all require a store). Non-blocking:
+ * a failure just leaves the existing "Create Store" call-to-action in place.
+ * Skipped if the profile already reports a store.
+ */
+async function ensureFirstStore(profile: UserProfile): Promise<void> {
+  try {
+    if ((profile.store_count ?? 0) > 0) return;
+    const { error } = await createMerchantStore({
+      name: deriveFirstStoreName(profile),
+      defaultCurrency: 'USD',
+    });
+    if (error) authLog('first store provisioning failed', { message: error });
+  } catch (err) {
+    authLog('first store provisioning threw', { message: String(err) });
+  }
+}
+
+/**
+ * Marks onboarding as complete and writes any final profile fields in one
+ * upsert, then provisions the merchant's first store.
  */
 export async function completeOnboarding(
   input: UpsertProfileInput = {},
 ): Promise<{ profile: UserProfile | null; error: AuthError | null }> {
-  return upsertUserProfile({
+  const result = await upsertUserProfile({
     ...input,
     onboarding_completed: true,
     onboarding_status: 'onboarding_complete',
   });
+
+  if (!result.error && result.profile) {
+    await ensureFirstStore(result.profile);
+  }
+
+  return result;
 }
 
 /**
