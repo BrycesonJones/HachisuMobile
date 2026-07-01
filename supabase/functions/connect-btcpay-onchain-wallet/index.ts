@@ -201,6 +201,9 @@ Deno.serve(async (req) => {
       onchain_provider: provider,
       onchain_address_type: addressType,
       onchain_wallet_configured_at: new Date().toISOString(),
+      // A freshly connected wallet is active by default. Must be set explicitly
+      // so a prior remove (which sets enabled=false) doesn't leave it disabled.
+      onchain_enabled: true,
       wallet_status: 'payment_destination_connected',
     })
     .eq('id', store.id);

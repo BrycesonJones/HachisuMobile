@@ -147,7 +147,7 @@ export default function BtcWalletSettingsScreen() {
           {storeName ? <Text style={styles.subtitle}>{storeName}</Text> : null}
 
           {loading ? (
-            <ActivityIndicator color={COLORS.primary} style={styles.loader} />
+            <ActivityIndicator color={COLORS.cream} style={styles.loader} />
           ) : loadError ? (
             <View style={styles.loadErrorBox}>
               <Text style={styles.errorText}>{loadError}</Text>
@@ -180,8 +180,8 @@ export default function BtcWalletSettingsScreen() {
                   value={enabled}
                   onValueChange={setEnabled}
                   disabled={busy || status === 'not_connected'}
-                  trackColor={{ false: COLORS.cardBorder, true: COLORS.primary }}
-                  thumbColor={COLORS.primaryText}
+                  trackColor={{ false: COLORS.cardBorder, true: COLORS.cream }}
+                  thumbColor={COLORS.background}
                 />
               </View>
 
@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
     marginTop: 28,
     height: 52,
     borderRadius: 12,
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.cream,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -395,14 +395,14 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: COLORS.primary,
+    borderColor: COLORS.cream,
     alignItems: 'center',
     justifyContent: 'center',
   },
   retryText: {
     fontSize: 15,
     fontWeight: '600',
-    color: COLORS.primary,
+    color: COLORS.cream,
   },
   pressed: {
     opacity: 0.7,
