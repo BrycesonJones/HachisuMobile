@@ -27,10 +27,13 @@ import {
   previewOnChainWallet,
 } from '../_shared/btcpay-client.ts';
 
-// A minimal sanity check so we don't bother BTCPay with obvious junk. BTCPay
-// remains the real validator. xpub/ypub/zpub/vpub/tpub/upub or a descriptor.
-const LOOKS_LIKE_KEY = /^([xyztuv]pub[1-9A-HJ-NP-Za-km-z]+|.*\()/;
-const MAX_KEY_LENGTH = 1000;
+// Minimal sanity check so we don't bother BTCPay with obvious junk; BTCPay is
+// the real validator and accepts far more than plain xpub. Matches an output
+// descriptor "(" anywhere, OR any extended-key token — single-sig & multisig,
+// mainnet & testnet (x/y/z/t/u/v-pub, incl. capital Ypub/Zpub/Upub/Vpub),
+// including suffixed (xpub-[p2sh]), multisig (N-of-...) and key-origin forms.
+const LOOKS_LIKE_KEY = /(\(|[xyztuv]pub[1-9A-HJ-NP-Za-km-z]{20,})/i;
+const MAX_KEY_LENGTH = 2000;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -126,13 +129,24 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: true, addressType, addresses });
   } catch (err) {
     const isApiError = err instanceof BtcpayApiError;
-    // Mask the key; never log the full value.
+    // Log BTCPay's status + body for support; mask the key, never log it in full.
+    let bodyText = '';
+    if (isApiError) {
+      try {
+        bodyText = typeof err.body === 'string' ? err.body : JSON.stringify(err.body);
+      } catch {
+        bodyText = '';
+      }
+      bodyText = (bodyText || '')
+        .replaceAll(extendedPublicKey, maskExtendedKey(extendedPublicKey))
+        .slice(0, 400);
+    }
     console.error(
       `[preview-onchain] store=${store.id} key=${maskExtendedKey(extendedPublicKey)} ` +
-        `failed: ${isApiError ? err.message : String(err)}`,
+        `failed: ${isApiError ? `HTTP ${err.status} ${bodyText}` : String(err)}`,
     );
     const message = isApiError
-      ? 'BTCPay could not read that key. Check the format and try again.'
+      ? `BTCPay could not read that key (HTTP ${err.status}). Check the format and try again.`
       : 'Could not preview the wallet. Please try again.';
     return jsonResponse({ ok: false, error: message }, 502);
   }

@@ -133,6 +133,8 @@ export type Database = {
           lightning_status: string
           name: string
           onchain_address_type: string | null
+          onchain_enabled: boolean
+          onchain_label: string | null
           onchain_provider: string | null
           onchain_status: string
           onchain_wallet_configured_at: string | null
@@ -155,6 +157,8 @@ export type Database = {
           lightning_status?: string
           name: string
           onchain_address_type?: string | null
+          onchain_enabled?: boolean
+          onchain_label?: string | null
           onchain_provider?: string | null
           onchain_status?: string
           onchain_wallet_configured_at?: string | null
@@ -177,6 +181,8 @@ export type Database = {
           lightning_status?: string
           name?: string
           onchain_address_type?: string | null
+          onchain_enabled?: boolean
+          onchain_label?: string | null
           onchain_provider?: string | null
           onchain_status?: string
           onchain_wallet_configured_at?: string | null

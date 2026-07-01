@@ -31,8 +31,10 @@ import {
 } from '../_shared/btcpay-client.ts';
 import { syncUserStoreSummary } from '../_shared/store-summary.ts';
 
-const LOOKS_LIKE_KEY = /^([xyztuv]pub[1-9A-HJ-NP-Za-km-z]+|.*\()/;
-const MAX_KEY_LENGTH = 1000;
+// Accepts an output descriptor "(" anywhere, OR any extended-key token (single-
+// sig & multisig, mainnet & testnet, incl. suffixed / N-of- / key-origin forms).
+const LOOKS_LIKE_KEY = /(\(|[xyztuv]pub[1-9A-HJ-NP-Za-km-z]{20,})/i;
+const MAX_KEY_LENGTH = 2000;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -152,9 +154,7 @@ Deno.serve(async (req) => {
   //    wallet enabled.
   let configured;
   try {
-    configured = await setOnChainWallet(config, store.btcpay_store_id, extendedPublicKey, {
-      label: store.name,
-    });
+    configured = await setOnChainWallet(config, store.btcpay_store_id, extendedPublicKey);
   } catch (err) {
     const isApiError = err instanceof BtcpayApiError;
     console.error(

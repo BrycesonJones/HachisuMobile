@@ -61,9 +61,10 @@ const MULTISIG_TYPES: AddressType[] = [
 
 export default function ImportXpubScreen() {
   const router = useRouter();
-  const { storeId, storeName } = useLocalSearchParams<{
+  const { storeId, storeName, mode } = useLocalSearchParams<{
     storeId?: string;
     storeName?: string;
+    mode?: string;
   }>();
 
   const [xpub, setXpub] = useState('');
@@ -72,9 +73,13 @@ export default function ImportXpubScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const trimmed = xpub.trim();
-  // Minimal "valid-looking" gate: an extended key prefix or a descriptor.
-  const looksValid = /^[xyztuv]pub[1-9A-HJ-NP-Za-km-z]{20,}$/.test(trimmed) || trimmed.includes('(');
-  const canContinue = !loading && trimmed.length > 0 && looksValid;
+  // Minimal "valid-looking" gate — BTCPay is the real validator. Accept an
+  // output descriptor ("(" anywhere) OR any extended-key token: single-sig &
+  // multisig, mainnet & testnet (x/y/z/t/u/v-pub incl. capital Ypub/Zpub…),
+  // including suffixed (xpub-[p2sh]), N-of-… multisig, and key-origin forms.
+  const looksValid =
+    trimmed.includes('(') || /[xyztuv]pub[1-9A-HJ-NP-Za-km-z]{20,}/i.test(trimmed);
+  const canContinue = !loading && looksValid;
 
   async function handleContinue() {
     if (!canContinue || !storeId) return;
@@ -98,6 +103,7 @@ export default function ImportXpubScreen() {
       params: {
         storeId,
         storeName: storeName ?? '',
+        mode: mode ?? 'connect',
         extendedPublicKey: trimmed,
         addressType: result.addressType ?? '',
         addresses: JSON.stringify(result.addresses),
@@ -132,7 +138,7 @@ export default function ImportXpubScreen() {
             </Text>
           ) : null}
 
-          <Text style={styles.label}>Extended public key</Text>
+          <Text style={styles.label}>Extended public key or descriptor</Text>
           <TextInput
             value={xpub}
             onChangeText={(text) => {

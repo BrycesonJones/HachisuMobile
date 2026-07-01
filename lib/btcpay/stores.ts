@@ -95,6 +95,8 @@ export async function createMerchantStore(
       onchain_provider: null,
       onchain_address_type: null,
       onchain_wallet_configured_at: null,
+      onchain_enabled: true,
+      onchain_label: null,
       is_default: isDefault,
       created_at: now,
       updated_at: now,
