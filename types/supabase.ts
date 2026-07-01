@@ -129,6 +129,8 @@ export type Database = {
           display_name: string | null
           id: string
           is_default: boolean
+          lightning_configured_at: string | null
+          lightning_error: string | null
           lightning_provider: string | null
           lightning_status: string
           name: string
@@ -153,6 +155,8 @@ export type Database = {
           display_name?: string | null
           id?: string
           is_default?: boolean
+          lightning_configured_at?: string | null
+          lightning_error?: string | null
           lightning_provider?: string | null
           lightning_status?: string
           name: string
@@ -177,6 +181,8 @@ export type Database = {
           display_name?: string | null
           id?: string
           is_default?: boolean
+          lightning_configured_at?: string | null
+          lightning_error?: string | null
           lightning_provider?: string | null
           lightning_status?: string
           name?: string

@@ -702,3 +702,223 @@ export async function removeOnChainWallet(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Lightning via the Boltz plugin
+// ---------------------------------------------------------------------------
+//
+// Hachisu does NOT expose BTCPay's "connect a Lightning node" choice to
+// merchants. Every store uses the Boltz plugin (submarine swaps to Liquid).
+// The Boltz plugin must be installed ONCE on the instance by the Hachisu admin —
+// installation is an instance-admin operation, never automated from here.
+//
+// The plugin ships a stable Greenfield JSON API (verified against
+// BoltzExchange/boltz-btcpay-plugin, GreenfieldBoltzController.cs). Routes are
+// absolute (registered with `~/`), so they live under /api/v1/stores/... :
+//
+//   GET    /api/v1/stores/{storeId}/boltz/setup            -> BoltzSetupData
+//   POST   /api/v1/stores/{storeId}/boltz/setup  { walletName }
+//   DELETE /api/v1/stores/{storeId}/boltz/setup
+//   GET    /api/v1/stores/{storeId}/boltz/wallets
+//   POST   /api/v1/stores/{storeId}/boltz/wallets { name, currency, coreDescriptor }
+//   DELETE /api/v1/stores/{storeId}/boltz/wallets/{walletId}
+//
+// There is NO Greenfield endpoint that lists installed plugins, so plugin
+// detection is a probe: GET .../boltz/setup. A 404 means the route (plugin) is
+// absent; we disambiguate "store gone" from "plugin gone" by first confirming
+// the store exists via GET /api/v1/stores/{storeId}.
+//
+// Lightning payment method id in current BTCPay is "BTC-LN". When Boltz is set
+// up (POST .../boltz/setup), the plugin itself wires the store's BTC-LN payment
+// method to the Boltz daemon — we never PUT BTC-LN manually for the Boltz path.
+
+export const LIGHTNING_PAYMENT_METHOD_ID = 'BTC-LN';
+
+/** Minimal shape of GreenfieldBoltzController's BoltzSetupData. Kept loose. */
+export interface BoltzSetupData {
+  /** Whether Boltz Lightning is enabled for the store. */
+  enabled?: boolean;
+  /** The standalone Liquid (L-BTC) wallet backing the store, if configured. */
+  wallet?: {
+    id?: number;
+    name?: string;
+    currency?: string;
+    readonly?: boolean;
+    [key: string]: unknown;
+  } | null;
+  [key: string]: unknown;
+}
+
+/** Result of probing the Boltz plugin for a store. */
+export type BoltzAvailability =
+  | { available: true; setup: BoltzSetupData }
+  | {
+      available: false;
+      /**
+       * not_installed -> plugin route absent (404, store confirmed present).
+       * forbidden     -> the Greenfield key lacks store-settings permission.
+       * unsupported   -> route exists but returned an unexpected/error payload.
+       */
+      reason: 'not_installed' | 'forbidden' | 'unsupported';
+      status: number;
+      body: unknown;
+    };
+
+interface RawResponse {
+  status: number;
+  ok: boolean;
+  parsed: unknown;
+}
+
+/** Internal: GET a BTCPay path with the server key; parse body (never throws on
+ * a non-2xx — callers classify the status). Throws only on network failure. */
+async function btcpayGet(config: BtcpayConfig, path: string): Promise<RawResponse> {
+  let response: Response;
+  try {
+    response = await fetch(`${config.serverUrl}${path}`, {
+      method: 'GET',
+      headers: { Authorization: `token ${config.apiKey}` },
+    });
+  } catch (cause) {
+    throw new BtcpayApiError(
+      `Could not reach BTCPay Server at ${config.serverUrl}.`,
+      0,
+      { cause: String(cause) },
+    );
+  }
+
+  const rawText = await response.text();
+  let parsed: unknown = rawText;
+  try {
+    parsed = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    // Leave parsed as raw text.
+  }
+  return { status: response.status, ok: response.ok, parsed };
+}
+
+/**
+ * Confirms a BTCPay store exists (GET /api/v1/stores/{storeId}). Returns the
+ * store on 200, null on 404. Throws BtcpayApiError on other non-2xx responses.
+ */
+export async function getStore(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+): Promise<BtcpayStore | null> {
+  const { status, ok, parsed } = await btcpayGet(
+    config,
+    `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}`,
+  );
+  if (ok) return parsed as BtcpayStore;
+  if (status === 404) return null;
+  throw new BtcpayApiError(
+    `BTCPay store lookup failed (HTTP ${status}).`,
+    status,
+    parsed,
+  );
+}
+
+/**
+ * Probes whether the Boltz plugin is available for a store and returns its
+ * current setup state. Detection only — does NOT modify the store.
+ *
+ * Call getStore() first to confirm the store exists, so a 404 here can be
+ * attributed to the plugin route being absent rather than the store missing.
+ */
+export async function getStoreBoltzSetup(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+): Promise<BoltzAvailability> {
+  const { status, ok, parsed } = await btcpayGet(
+    config,
+    `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}/boltz/setup`,
+  );
+
+  if (ok) {
+    if (parsed && typeof parsed === 'object') {
+      return { available: true, setup: parsed as BoltzSetupData };
+    }
+    return { available: false, reason: 'unsupported', status, body: parsed };
+  }
+  if (status === 404) {
+    // Store is confirmed present by the caller -> the /boltz route is missing.
+    return { available: false, reason: 'not_installed', status, body: parsed };
+  }
+  if (status === 401 || status === 403) {
+    return { available: false, reason: 'forbidden', status, body: parsed };
+  }
+  return { available: false, reason: 'unsupported', status, body: parsed };
+}
+
+export interface LightningPaymentMethod {
+  enabled?: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * Reads the store's Lightning (BTC-LN) payment method, or null if it isn't
+ * configured yet (404). Throws BtcpayApiError on other non-2xx responses. Used
+ * to confirm Boltz wired Lightning before marking a store connected.
+ */
+export async function getStoreLightningPaymentMethod(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+): Promise<LightningPaymentMethod | null> {
+  const { status, ok, parsed } = await btcpayGet(
+    config,
+    `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}` +
+      `/payment-methods/${LIGHTNING_PAYMENT_METHOD_ID}`,
+  );
+  if (ok) return (parsed as LightningPaymentMethod) ?? null;
+  if (status === 404) return null;
+  throw new BtcpayApiError(
+    `BTCPay Lightning payment-method lookup failed (HTTP ${status}).`,
+    status,
+    parsed,
+  );
+}
+
+/** A coarse, non-authoritative view of a store's Lightning readiness. */
+export interface StoreLightningStatus {
+  boltzAvailable: boolean;
+  boltzEnabled: boolean;
+  /** A readonly L-BTC wallet is attached to the Boltz setup. */
+  hasLbtcWallet: boolean;
+  /** BTCPay reports the BTC-LN payment method enabled. */
+  lightningEnabled: boolean;
+}
+
+/**
+ * Aggregates Boltz setup + BTC-LN payment-method state into one status object.
+ * Best-effort: missing pieces resolve to false rather than throwing, except for
+ * network failures which propagate.
+ */
+export async function getStoreLightningStatus(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+): Promise<StoreLightningStatus> {
+  const boltz = await getStoreBoltzSetup(config, btcpayStoreId);
+  if (!boltz.available) {
+    return {
+      boltzAvailable: false,
+      boltzEnabled: false,
+      hasLbtcWallet: false,
+      lightningEnabled: false,
+    };
+  }
+
+  const wallet = boltz.setup.wallet;
+  let lightningEnabled = false;
+  try {
+    const ln = await getStoreLightningPaymentMethod(config, btcpayStoreId);
+    lightningEnabled = ln?.enabled === true;
+  } catch {
+    // Treat a payment-method read failure as "not enabled" for status purposes.
+  }
+
+  return {
+    boltzAvailable: true,
+    boltzEnabled: boltz.setup.enabled === true,
+    hasLbtcWallet: !!wallet && typeof wallet === 'object',
+    lightningEnabled,
+  };
+}

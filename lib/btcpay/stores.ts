@@ -91,6 +91,8 @@ export async function createMerchantStore(
       wallet_status: 'store_created',
       lightning_status: 'not_connected',
       lightning_provider: null,
+      lightning_configured_at: null,
+      lightning_error: null,
       onchain_status: 'not_connected',
       onchain_provider: null,
       onchain_address_type: null,
