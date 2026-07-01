@@ -1,5 +1,7 @@
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,16 +16,56 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/auth/back-button';
 import { COLORS } from '@/constants/colors';
+import { useActiveStore } from '@/contexts/active-store-context';
+import { connectLbtcWallet } from '@/lib/btcpay/lightning';
 
 export default function ImportCoreDescriptorScreen() {
-  const [walletName, setWalletName] = useState('lightning');
+  const router = useRouter();
+  const { activeMerchantStoreId, refetch } = useActiveStore();
+  const params = useLocalSearchParams<{ storeId?: string; storeName?: string; mode?: string }>();
+  const storeId = params.storeId || activeMerchantStoreId || '';
+
+  // In replace mode use a unique wallet name so a NEW Boltz wallet is imported
+  // (the backend reuses wallets by name); a first-time connect uses "Lightning".
+  const [walletName, setWalletName] = useState(() =>
+    params.mode === 'replace' ? `Lightning-${Date.now().toString(36)}` : 'Lightning',
+  );
   const [descriptor, setDescriptor] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const canImport = walletName.trim().length > 0 && descriptor.trim().length > 0;
+  const canImport = walletName.trim().length > 0 && descriptor.trim().length > 0 && !submitting;
 
-  function handleImport() {
+  async function handleImport() {
     if (!canImport) return;
-    // TODO: import the read-only wallet from the core descriptor.
+    if (!storeId) {
+      setError('No store selected.');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+
+    const result = await connectLbtcWallet({
+      merchantStoreId: storeId,
+      coreDescriptor: descriptor,
+      walletName,
+    });
+
+    if (!result.ok) {
+      setError(result.error ?? 'Could not connect the wallet. Please try again.');
+      setSubmitting(false);
+      return;
+    }
+
+    // Descriptor is no longer needed on-device — drop it as soon as the import
+    // succeeds so it never lingers in component state. Refresh the active store so
+    // the dashboard Lightning indicator turns on, then return straight to the
+    // dashboard (no interstitial success screen).
+    setDescriptor('');
+    refetch().catch(() => {
+      /* Non-fatal: indicator refreshes on next load. */
+    });
+    router.dismissTo('/(tabs)/home');
   }
 
   return (
@@ -54,6 +96,7 @@ export default function ImportCoreDescriptorScreen() {
           <TextInput
             value={descriptor}
             onChangeText={setDescriptor}
+            editable={!submitting}
             style={styles.textArea}
             multiline
             numberOfLines={4}
@@ -63,6 +106,8 @@ export default function ImportCoreDescriptorScreen() {
             autoComplete="off"
             spellCheck={false}
           />
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
           <Pressable
             onPress={handleImport}
@@ -74,7 +119,11 @@ export default function ImportCoreDescriptorScreen() {
             ]}
             accessibilityRole="button"
             accessibilityLabel="Import">
-            <Text style={styles.importText}>Import</Text>
+            {submitting ? (
+              <ActivityIndicator color={COLORS.background} />
+            ) : (
+              <Text style={styles.importText}>Import</Text>
+            )}
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -133,6 +182,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.cardAlt,
     color: COLORS.primaryText,
     fontSize: 16,
+  },
+  errorText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: '#F87171',
+    lineHeight: 19,
   },
   importButton: {
     marginTop: 28,

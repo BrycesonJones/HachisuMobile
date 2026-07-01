@@ -31,6 +31,15 @@ function toWalletState(status: string | null | undefined): WalletState {
   }
 }
 
+// The dot glows only when a payment method is ACTIVE — configured AND enabled.
+// A configured-but-disabled method (connection exists, but the merchant can't
+// currently accept payments) shows the muted/inactive dot, even though the
+// settings screen still treats it as connected/configured.
+function walletDotState(status: string | null | undefined, enabled: boolean): WalletState {
+  if (status === 'connected') return enabled ? 'connected' : 'inactive';
+  return toWalletState(status);
+}
+
 const STATE_COLOR: Record<WalletState, string> = {
   connected: HachisuColors.primary, // #F28C10
   pending: HachisuColors.primaryLight, // #FBBF24 — subtle/active-but-pending
@@ -45,15 +54,18 @@ const STATE_COLOR: Record<WalletState, string> = {
 export function WalletIndicator() {
   const router = useRouter();
   const { activeStore } = useActiveStore();
-  // Which wallet row is expanded to reveal its actions (Bitcoin → Settings).
-  const [expanded, setExpanded] = useState(false);
+  // Which wallet row (if any) is expanded to reveal its actions (→ Settings).
+  const [expanded, setExpanded] = useState<'bitcoin' | 'lightning' | null>(null);
 
   // No active store yet — don't show misleading connected status.
   if (!activeStore) return null;
 
-  const bitcoinState = toWalletState(activeStore.onchain_status);
-  const lightningState = toWalletState(activeStore.lightning_status);
-  const bitcoinConnected = bitcoinState === 'connected';
+  // "configured" = a connection exists (tapping opens the Settings dropdown even
+  // when disabled). "state" = the dot, which only glows when configured AND enabled.
+  const bitcoinConfigured = activeStore.onchain_status === 'connected';
+  const lightningConfigured = activeStore.lightning_status === 'connected';
+  const bitcoinState = walletDotState(activeStore.onchain_status, activeStore.onchain_enabled);
+  const lightningState = walletDotState(activeStore.lightning_status, activeStore.lightning_enabled);
 
   // Wallet setup is always scoped to the selected store: the active store's id
   // and name are passed into the flow.
@@ -67,20 +79,36 @@ export function WalletIndicator() {
     });
   }
 
-  // Connected Bitcoin: tapping expands a small dropdown (Settings only — no
-  // Send/Receive). Not connected: tapping opens the connect flow.
+  // Connected wallet: tapping expands a small dropdown (Settings only — no
+  // Send/Receive/node info). Not connected: tapping opens the connect flow.
   function onBitcoinPress() {
-    if (bitcoinConnected) {
-      setExpanded((v) => !v);
+    if (bitcoinConfigured) {
+      setExpanded((v) => (v === 'bitcoin' ? null : 'bitcoin'));
     } else {
       openWalletSetup(activeStore!, '/account/connect-onchain-wallet');
     }
   }
 
+  function onLightningPress() {
+    if (lightningConfigured) {
+      setExpanded((v) => (v === 'lightning' ? null : 'lightning'));
+    } else {
+      openWalletSetup(activeStore!, '/account/connect-lightning');
+    }
+  }
+
   function openBitcoinSettings() {
-    setExpanded(false);
+    setExpanded(null);
     router.push({
       pathname: '/account/btc-wallet-settings',
+      params: { storeId: activeStore!.id, storeName: activeStore!.name },
+    });
+  }
+
+  function openLightningSettings() {
+    setExpanded(null);
+    router.push({
+      pathname: '/account/lightning-settings',
       params: { storeId: activeStore!.id, storeName: activeStore!.name },
     });
   }
@@ -89,7 +117,7 @@ export function WalletIndicator() {
     <View style={styles.root}>
       <Text style={styles.label}>WALLETS</Text>
       <WalletRow name="Bitcoin" state={bitcoinState} onPress={onBitcoinPress} />
-      {bitcoinConnected && expanded ? (
+      {bitcoinConfigured && expanded === 'bitcoin' ? (
         <Pressable
           onPress={openBitcoinSettings}
           style={({ pressed }) => [styles.subRow, pressed && styles.pressed]}
@@ -98,11 +126,16 @@ export function WalletIndicator() {
           <Text style={styles.subRowLabel}>Settings</Text>
         </Pressable>
       ) : null}
-      <WalletRow
-        name="Lightning"
-        state={lightningState}
-        onPress={() => openWalletSetup(activeStore, '/account/connect-lightning')}
-      />
+      <WalletRow name="Lightning" state={lightningState} onPress={onLightningPress} />
+      {lightningConfigured && expanded === 'lightning' ? (
+        <Pressable
+          onPress={openLightningSettings}
+          style={({ pressed }) => [styles.subRow, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Lightning settings">
+          <Text style={styles.subRowLabel}>Settings</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

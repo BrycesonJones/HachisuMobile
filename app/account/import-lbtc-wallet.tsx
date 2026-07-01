@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,6 +8,11 @@ import { COLORS } from '@/constants/colors';
 
 export default function ImportLbtcWalletScreen() {
   const router = useRouter();
+  const { storeId, storeName, mode } = useLocalSearchParams<{
+    storeId?: string;
+    storeName?: string;
+    mode?: string;
+  }>();
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -28,8 +33,13 @@ export default function ImportLbtcWalletScreen() {
         <MethodRow
           icon="insert-drive-file"
           title="Enter core descriptor"
-          subtitle="Provide the core descriptor of your read-only wallet. Hachisu and BTCPay Server can't control funds."
-          onPress={() => router.push('/account/import-core-descriptor')}
+          subtitle="Provide the core descriptor of your read-only wallet. Hachisu cannot control funds."
+          onPress={() =>
+            router.push({
+              pathname: '/account/import-core-descriptor',
+              params: { storeId: storeId ?? '', storeName: storeName ?? '', mode: mode ?? '' },
+            })
+          }
         />
       </ScrollView>
     </SafeAreaView>

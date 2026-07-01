@@ -30,6 +30,7 @@ import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 import {
   BtcpayApiError,
   BtcpayConfigError,
+  ensureBoltzStoreReady,
   getBtcpayConfig,
   getStore,
   getStoreBoltzSetup,
@@ -122,15 +123,10 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: 'Store not found.' }, 404);
   }
 
-  // Never disturb an already-connected Lightning store.
-  if (store.lightning_status === 'connected') {
-    return jsonResponse({
-      ok: true,
-      provider: 'boltz',
-      status: 'connected',
-      nextStep: 'none',
-    });
-  }
+  // NOTE: "prepare" is READINESS ONLY (Layer 1 — can the server support Lightning
+  // setup for this store). It must NEVER report or persist a connected state.
+  // Connection (Layer 2) happens only in connect-btcpay-lbtc-wallet once BTC-LN is
+  // confirmed. So we do NOT short-circuit on lightning_status here.
 
   // 4. Validate BTCPay config.
   let config;
@@ -245,55 +241,96 @@ Deno.serve(async (req) => {
     );
   }
 
-  // 7. Boltz is available. If a readonly L-BTC wallet is already attached AND
-  //    Boltz is enabled, the store is effectively connected — reflect that.
-  const enabled = boltz.setup.enabled === true;
-  const wallet = boltz.setup.wallet;
-  const hasWallet = !!wallet && typeof wallet === 'object';
-
-  const nextStatus = enabled && hasWallet ? 'connected' : 'pending_lbtc_wallet';
-  const nextStep = nextStatus === 'connected' ? 'none' : 'setup_lbtc_wallet';
-
-  const { error: updateError } = await admin
-    .from('merchant_stores')
-    .update({
-      lightning_status: nextStatus,
-      lightning_provider: 'boltz',
-      lightning_configured_at: new Date().toISOString(),
-      lightning_error: null,
-    })
-    .eq('id', store.id);
-  if (updateError) {
+  // 6b. Ensure the store can accept a wallet import RIGHT NOW (readiness +
+  //     on-demand provisioning). This is Layer 1 ONLY — it does NOT connect a
+  //     wallet. GET /boltz/setup can report an enabled standalone wallet left
+  //     over from a prior connect even after BTC-LN was removed, so we must NOT
+  //     treat it as connected. If not ready, block so the merchant never enters
+  //     the descriptor screen — a server/admin readiness issue, not their fault.
+  let readiness;
+  try {
+    readiness = await ensureBoltzStoreReady(config, store.btcpay_store_id);
+  } catch (err) {
+    const isApiError = err instanceof BtcpayApiError;
     await logEvent({
       eventType: 'lightning_boltz_prepare_failed',
       status: 'error',
-      message: `Boltz ready at BTCPay but DB update failed: ${updateError.message}`,
+      message: isApiError ? err.message : 'Could not reach the payment server.',
       btcpayStoreId: store.btcpay_store_id,
+      rawError: isApiError ? { status: err.status } : null,
     });
     return jsonResponse(
-      { ok: false, error: 'Lightning prepared but could not be saved. Please try again.' },
-      500,
+      { ok: false, error: 'Could not reach the payment server. Please try again.' },
+      502,
     );
   }
 
-  // 8. Keep the user_profiles default-store summary in sync.
-  try {
-    await syncUserStoreSummary(admin, user.id);
-  } catch (err) {
-    console.error('[prepare-boltz] summary sync failed:', String(err));
+  if (!readiness.ready) {
+    await logEvent({
+      eventType: 'lightning_boltz_daemon_unavailable',
+      status: 'error',
+      message: `Boltz not ready (reason=${readiness.reason}, code=${readiness.code ?? 'none'}, HTTP ${readiness.status}).`,
+      btcpayStoreId: store.btcpay_store_id,
+      rawError: { reason: readiness.reason, status: readiness.status, code: readiness.code },
+    });
+    // 200 + stable code so the client can show a blocked state cleanly.
+    return jsonResponse(
+      {
+        ok: false,
+        code: 'BOLTZ_DAEMON_UNAVAILABLE',
+        error: 'Lightning isn’t ready on the payment server yet. Please try again later.',
+      },
+      200,
+    );
+  }
+
+  // 7. Readiness confirmed. Persist a TRANSITIONAL state only — NEVER 'connected',
+  //    and NO configured_at timestamp (that's a connection fact). The store only
+  //    becomes 'connected' in connect-btcpay-lbtc-wallet after BTC-LN is confirmed.
+  //    Don't downgrade an already-connected store (e.g. a 'Change connection'
+  //    replace in progress) — leave it connected until the new import succeeds.
+  if (store.lightning_status !== 'connected') {
+    const { error: updateError } = await admin
+      .from('merchant_stores')
+      .update({
+        lightning_status: 'pending_lbtc_wallet',
+        lightning_provider: 'boltz',
+        lightning_error: null,
+      })
+      .eq('id', store.id);
+    if (updateError) {
+      await logEvent({
+        eventType: 'lightning_boltz_prepare_failed',
+        status: 'error',
+        message: `Boltz ready at BTCPay but DB update failed: ${updateError.message}`,
+        btcpayStoreId: store.btcpay_store_id,
+      });
+      return jsonResponse(
+        { ok: false, error: 'Lightning prepared but could not be saved. Please try again.' },
+        500,
+      );
+    }
+
+    try {
+      await syncUserStoreSummary(admin, user.id);
+    } catch (err) {
+      console.error('[prepare-boltz] summary sync failed:', String(err));
+    }
   }
 
   await logEvent({
     eventType: 'lightning_boltz_ready',
     status: 'ok',
-    message: `Boltz Lightning ready (${nextStatus}) for store "${store.name}".`,
+    message: `Boltz Lightning ready (pending L-BTC wallet import) for store "${store.name}".`,
     btcpayStoreId: store.btcpay_store_id,
   });
 
+  // status is a READINESS signal — never 'connected'. The client routes to the
+  // Set L-BTC Wallet flow; connection is confirmed only by the descriptor import.
   return jsonResponse({
     ok: true,
     provider: 'boltz',
-    status: nextStatus,
-    nextStep,
+    status: 'pending_lbtc_wallet',
+    nextStep: 'setup_lbtc_wallet',
   });
 });

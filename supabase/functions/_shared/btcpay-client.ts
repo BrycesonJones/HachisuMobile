@@ -922,3 +922,454 @@ export async function getStoreLightningStatus(
     lightningEnabled,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Boltz L-BTC wallet import + setup (Phase 3)
+// ---------------------------------------------------------------------------
+//
+// Connecting Lightning for a store is a two-call sequence on the Boltz plugin:
+//   1. POST /api/v1/stores/{storeId}/boltz/wallets
+//        { name, currency: "LBTC", coreDescriptor }  -> watch-only import
+//   2. POST /api/v1/stores/{storeId}/boltz/setup  { walletName: name }
+//        -> makes that wallet the store's Lightning receive wallet; the plugin
+//           itself wires the store's BTC-LN payment method to the Boltz daemon.
+//
+// We only ever import a READ-ONLY core descriptor (coreDescriptor). We never
+// send a mnemonic/seed and never create a hot wallet.
+
+/**
+ * Masks a wallet descriptor for safe logging. A descriptor reveals a wallet's
+ * entire address history, so the full value is NEVER logged. e.g. "elwpkh…f0aa".
+ */
+export function maskDescriptor(value: string): string {
+  const v = (value ?? '').trim();
+  if (v.length <= 12) return '***';
+  return `${v.slice(0, 6)}…${v.slice(-4)}`;
+}
+
+/** A Boltz wallet as returned by the plugin (loose — we only read a few fields). */
+export interface BoltzWallet {
+  id?: number;
+  name?: string;
+  currency?: string;
+  readonly?: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * Internal: POST a JSON body to a BTCPay path with the server key. Parses the
+ * body; throws BtcpayApiError on network failure or a non-2xx response (the
+ * parsed body is captured for diagnostics — callers must not log it verbatim as
+ * it can echo the submitted descriptor).
+ */
+async function btcpayPost(
+  config: BtcpayConfig,
+  path: string,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  let response: Response;
+  try {
+    response = await fetch(`${config.serverUrl}${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `token ${config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (cause) {
+    throw new BtcpayApiError(
+      `Could not reach BTCPay Server at ${config.serverUrl}.`,
+      0,
+      { cause: String(cause) },
+    );
+  }
+
+  const rawText = await response.text();
+  let parsed: unknown = rawText;
+  try {
+    parsed = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    // Leave parsed as raw text.
+  }
+
+  if (!response.ok) {
+    throw new BtcpayApiError(
+      `BTCPay Boltz request failed (HTTP ${response.status}).`,
+      response.status,
+      parsed,
+    );
+  }
+  return parsed;
+}
+
+/** Lists the Boltz wallets configured for a store (empty array on 404). */
+export async function listBoltzWallets(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+): Promise<BoltzWallet[]> {
+  const { status, ok, parsed } = await btcpayGet(
+    config,
+    `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}/boltz/wallets`,
+  );
+  if (status === 404) return [];
+  if (!ok) {
+    throw new BtcpayApiError(
+      `BTCPay Boltz wallet list failed (HTTP ${status}).`,
+      status,
+      parsed,
+    );
+  }
+  return Array.isArray(parsed) ? (parsed as BoltzWallet[]) : [];
+}
+
+/**
+ * Imports a READ-ONLY L-BTC wallet from a core descriptor. Returns the created
+ * Boltz wallet. Throws BtcpayApiError on failure (body captured but NEVER log it
+ * verbatim — it can echo the descriptor).
+ */
+export async function importBoltzLbtcWallet(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  input: { name: string; coreDescriptor: string },
+): Promise<BoltzWallet> {
+  const parsed = await btcpayPost(
+    config,
+    `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}/boltz/wallets`,
+    { name: input.name, currency: 'LBTC', coreDescriptor: input.coreDescriptor },
+  );
+  const wallet = parsed as Partial<BoltzWallet> | null;
+  if (!wallet || typeof wallet !== 'object') {
+    throw new BtcpayApiError(
+      'BTCPay returned an unexpected Boltz wallet payload.',
+      200,
+      null, // do not retain the body: it may echo the descriptor.
+    );
+  }
+  return wallet as BoltzWallet;
+}
+
+/**
+ * Selects the named Boltz wallet as the store's Lightning receive wallet. The
+ * plugin wires the store's BTC-LN payment method to the Boltz daemon. Returns
+ * the resulting BoltzSetupData so the caller can confirm it reports enabled.
+ */
+export async function setupBoltzForStore(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  walletName: string,
+): Promise<BoltzSetupData> {
+  const parsed = await btcpayPost(
+    config,
+    `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}/boltz/setup`,
+    { walletName },
+  );
+  const setup = parsed as Partial<BoltzSetupData> | null;
+  if (!setup || typeof setup !== 'object') {
+    throw new BtcpayApiError(
+      'BTCPay returned an unexpected Boltz setup payload.',
+      200,
+      parsed,
+    );
+  }
+  return setup as BoltzSetupData;
+}
+
+/** Extracts the Boltz plugin's structured error code (e.g. "boltz-unavailable")
+ * from a parsed BTCPay error body, if present. */
+export function extractBoltzCode(body: unknown): string | null {
+  if (body && typeof body === 'object' && typeof (body as { code?: unknown }).code === 'string') {
+    return (body as { code: string }).code;
+  }
+  if (typeof body === 'string') {
+    try {
+      const p = JSON.parse(body);
+      if (p && typeof p.code === 'string') return p.code;
+    } catch {
+      // Not JSON — no code.
+    }
+  }
+  return null;
+}
+
+/** Internal: POST JSON to a BTCPay path, returning the raw status/body WITHOUT
+ * throwing on a non-2xx (only a network failure throws). Mirror of btcpayGet. */
+async function btcpayPostRaw(
+  config: BtcpayConfig,
+  path: string,
+  body: Record<string, unknown>,
+): Promise<RawResponse> {
+  let response: Response;
+  try {
+    response = await fetch(`${config.serverUrl}${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `token ${config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (cause) {
+    throw new BtcpayApiError(
+      `Could not reach BTCPay Server at ${config.serverUrl}.`,
+      0,
+      { cause: String(cause) },
+    );
+  }
+  const rawText = await response.text();
+  let parsed: unknown = rawText;
+  try {
+    parsed = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    // Leave parsed as raw text.
+  }
+  return { status: response.status, ok: response.ok, parsed };
+}
+
+/**
+ * Sentinel wallet name used ONLY to trigger per-store Boltz auto-provisioning
+ * while probing readiness. It is intentionally a name that will not exist, so the
+ * setup call returns a harmless "wallet not found" error (proving the daemon
+ * reached provisioning) rather than actually enabling any wallet.
+ */
+export const READINESS_SENTINEL_WALLET = '__hachisu_readiness_probe__';
+
+/** Result of ensuring a store is Boltz-ready to accept a descriptor import. */
+export type BoltzReadiness =
+  | { ready: true }
+  | {
+      ready: false;
+      /**
+       * daemon_unavailable -> the Boltz daemon isn't reachable / the store can't
+       *   be provisioned (e.g. daemon down, or non-admin key + tenants disabled).
+       * unknown -> an unexpected error (permission/route/config) — treat as blocked.
+       */
+      reason: 'daemon_unavailable' | 'unknown';
+      status: number;
+      code: string | null;
+    };
+
+/**
+ * Ensures a store can accept a Boltz L-BTC wallet import RIGHT NOW, and provisions
+ * it if needed. This is the correct readiness gate:
+ *
+ *   1. GET /boltz/wallets — 200 means the store is already provisioned (fast path,
+ *      read-only). NOTE: this endpoint returns `boltz-unavailable` for a store that
+ *      simply hasn't been provisioned yet, so a 400 here is NOT conclusive.
+ *   2. On `boltz-unavailable`, POST /boltz/setup with a non-existent sentinel wallet
+ *      to trigger the plugin's on-demand per-store provisioning (GetOrCreateClient):
+ *        - still `boltz-unavailable`  -> daemon truly unavailable / can't provision.
+ *        - any other error (e.g. `boltz-error` "wallet not found") or 2xx
+ *          -> the daemon is reachable and the store is now provisioned -> READY.
+ *
+ * Only a network failure throws; all HTTP outcomes resolve to a BoltzReadiness.
+ */
+export async function ensureBoltzStoreReady(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+): Promise<BoltzReadiness> {
+  const base = `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}/boltz`;
+
+  const list = await btcpayGet(config, `${base}/wallets`);
+  if (list.ok) return { ready: true };
+
+  const listCode = extractBoltzCode(list.parsed);
+  if (!(list.status === 400 && listCode === 'boltz-unavailable')) {
+    // Unexpected: 403 (permission), 404 (plugin route gone), etc. Blocked.
+    return { ready: false, reason: 'unknown', status: list.status, code: listCode };
+  }
+
+  // Not provisioned yet — try to provision on demand.
+  const probe = await btcpayPostRaw(config, `${base}/setup`, {
+    walletName: READINESS_SENTINEL_WALLET,
+  });
+  if (probe.ok) return { ready: true };
+
+  const probeCode = extractBoltzCode(probe.parsed);
+  if (probeCode === 'boltz-unavailable') {
+    return { ready: false, reason: 'daemon_unavailable', status: probe.status, code: probeCode };
+  }
+  // Daemon reachable and store provisioned (the sentinel wallet just doesn't exist).
+  return { ready: true };
+}
+
+// ---------------------------------------------------------------------------
+// Lightning settings (mobile Lightning Settings screen)
+// ---------------------------------------------------------------------------
+//
+// The "Enabled" flag lives on the BTC-LN payment method; its config holds the
+// connectionString (the Boltz macaroon) which is SERVER-ONLY and must be
+// round-tripped, never returned to the client. The "description template" is a
+// STORE-level field (lightningDescriptionTemplate), updated via PUT /stores/{id}.
+
+/** Internal: PUT JSON, returning the parsed body; throws on network / non-2xx. */
+async function btcpayPut(
+  config: BtcpayConfig,
+  path: string,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  let response: Response;
+  try {
+    response = await fetch(`${config.serverUrl}${path}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `token ${config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (cause) {
+    throw new BtcpayApiError(
+      `Could not reach BTCPay Server at ${config.serverUrl}.`,
+      0,
+      { cause: String(cause) },
+    );
+  }
+  const rawText = await response.text();
+  let parsed: unknown = rawText;
+  try {
+    parsed = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    // Leave parsed as raw text.
+  }
+  if (!response.ok) {
+    throw new BtcpayApiError(
+      `BTCPay request failed (HTTP ${response.status}).`,
+      response.status,
+      parsed,
+    );
+  }
+  return parsed;
+}
+
+/** Internal: DELETE a path; returns the status. Throws on network / non-2xx
+ * (except 404, which is returned so callers can treat it as idempotent). */
+async function btcpayDelete(config: BtcpayConfig, path: string): Promise<number> {
+  let response: Response;
+  try {
+    response = await fetch(`${config.serverUrl}${path}`, {
+      method: 'DELETE',
+      headers: { Authorization: `token ${config.apiKey}` },
+    });
+  } catch (cause) {
+    throw new BtcpayApiError(
+      `Could not reach BTCPay Server at ${config.serverUrl}.`,
+      0,
+      { cause: String(cause) },
+    );
+  }
+  if (response.ok || response.status === 404) return response.status;
+  const rawText = await response.text();
+  let parsed: unknown = rawText;
+  try {
+    parsed = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    // Leave parsed as raw text.
+  }
+  throw new BtcpayApiError(
+    `BTCPay delete failed (HTTP ${response.status}).`,
+    response.status,
+    parsed,
+  );
+}
+
+export interface LightningPaymentMethodState {
+  /** True when a Lightning connection (connectionString/internalNodeRef) is set. */
+  configured: boolean;
+  /** Whether the BTC-LN payment method is currently enabled. */
+  enabled: boolean;
+  /** Raw BTCPay config — SERVER-ONLY (holds the Boltz macaroon). Never return to
+   * the client; only round-trip it on a PUT that preserves the connection. */
+  config: Record<string, unknown> | null;
+}
+
+/**
+ * Reads the store's BTC-LN payment method WITH config (server-side only). Returns
+ * a not-configured state on 404. The `config` must never be returned to a client.
+ */
+export async function getLightningPaymentMethodConfig(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+): Promise<LightningPaymentMethodState> {
+  const { status, ok, parsed } = await btcpayGet(
+    config,
+    `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}` +
+      `/payment-methods/${LIGHTNING_PAYMENT_METHOD_ID}?includeConfig=true`,
+  );
+  if (status === 404) return { configured: false, enabled: false, config: null };
+  if (!ok) {
+    throw new BtcpayApiError(
+      `BTCPay Lightning payment-method lookup failed (HTTP ${status}).`,
+      status,
+      parsed,
+    );
+  }
+  const pm = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+  const cfg =
+    pm.config && typeof pm.config === 'object' ? (pm.config as Record<string, unknown>) : null;
+  const hasConnection =
+    !!cfg &&
+    ((typeof cfg.connectionString === 'string' && cfg.connectionString.length > 0) ||
+      (typeof cfg.internalNodeRef === 'string' && cfg.internalNodeRef.length > 0));
+  return { configured: hasConnection, enabled: pm.enabled === true, config: cfg };
+}
+
+/**
+ * Sets the BTC-LN enabled flag WITHOUT changing the connection — the current
+ * config (fetched server-side) is echoed back so the Boltz connection is
+ * preserved. Returns BTCPay's reported enabled state.
+ */
+export async function setLightningEnabled(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  enabled: boolean,
+  currentConfig: Record<string, unknown> | null,
+): Promise<{ enabled: boolean }> {
+  const parsed = await btcpayPut(
+    config,
+    `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}/payment-methods/${LIGHTNING_PAYMENT_METHOD_ID}`,
+    { enabled, config: currentConfig ?? {} },
+  );
+  const pm = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+  return { enabled: pm.enabled === true };
+}
+
+/** Reads the store's Lightning invoice description template (non-sensitive). */
+export function getStoreLightningDescriptionTemplate(store: BtcpayStore): string | null {
+  const v = (store as Record<string, unknown>).lightningDescriptionTemplate;
+  return typeof v === 'string' ? v : null;
+}
+
+/**
+ * Updates the store's Lightning invoice description template. BTCPay's store PUT
+ * is a full update, so we echo the current store object (already fetched) back
+ * with only lightningDescriptionTemplate changed — preserving all other settings.
+ */
+export async function setStoreLightningDescriptionTemplate(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  currentStore: BtcpayStore,
+  template: string | null,
+): Promise<void> {
+  const body: Record<string, unknown> = {
+    ...(currentStore as Record<string, unknown>),
+    lightningDescriptionTemplate: template ?? '',
+  };
+  delete body.id; // id is the path param, not part of the update body.
+  await btcpayPut(config, `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}`, body);
+}
+
+/**
+ * Removes the store's BTC-LN payment method at BTCPay. Idempotent: a 404 (already
+ * gone) is treated as success. Note: this removes the store's Lightning payment
+ * method only; it does not delete the underlying Boltz wallet.
+ */
+export async function removeLightningPaymentMethod(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+): Promise<void> {
+  await btcpayDelete(
+    config,
+    `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}/payment-methods/${LIGHTNING_PAYMENT_METHOD_ID}`,
+  );
+}
