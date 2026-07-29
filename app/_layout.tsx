@@ -34,6 +34,14 @@ export default function RootLayout() {
               }}
             />
             <Stack.Screen
+              name="activity-details"
+              options={{
+                presentation: 'fullScreenModal',
+                headerShown: false,
+                animation: 'slide_from_bottom',
+              }}
+            />
+            <Stack.Screen
               name="account"
               options={{
                 // Standard push (slide-from-right) rather than a fullScreenModal:

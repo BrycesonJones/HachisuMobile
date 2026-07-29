@@ -1,5 +1,4 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { useRouter } from 'expo-router';
 import { useCallback } from 'react';
 import { StatusBar, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -11,10 +10,8 @@ import { useDashboardTab } from '@/components/dashboard/dashboard-tab-context';
 import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
 import { useActiveStore } from '@/contexts/active-store-context';
 import { bitcoinBalance } from '@/data/bitcoin-balance';
-import type { Transaction } from '@/types/transaction';
 
 export default function MerchantDashboardScreen() {
-  const router = useRouter();
   const { activeTab } = useDashboardTab();
   const { refetch } = useActiveStore();
 
@@ -26,13 +23,6 @@ export default function MerchantDashboardScreen() {
     }, [refetch]),
   );
 
-  function handleTransactionPress(transaction: Transaction) {
-    router.push({
-      pathname: '/transaction-details',
-      params: { id: transaction.id },
-    });
-  }
-
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="light-content" />
@@ -40,7 +30,7 @@ export default function MerchantDashboardScreen() {
       <View style={styles.content}>
         {activeTab === 'activity' ? (
           <Animated.View key="activity" entering={FadeIn.duration(200)} style={styles.view}>
-            <ActivityDashboardView onTransactionPress={handleTransactionPress} />
+            <ActivityDashboardView />
           </Animated.View>
         ) : (
           <Animated.View key="bitcoin" entering={FadeIn.duration(200)} style={styles.view}>

@@ -1,18 +1,33 @@
-import { DashboardHeader } from '@/components/dashboard/dashboard-header';
-import { TransactionList } from '@/components/dashboard/transaction-list';
-import { MOCK_TRANSACTIONS } from '@/data/mock-transactions';
-import type { Transaction } from '@/types/transaction';
+import { useRouter } from 'expo-router';
 
-interface ActivityDashboardViewProps {
-  onTransactionPress: (transaction: Transaction) => void;
-}
+import { ActivityList } from '@/components/dashboard/activity-list';
+import { useActiveStore } from '@/contexts/active-store-context';
+import { useStoreActivity } from '@/hooks/use-store-activity';
+import type { ActivityItem } from '@/types/activity';
 
-export function ActivityDashboardView({ onTransactionPress }: ActivityDashboardViewProps) {
+/**
+ * The Activity tab. Shows BTCPay-derived invoice/payment records for the ACTIVE
+ * store only. When the active store changes the underlying hook clears and
+ * refetches, so activity never leaks across stores.
+ */
+export function ActivityDashboardView() {
+  const router = useRouter();
+  const { activeMerchantStoreId } = useActiveStore();
+  const { items, loading, refreshing, error, refetch } =
+    useStoreActivity(activeMerchantStoreId);
+
+  function handleItemPress(item: ActivityItem) {
+    router.push({ pathname: '/activity-details', params: { id: item.id } });
+  }
+
   return (
-    <TransactionList
-      transactions={MOCK_TRANSACTIONS}
-      onTransactionPress={onTransactionPress}
-      ListHeaderComponent={<DashboardHeader />}
+    <ActivityList
+      items={items}
+      loading={loading}
+      refreshing={refreshing}
+      error={error}
+      onRefresh={refetch}
+      onItemPress={handleItemPress}
     />
   );
 }
