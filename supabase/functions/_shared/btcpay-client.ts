@@ -703,6 +703,160 @@ export async function removeOnChainWallet(
 }
 
 // ---------------------------------------------------------------------------
+// On-chain wallet balance (read-only overview)
+// ---------------------------------------------------------------------------
+//
+// Greenfield: GET /api/v1/stores/{storeId}/payment-methods/{pmId}/wallet
+//   -> OnChainWalletOverviewData { balance, confirmedBalance, unconfirmedBalance }
+// All three are DECIMAL BTC STRINGS (e.g. "0.00012500"). BTCPay computes them
+// from NBXplorer's UTXO tracking of the store's derivation scheme, so it works
+// for watch-only (xpub/descriptor) wallets — no hot wallet required.
+//
+// Field names + units verified against btcpayserver/btcpayserver master swagger
+// (swagger.template.stores-wallet.on-chain.json, OnChainWalletOverviewData).
+
+/**
+ * Parses a decimal BTC string into integer satoshis WITHOUT floating point, so
+ * no precision is lost. Returns a bigint. Throws on a malformed value.
+ */
+export function btcDecimalStringToSats(value: string): bigint {
+  const v = (value ?? '').trim();
+  const m = /^(-?)(\d*)(?:\.(\d*))?$/.exec(v);
+  if (!m || (!m[2] && !m[3])) {
+    throw new BtcpayApiError(`BTCPay returned a malformed BTC amount: "${value}".`, 200, null);
+  }
+  const sign = m[1] === '-' ? -1n : 1n;
+  const whole = m[2] || '0';
+  // BTC has exactly 8 decimal places (1 BTC = 100_000_000 sats). Pad/truncate to 8.
+  const frac = (m[3] || '').padEnd(8, '0').slice(0, 8);
+  return sign * (BigInt(whole) * 100_000_000n + BigInt(frac || '0'));
+}
+
+/** Renders integer satoshis back to a canonical 8-decimal BTC string. */
+export function satsToBtcDecimalString(sats: bigint): string {
+  const neg = sats < 0n;
+  const abs = neg ? -sats : sats;
+  const whole = abs / 100_000_000n;
+  const frac = (abs % 100_000_000n).toString().padStart(8, '0');
+  return `${neg ? '-' : ''}${whole}.${frac}`;
+}
+
+export interface OnChainWalletBalance {
+  /** Confirmed spendable balance, in integer satoshis. */
+  confirmedSats: bigint;
+  /** Unconfirmed (mempool) balance, in integer satoshis. */
+  unconfirmedSats: bigint;
+  /** Total = confirmed + unconfirmed, in integer satoshis. */
+  totalSats: bigint;
+}
+
+/**
+ * Reads the store's on-chain wallet balance from BTCPay. Returns confirmed and
+ * unconfirmed balances as exact integer satoshis (never a float). Throws
+ * BtcpayApiError — a 404 means no on-chain wallet is configured for the store.
+ */
+export async function getOnChainWalletBalance(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+): Promise<OnChainWalletBalance> {
+  const parsed = await callOnChain(config, btcpayStoreId, 'GET', '/wallet', null);
+
+  const data = (parsed ?? {}) as {
+    balance?: unknown;
+    confirmedBalance?: unknown;
+    unconfirmedBalance?: unknown;
+  };
+
+  const readStr = (v: unknown): string | null =>
+    typeof v === 'string' && v.trim() !== '' ? v.trim() : null;
+
+  const confirmedRaw = readStr(data.confirmedBalance);
+  const unconfirmedRaw = readStr(data.unconfirmedBalance);
+  const totalRaw = readStr(data.balance);
+
+  if (confirmedRaw == null && unconfirmedRaw == null && totalRaw == null) {
+    throw new BtcpayApiError(
+      'BTCPay returned an unexpected wallet overview payload (no balance).',
+      200,
+      parsed,
+    );
+  }
+
+  // Prefer the explicit confirmed/unconfirmed split. Fall back gracefully when a
+  // field is missing: if only the total is present, treat it as confirmed.
+  const unconfirmedSats = unconfirmedRaw != null ? btcDecimalStringToSats(unconfirmedRaw) : 0n;
+  let confirmedSats: bigint;
+  if (confirmedRaw != null) {
+    confirmedSats = btcDecimalStringToSats(confirmedRaw);
+  } else if (totalRaw != null) {
+    confirmedSats = btcDecimalStringToSats(totalRaw) - unconfirmedSats;
+  } else {
+    confirmedSats = 0n;
+  }
+
+  return {
+    confirmedSats,
+    unconfirmedSats,
+    totalSats: confirmedSats + unconfirmedSats,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Store exchange rate (BTCPay-computed, from the store's configured price source)
+// ---------------------------------------------------------------------------
+//
+// Greenfield: GET /api/v1/stores/{storeId}/rates?currencyPair=BTC_USD
+//   -> [ { currencyPair, rate, errors } ]   (rate is a decimal string)
+// This reuses the store's own rate source (Hachisu stores default to Kraken), so
+// the fiat estimate matches what BTCPay would use to price an invoice. Verified
+// against btcpayserver master swagger (swagger.template.stores-rates.json).
+
+export interface StoreRate {
+  /** e.g. "BTC_USD". */
+  currencyPair: string;
+  /** The rate as a decimal string, exactly as BTCPay reported it. */
+  rate: string;
+}
+
+/**
+ * Fetches the BTC -> fiat rate for a store from BTCPay's rates API. Throws
+ * BtcpayApiError when the pair can't be priced (non-2xx, empty result, or the
+ * result carries provider errors) so the caller can degrade fiat gracefully.
+ */
+export async function getStoreRate(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  currencyPair: string,
+): Promise<StoreRate> {
+  const { status, ok, parsed } = await btcpayGet(
+    config,
+    `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}/rates` +
+      `?currencyPair=${encodeURIComponent(currencyPair)}`,
+  );
+
+  if (!ok) {
+    throw new BtcpayApiError(`BTCPay rate fetch failed (HTTP ${status}).`, status, parsed);
+  }
+
+  const rows = Array.isArray(parsed) ? (parsed as Array<Record<string, unknown>>) : [];
+  const row =
+    rows.find((r) => r?.currencyPair === currencyPair) ?? (rows.length > 0 ? rows[0] : null);
+  const errors = row?.errors;
+  const rate = row && typeof row.rate === 'string' ? row.rate.trim() : '';
+
+  if (!row || !rate || (Array.isArray(errors) && errors.length > 0)) {
+    throw new BtcpayApiError(
+      `BTCPay could not price ${currencyPair}.`,
+      status,
+      // Keep the provider errors (not secrets) for server-side diagnosis.
+      Array.isArray(errors) && errors.length > 0 ? { errors } : parsed,
+    );
+  }
+
+  return { currencyPair, rate };
+}
+
+// ---------------------------------------------------------------------------
 // Lightning via the Boltz plugin
 // ---------------------------------------------------------------------------
 //
