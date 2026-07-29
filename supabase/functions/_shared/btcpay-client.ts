@@ -1739,3 +1739,120 @@ export function buildPayButtonOutput(
   return { htmlCode: html, linkUrl, lnurl, limitations };
 }
 
+// ---------------------------------------------------------------------------
+// Invoice / payment activity (reporting source of truth for the Activity feed)
+// ---------------------------------------------------------------------------
+//
+// Greenfield:
+//   GET /api/v1/stores/{storeId}/invoices
+//        ?startDate&endDate (unix seconds) &skip&take[&status][&orderId]
+//        -> InvoiceData[]  (newest first)
+//   GET /api/v1/stores/{storeId}/invoices/{invoiceId}/payment-methods
+//        -> InvoicePaymentMethodData[]  (crypto amount + individual payments)
+//
+// The invoice list is the primary feed. Payment-methods is an optional per-invoice
+// enrichment for the on-chain/Lightning amount actually paid and the received date;
+// it is best-effort (never fails the feed) because it is one extra call per invoice.
+
+/** Loose shape of Greenfield InvoiceData. Only the fields we normalize are typed. */
+export interface BtcpayInvoice {
+  id: string;
+  storeId?: string;
+  /** Fiat/display amount as a string, e.g. "1.00". */
+  amount?: string;
+  currency?: string;
+  /** New | Processing | Settled | Expired | Invalid (+ legacy Paid/Complete/Confirmed). */
+  status?: string;
+  additionalStatus?: string;
+  /** Unix seconds. */
+  createdTime?: number;
+  expirationTime?: number;
+  checkoutLink?: string;
+  type?: string;
+  metadata?: Record<string, unknown> | null;
+  checkout?: { paymentMethods?: string[]; [key: string]: unknown } | null;
+  [key: string]: unknown;
+}
+
+/** A single on-chain/Lightning payment recorded against an invoice. */
+export interface BtcpayInvoicePayment {
+  /** Unix seconds the payment was seen. */
+  receivedDate?: number;
+  value?: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
+/** Loose shape of Greenfield InvoicePaymentMethodData (field names vary by version). */
+export interface BtcpayInvoicePaymentMethod {
+  /** e.g. "BTC-CHAIN", "BTC-LN" (current) or "BTC" (legacy). */
+  paymentMethodId?: string;
+  /** Legacy fields carrying the same information. */
+  cryptoCode?: string;
+  paymentMethod?: string;
+  currency?: string;
+  /** Crypto amount due, as a string. */
+  amount?: string;
+  /** Crypto amount received, as a string. */
+  totalPaid?: string;
+  paymentMethodPaid?: string;
+  due?: string;
+  payments?: BtcpayInvoicePayment[];
+  [key: string]: unknown;
+}
+
+export interface ListInvoicesParams {
+  /** Unix seconds. */
+  startDate?: number;
+  /** Unix seconds. */
+  endDate?: number;
+  skip?: number;
+  take?: number;
+}
+
+/**
+ * Lists a store's invoices in a date range (newest first). Throws BtcpayApiError
+ * on a non-2xx response (e.g. store missing / key lacks permission).
+ */
+export async function listStoreInvoices(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  params: ListInvoicesParams,
+): Promise<BtcpayInvoice[]> {
+  const qs = new URLSearchParams();
+  if (params.startDate != null) qs.set('startDate', String(params.startDate));
+  if (params.endDate != null) qs.set('endDate', String(params.endDate));
+  if (params.skip != null) qs.set('skip', String(params.skip));
+  if (params.take != null) qs.set('take', String(params.take));
+  const query = qs.toString();
+  const path =
+    `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}/invoices` +
+    (query ? `?${query}` : '');
+
+  const { status, ok, parsed } = await btcpayGet(config, path);
+  if (ok) return Array.isArray(parsed) ? (parsed as BtcpayInvoice[]) : [];
+  throw new BtcpayApiError(
+    `BTCPay invoice listing failed (HTTP ${status}).`,
+    status,
+    parsed,
+  );
+}
+
+/**
+ * Reads the per-invoice payment methods (crypto amount + individual payments).
+ * Best-effort: returns [] on any non-2xx or unexpected payload so a single
+ * enrichment failure never breaks the activity feed. Network failures propagate.
+ */
+export async function getInvoicePaymentMethods(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  invoiceId: string,
+): Promise<BtcpayInvoicePaymentMethod[]> {
+  const { ok, parsed } = await btcpayGet(
+    config,
+    `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}` +
+      `/invoices/${encodeURIComponent(invoiceId)}/payment-methods`,
+  );
+  if (ok && Array.isArray(parsed)) return parsed as BtcpayInvoicePaymentMethod[];
+  return [];
+}
