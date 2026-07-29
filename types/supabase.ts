@@ -140,7 +140,11 @@ export type Database = {
           onchain_address_type: string | null
           onchain_enabled: boolean
           onchain_label: string | null
+          onchain_operation: string
+          onchain_operation_started_at: string | null
+          onchain_operation_token: string | null
           onchain_provider: string | null
+          onchain_scheme_fingerprint: string | null
           onchain_status: string
           onchain_wallet_configured_at: string | null
           pay_button_enabled: boolean
@@ -173,7 +177,11 @@ export type Database = {
           onchain_address_type?: string | null
           onchain_enabled?: boolean
           onchain_label?: string | null
+          onchain_operation?: string
+          onchain_operation_started_at?: string | null
+          onchain_operation_token?: string | null
           onchain_provider?: string | null
+          onchain_scheme_fingerprint?: string | null
           onchain_status?: string
           onchain_wallet_configured_at?: string | null
           pay_button_enabled?: boolean
@@ -206,7 +214,11 @@ export type Database = {
           onchain_address_type?: string | null
           onchain_enabled?: boolean
           onchain_label?: string | null
+          onchain_operation?: string
+          onchain_operation_started_at?: string | null
+          onchain_operation_token?: string | null
           onchain_provider?: string | null
+          onchain_scheme_fingerprint?: string | null
           onchain_status?: string
           onchain_wallet_configured_at?: string | null
           pay_button_enabled?: boolean

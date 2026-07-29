@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -15,8 +16,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { COLORS } from '@/constants/colors';
+import { useActiveStore } from '@/contexts/active-store-context';
+import { useAuth } from '@/contexts/auth-context';
 import {
   connectOnchainWallet,
+  newReplacementIdempotencyKey,
+  replaceOnchainWallet,
   type PreviewAddress,
 } from '@/lib/btcpay/onchain-wallet';
 
@@ -28,13 +33,19 @@ import {
 // match what their own wallet produces, then taps Confirm to finalize.
 export default function ConfirmAddressesScreen() {
   const router = useRouter();
+  const { refetch: refetchStores } = useActiveStore();
+  const { refreshProfile } = useAuth();
   const params = useLocalSearchParams<{
     storeId?: string;
     storeName?: string;
+    mode?: string;
     extendedPublicKey?: string;
     addressType?: string;
     addresses?: string;
+    previewVerificationId?: string;
   }>();
+
+  const isReplace = params.mode === 'replace';
 
   const addresses = useMemo<PreviewAddress[]>(() => {
     try {
@@ -48,6 +59,9 @@ export default function ConfirmAddressesScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedKeyPath, setCopiedKeyPath] = useState<string | null>(null);
+  // Stable for this screen instance so duplicate confirm taps map to ONE
+  // replacement server-side (the backend dedupes on this key).
+  const [idempotencyKey] = useState(() => newReplacementIdempotencyKey());
 
   function handleClose() {
     // Bail out of the whole connect flow, back to the dashboard.
@@ -64,8 +78,21 @@ export default function ConfirmAddressesScreen() {
     setTimeout(() => setCopiedKeyPath((k) => (k === item.keyPath ? null : k)), 1500);
   }
 
+  function goHome() {
+    if (router.canDismiss()) {
+      router.dismissTo('/(tabs)/home');
+    } else {
+      router.replace('/(tabs)/home');
+    }
+  }
+
   async function handleConfirm() {
     if (loading || !params.storeId || !params.extendedPublicKey) return;
+    if (isReplace) {
+      await handleReplaceConfirm();
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -84,11 +111,63 @@ export default function ConfirmAddressesScreen() {
 
     // Connected — return to the dashboard, which refetches on focus and shows
     // the selected store's wallet as connected.
-    if (router.canDismiss()) {
-      router.dismissTo('/(tabs)/home');
-    } else {
-      router.replace('/(tabs)/home');
+    goHome();
+  }
+
+  async function handleReplaceConfirm() {
+    if (!params.storeId || !params.extendedPublicKey) return;
+    if (!params.previewVerificationId) {
+      setError('Please go back and preview the replacement addresses again.');
+      return;
     }
+    setLoading(true);
+    setError(null);
+
+    const result = await replaceOnchainWallet({
+      merchantStoreId: params.storeId,
+      previewVerificationId: params.previewVerificationId,
+      extendedPublicKey: params.extendedPublicKey,
+      idempotencyKey,
+    });
+
+    setLoading(false);
+
+    // Reconcile-required: BTCPay may have changed but the app couldn't confirm/
+    // save cleanly. Route to the SAFE wallet-status screen — never back through
+    // another replacement — so the merchant re-checks before acting.
+    if (result.reconcile) {
+      await refetchStores();
+      await refreshProfile();
+      router.replace({
+        pathname: '/account/btc-wallet-settings',
+        params: { storeId: params.storeId, storeName: params.storeName ?? '', reconcile: '1' },
+      });
+      return;
+    }
+
+    if (!result.ok) {
+      setError(result.error ?? 'Could not replace the wallet. Please try again.');
+      return;
+    }
+
+    // Success: refresh the store wallet-status / balance-driving state and the
+    // profile summary so the dashboard glow + settings reflect the new wallet.
+    await refetchStores();
+    await refreshProfile();
+    Alert.alert(
+      'Wallet replaced',
+      `${params.storeName ? `${params.storeName}'s` : 'This store’s'} Bitcoin wallet was replaced. Future payments will use the new wallet.`,
+      [
+        {
+          text: 'Done',
+          onPress: () =>
+            router.replace({
+              pathname: '/account/btc-wallet-settings',
+              params: { storeId: params.storeId, storeName: params.storeName ?? '' },
+            }),
+        },
+      ],
+    );
   }
 
   return (
@@ -119,6 +198,18 @@ export default function ConfirmAddressesScreen() {
         <Text style={styles.subtitle}>
           Please check that your wallet is generating the same addresses as below.
         </Text>
+
+        {isReplace ? (
+          <View style={styles.replaceBanner}>
+            <Text style={styles.replaceBannerLabel}>
+              You are replacing the Bitcoin wallet for:
+            </Text>
+            <Text style={styles.replaceBannerStore}>{params.storeName || 'this store'}</Text>
+            <Text style={styles.replaceBannerHint}>
+              Your current wallet stays active until this replacement succeeds.
+            </Text>
+          </View>
+        ) : null}
 
         <View style={styles.tableHeader}>
           <Text style={[styles.columnHeader, styles.keyPathColumn]}>Key path</Text>
@@ -163,10 +254,10 @@ export default function ConfirmAddressesScreen() {
           {loading ? (
             <View style={styles.loadingRow}>
               <ActivityIndicator color={COLORS.background} size="small" />
-              <Text style={styles.confirmText}>Connecting…</Text>
+              <Text style={styles.confirmText}>{isReplace ? 'Replacing…' : 'Connecting…'}</Text>
             </View>
           ) : (
-            <Text style={styles.confirmText}>Confirm</Text>
+            <Text style={styles.confirmText}>{isReplace ? 'Replace wallet' : 'Confirm'}</Text>
           )}
         </Pressable>
       </ScrollView>
@@ -216,6 +307,33 @@ const styles = StyleSheet.create({
     color: COLORS.secondaryText,
     lineHeight: 20,
     textAlign: 'center',
+  },
+  replaceBanner: {
+    marginBottom: 24,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: COLORS.cardBorder,
+    backgroundColor: COLORS.cardAlt,
+    alignItems: 'center',
+    gap: 4,
+  },
+  replaceBannerLabel: {
+    fontSize: 13,
+    color: COLORS.secondaryText,
+  },
+  replaceBannerStore: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.primaryText,
+    textAlign: 'center',
+  },
+  replaceBannerHint: {
+    marginTop: 4,
+    fontSize: 12,
+    color: COLORS.secondaryText,
+    textAlign: 'center',
+    lineHeight: 17,
   },
   tableHeader: {
     flexDirection: 'row',

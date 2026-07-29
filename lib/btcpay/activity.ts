@@ -1,6 +1,10 @@
 import { isDevAuthActive } from '@/lib/auth/dev-session';
 import { supabase } from '@/lib/supabase';
-import type { ActivityItem, StoreActivityResponse } from '@/types/activity';
+import type {
+  ActivityFeedEnrichment,
+  ActivityItem,
+  StoreActivityResponse,
+} from '@/types/activity';
 
 export interface FetchStoreActivityOptions {
   startDate?: string;
@@ -11,8 +15,19 @@ export interface FetchStoreActivityOptions {
 
 export interface StoreActivityResult {
   items: ActivityItem[];
+  enrichment: ActivityFeedEnrichment;
   nextOffset: number | null;
 }
+
+/** Default when a response predates enrichment metadata (or dev-bypass): treat as
+ * nothing-to-enrich rather than fabricating a "complete" signal. */
+const NOT_REQUIRED_ENRICHMENT: ActivityFeedEnrichment = {
+  status: 'not_required',
+  attemptedCount: 0,
+  succeededCount: 0,
+  failedCount: 0,
+  retryableCount: 0,
+};
 
 /** Best-effort extraction of the server-side `{ error }` from a non-2xx
  * functions.invoke response (supabase-js otherwise gives a generic message). */
@@ -40,7 +55,7 @@ export async function fetchStoreActivity(
   options: FetchStoreActivityOptions = {},
 ): Promise<StoreActivityResult> {
   if (isDevAuthActive()) {
-    return { items: [], nextOffset: null };
+    return { items: [], enrichment: NOT_REQUIRED_ENRICHMENT, nextOffset: null };
   }
 
   const { data, error } = await supabase.functions.invoke<StoreActivityResponse>(
@@ -64,5 +79,9 @@ export async function fetchStoreActivity(
     throw new Error(data?.error ?? 'Could not load activity.');
   }
 
-  return { items: data.items ?? [], nextOffset: data.nextOffset ?? null };
+  return {
+    items: data.items ?? [],
+    enrichment: data.enrichment ?? NOT_REQUIRED_ENRICHMENT,
+    nextOffset: data.nextOffset ?? null,
+  };
 }

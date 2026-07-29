@@ -6,6 +6,7 @@ import { HachisuColors } from '@/constants/hachisu-colors';
 import {
   formatActivityAmount,
   formatActivityListDate,
+  isItemEnrichmentDegraded,
   isMutedActivity,
 } from '@/lib/transactions/activity-utils';
 import type { ActivityItem } from '@/types/activity';
@@ -19,6 +20,7 @@ export function ActivityItemRow({ item, onPress }: ActivityItemRowProps) {
   const muted = isMutedActivity(item.status);
   const amount = formatActivityAmount(item.amount, item.currency);
   const dateLabel = formatActivityListDate(item.createdAt);
+  const degraded = isItemEnrichmentDegraded(item);
 
   function handlePress() {
     onPress(item);
@@ -29,7 +31,10 @@ export function ActivityItemRow({ item, onPress }: ActivityItemRowProps) {
       onPress={handlePress}
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
       accessibilityRole="button"
-      accessibilityLabel={`${item.title}, ${amount}, ${item.displayStatus}`}>
+      accessibilityLabel={
+        `${item.title}, ${amount}, ${item.displayStatus}` +
+        (degraded ? ', some payment details unavailable' : '')
+      }>
       <ActivityAvatar item={item} muted={muted} />
 
       <View style={styles.content}>
@@ -42,6 +47,11 @@ export function ActivityItemRow({ item, onPress }: ActivityItemRowProps) {
         <Text style={[styles.dateLine, muted && styles.mutedText]} numberOfLines={1}>
           {dateLabel} · {item.displayStatus}
         </Text>
+        {degraded ? (
+          <Text style={styles.degradedMarker} numberOfLines={1}>
+            Some details unavailable
+          </Text>
+        ) : null}
       </View>
 
       <Text style={[styles.amount, muted && styles.mutedAmount]}>{amount}</Text>
@@ -55,7 +65,7 @@ interface ActivityAvatarProps {
 }
 
 function ActivityAvatar({ item, muted }: ActivityAvatarProps) {
-  const icon = item.paymentMethod === 'BTC-LN' ? 'bolt' : 'currency-bitcoin';
+  const icon = item.paymentRail === 'lightning' ? 'bolt' : 'currency-bitcoin';
   return (
     <View style={[styles.avatar, muted ? styles.mutedAvatar : styles.bitcoinAvatar]}>
       <MaterialIcons name={icon} size={22} color={HachisuColors.white} />
@@ -103,6 +113,10 @@ const styles = StyleSheet.create({
   dateLine: {
     fontSize: 14,
     color: DASHBOARD_COLORS.secondaryText,
+  },
+  degradedMarker: {
+    fontSize: 13,
+    color: DASHBOARD_COLORS.warningText,
   },
   amount: {
     fontSize: 17,

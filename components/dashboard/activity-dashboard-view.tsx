@@ -13,16 +13,29 @@ import type { ActivityItem } from '@/types/activity';
 export function ActivityDashboardView() {
   const router = useRouter();
   const { activeMerchantStoreId } = useActiveStore();
-  const { items, loading, refreshing, error, refetch } =
+  const { items, enrichment, loading, refreshing, error, refetch } =
     useStoreActivity(activeMerchantStoreId);
 
   function handleItemPress(item: ActivityItem) {
-    router.push({ pathname: '/activity-details', params: { id: item.id } });
+    // Route by DURABLE identifiers, never the in-memory item. The store is bound
+    // to the record here (the list is store-scoped), so the detail screen fetches
+    // this payment's store even if the active store changes later. `source` is
+    // display-only — the backend derives the authoritative record type.
+    if (!activeMerchantStoreId) return;
+    router.push({
+      pathname: '/activity-details',
+      params: {
+        merchantStoreId: activeMerchantStoreId,
+        invoiceId: item.btcpayInvoiceId,
+        source: item.sourceFeature,
+      },
+    });
   }
 
   return (
     <ActivityList
       items={items}
+      enrichment={enrichment}
       loading={loading}
       refreshing={refreshing}
       error={error}

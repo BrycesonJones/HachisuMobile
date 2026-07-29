@@ -61,6 +61,18 @@ export class BtcpayApiError extends Error {
   }
 }
 
+/**
+ * A BTCPay request that exceeded its per-request timeout (see btcpayGet's
+ * `timeoutMs`). Extends BtcpayApiError (status 0) so existing catch-all handling
+ * still works, but callers can special-case it as a retryable transient failure.
+ */
+export class BtcpayTimeoutError extends BtcpayApiError {
+  constructor(message: string) {
+    super(message, 0, null);
+    this.name = 'BtcpayTimeoutError';
+  }
+}
+
 export interface BtcpayStore {
   id: string;
   name: string;
@@ -923,21 +935,50 @@ interface RawResponse {
   parsed: unknown;
 }
 
+export interface BtcpayGetOptions {
+  /** Abort the request after this many ms and throw a BtcpayTimeoutError. */
+  timeoutMs?: number;
+}
+
 /** Internal: GET a BTCPay path with the server key; parse body (never throws on
- * a non-2xx — callers classify the status). Throws only on network failure. */
-async function btcpayGet(config: BtcpayConfig, path: string): Promise<RawResponse> {
+ * a non-2xx — callers classify the status). Throws BtcpayTimeoutError when
+ * `timeoutMs` elapses, otherwise BtcpayApiError (status 0) on network failure. */
+async function btcpayGet(
+  config: BtcpayConfig,
+  path: string,
+  opts: BtcpayGetOptions = {},
+): Promise<RawResponse> {
+  const { timeoutMs } = opts;
+  const controller = timeoutMs != null ? new AbortController() : undefined;
+  let timedOut = false;
+  const timer =
+    controller != null
+      ? setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, timeoutMs)
+      : undefined;
+
   let response: Response;
   try {
     response = await fetch(`${config.serverUrl}${path}`, {
       method: 'GET',
       headers: { Authorization: `token ${config.apiKey}` },
+      signal: controller?.signal,
     });
   } catch (cause) {
+    if (timedOut) {
+      throw new BtcpayTimeoutError(
+        `BTCPay request timed out after ${timeoutMs}ms.`,
+      );
+    }
     throw new BtcpayApiError(
       `Could not reach BTCPay Server at ${config.serverUrl}.`,
       0,
       { cause: String(cause) },
     );
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 
   const rawText = await response.text();
@@ -1993,20 +2034,68 @@ export async function listStoreInvoices(
 }
 
 /**
+ * Fetches a SINGLE invoice by id for a store (the durable-detail path). Unlike
+ * the list, this SURFACES failures so the caller can distinguish states:
+ * BtcpayTimeoutError on timeout, BtcpayApiError(404) when the invoice does not
+ * exist for the resolved store, BtcpayApiError(status) for other non-2xx, and
+ * BtcpayApiError(200) on an unexpected (non-object) payload. Because BTCPay
+ * scopes the lookup to `btcpayStoreId`, an invoice belonging to another store
+ * returns 404 here — the request is always bound to the resolved store.
+ */
+export async function getStoreInvoice(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  invoiceId: string,
+  opts: BtcpayGetOptions = {},
+): Promise<BtcpayInvoice> {
+  const { status, ok, parsed } = await btcpayGet(
+    config,
+    `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}` +
+      `/invoices/${encodeURIComponent(invoiceId)}`,
+    opts,
+  );
+  if (ok) {
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as BtcpayInvoice;
+    }
+    throw new BtcpayApiError('BTCPay returned an unexpected invoice payload.', status, parsed);
+  }
+  throw new BtcpayApiError(`BTCPay invoice fetch failed (HTTP ${status}).`, status, parsed);
+}
+
+/**
  * Reads the per-invoice payment methods (crypto amount + individual payments).
- * Best-effort: returns [] on any non-2xx or unexpected payload so a single
- * enrichment failure never breaks the activity feed. Network failures propagate.
+ *
+ * Unlike a best-effort helper, this SURFACES failures: it throws
+ * BtcpayTimeoutError on timeout, BtcpayApiError(status) on a non-2xx response,
+ * and BtcpayApiError(200) on an unexpected (non-array) payload. Callers that
+ * enrich the activity feed classify these into per-item enrichment status so a
+ * failed lookup is never silently rendered as "no payment." Pass `timeoutMs` to
+ * bound a single slow invoice.
  */
 export async function getInvoicePaymentMethods(
   config: BtcpayConfig,
   btcpayStoreId: string,
   invoiceId: string,
+  opts: BtcpayGetOptions = {},
 ): Promise<BtcpayInvoicePaymentMethod[]> {
-  const { ok, parsed } = await btcpayGet(
+  const { status, ok, parsed } = await btcpayGet(
     config,
     `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}` +
       `/invoices/${encodeURIComponent(invoiceId)}/payment-methods`,
+    opts,
   );
-  if (ok && Array.isArray(parsed)) return parsed as BtcpayInvoicePaymentMethod[];
-  return [];
+  if (ok) {
+    if (Array.isArray(parsed)) return parsed as BtcpayInvoicePaymentMethod[];
+    throw new BtcpayApiError(
+      'BTCPay returned an unexpected payment-methods payload.',
+      status,
+      parsed,
+    );
+  }
+  throw new BtcpayApiError(
+    `BTCPay payment-methods fetch failed (HTTP ${status}).`,
+    status,
+    parsed,
+  );
 }

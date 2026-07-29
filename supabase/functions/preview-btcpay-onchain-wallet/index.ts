@@ -23,6 +23,7 @@ import {
   BtcpayConfigError,
   classifyDerivation,
   getBtcpayConfig,
+  getOnChainWallet,
   maskExtendedKey,
   previewOnChainWallet,
 } from '../_shared/btcpay-client.ts';
@@ -117,6 +118,36 @@ Deno.serve(async (req) => {
     const message =
       err instanceof BtcpayConfigError ? err.message : 'BTCPay is not configured.';
     return jsonResponse({ ok: false, error: message }, 500);
+  }
+
+  // 4b. REPLACEMENT-GUARD: this is the CONNECT preview. A store that already has
+  //     a configured wallet must not be able to mint a connect-mode preview (which
+  //     could otherwise feed the connect endpoint and bypass replacement rules).
+  //     Existence is decided by the AUTHORITATIVE BTCPay state; a lookup failure
+  //     is a hard error, never "no wallet". Disabled-but-configured counts as
+  //     configured. The existing wallet is not touched.
+  try {
+    const existing = await getOnChainWallet(config, store.btcpay_store_id);
+    if (existing.configured) {
+      return jsonResponse(
+        {
+          ok: false,
+          code: 'WALLET_ALREADY_CONNECTED',
+          error:
+            'This store already has a Bitcoin wallet connected. Use Replace wallet to change it.',
+        },
+        409,
+      );
+    }
+  } catch (err) {
+    const isApiError = err instanceof BtcpayApiError;
+    console.error(
+      `[preview-onchain] store=${store.id} existence check failed: ${isApiError ? `HTTP ${err.status}` : String(err)}`,
+    );
+    return jsonResponse(
+      { ok: false, error: 'Could not verify the store wallet state. Please try again.' },
+      502,
+    );
   }
 
   // 5. Ask BTCPay to preview the derived addresses (0/0 … 0/9).

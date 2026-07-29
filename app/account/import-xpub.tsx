@@ -18,7 +18,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CloseFlowButton } from '@/components/account/close-flow-button';
 import { BackButton } from '@/components/auth/back-button';
 import { COLORS } from '@/constants/colors';
-import { previewOnchainWallet } from '@/lib/btcpay/onchain-wallet';
+import {
+  previewOnchainWallet,
+  previewOnchainWalletReplacement,
+} from '@/lib/btcpay/onchain-wallet';
 
 interface AddressType {
   type: string;
@@ -72,6 +75,11 @@ export default function ImportXpubScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Explicit, validated mode. Only 'connect' and 'replace' are valid; anything
+  // else (e.g. a tampered route param) fails safely rather than guessing.
+  const isReplace = mode === 'replace';
+  const modeValid = mode == null || mode === 'connect' || mode === 'replace';
+
   const trimmed = xpub.trim();
   // Minimal "valid-looking" gate — BTCPay is the real validator. Accept an
   // output descriptor ("(" anywhere) OR any extended-key token: single-sig &
@@ -83,13 +91,22 @@ export default function ImportXpubScreen() {
 
   async function handleContinue() {
     if (!canContinue || !storeId) return;
+    if (!modeValid) {
+      setError('This screen was opened incorrectly. Please go back and try again.');
+      return;
+    }
     setLoading(true);
     setError(null);
 
-    const result = await previewOnchainWallet({
-      merchantStoreId: storeId,
-      extendedPublicKey: trimmed,
-    });
+    const result = isReplace
+      ? await previewOnchainWalletReplacement({
+          merchantStoreId: storeId,
+          extendedPublicKey: trimmed,
+        })
+      : await previewOnchainWallet({
+          merchantStoreId: storeId,
+          extendedPublicKey: trimmed,
+        });
 
     setLoading(false);
 
@@ -103,10 +120,14 @@ export default function ImportXpubScreen() {
       params: {
         storeId,
         storeName: storeName ?? '',
-        mode: mode ?? 'connect',
+        mode: isReplace ? 'replace' : 'connect',
         extendedPublicKey: trimmed,
         addressType: result.addressType ?? '',
         addresses: JSON.stringify(result.addresses),
+        // Only replacement carries a server-issued, single-use preview token.
+        previewVerificationId: isReplace
+          ? ((result as { previewVerificationId?: string }).previewVerificationId ?? '')
+          : '',
       },
     });
   }
@@ -133,7 +154,7 @@ export default function ImportXpubScreen() {
 
           {storeName ? (
             <Text style={styles.storeContext}>
-              Connecting wallet for{' '}
+              {isReplace ? 'Replacing wallet for ' : 'Connecting wallet for '}
               <Text style={styles.storeContextName}>{storeName}</Text>
             </Text>
           ) : null}

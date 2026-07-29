@@ -14,4 +14,8 @@ export const DASHBOARD_COLORS = {
   statusComplete: COLORS.primaryText,
   iconBackground: COLORS.card,
   profileIcon: HachisuColors.cream,
+  /** Degraded-state (partial/failed enrichment) banner — amber, non-alarming. */
+  warningText: '#eab308',
+  warningBackground: '#26210f',
+  warningBorder: '#3d3413',
 } as const;

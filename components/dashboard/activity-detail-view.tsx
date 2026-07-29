@@ -3,24 +3,39 @@ import * as Clipboard from 'expo-clipboard';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ActivityDegradedBanner } from '@/components/dashboard/activity-degraded-banner';
 import { CloseButton } from '@/components/auth/close-button';
 import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
 import {
   formatActivityAmount,
   formatActivityDateTime,
+  formatCryptoAmount,
+  getActivityPaymentLabel,
   getActivityStatusDescription,
-  getPaymentMethodLabel,
   getSourceFeatureLabel,
+  isItemEnrichmentDegraded,
+  UNAVAILABLE_FIELD_PLACEHOLDER,
 } from '@/lib/transactions/activity-utils';
 import type { ActivityItem } from '@/types/activity';
 
 interface ActivityDetailViewProps {
   item: ActivityItem;
   onClose: () => void;
+  /** When provided, the degraded banner offers a Retry that re-fetches this record
+   * (the detail screen has no pull-to-refresh of its own). */
+  onRetryDetails?: () => void;
 }
 
-export function ActivityDetailView({ item, onClose }: ActivityDetailViewProps) {
+export function ActivityDetailView({ item, onClose, onRetryDetails }: ActivityDetailViewProps) {
   const amount = formatActivityAmount(item.amount, item.currency);
+  const cryptoAmount = formatCryptoAmount(item.cryptoAmount, item.cryptoAsset);
+  const hasCrypto = item.multiMethod || item.cryptoAmount != null;
+  const paymentLabel = getActivityPaymentLabel(item);
+  // Enrichment failed for THIS item: the base status stays authoritative, but the
+  // payment details could not be loaded. Show them explicitly as unavailable
+  // (never fabricated) rather than hiding them, so a settled invoice with a failed
+  // lookup can't read as an ordinary payment with no details.
+  const degraded = isItemEnrichmentDegraded(item);
 
   async function handleCopyInvoiceId() {
     await Clipboard.setStringAsync(item.btcpayInvoiceId);
@@ -37,6 +52,16 @@ export function ActivityDetailView({ item, onClose }: ActivityDetailViewProps) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">
+        {degraded ? (
+          <ActivityDegradedBanner
+            message={
+              onRetryDetails
+                ? 'Some payment details are temporarily unavailable.'
+                : 'Some payment details for this record couldn’t be loaded. Pull to refresh on the activity screen to try again.'
+            }
+            onRetry={onRetryDetails}
+          />
+        ) : null}
         <View style={styles.summary}>
           <Text style={styles.title}>{item.title}</Text>
           <Text style={styles.dateTime}>{formatActivityDateTime(item.createdAt)}</Text>
@@ -44,8 +69,10 @@ export function ActivityDetailView({ item, onClose }: ActivityDetailViewProps) {
             <Text style={styles.description}>{item.description}</Text>
           ) : null}
           <Text style={styles.amount}>{amount}</Text>
-          {item.btcAmount ? (
-            <Text style={styles.btcAmount}>{item.btcAmount} BTC</Text>
+          {item.multiMethod ? (
+            <Text style={styles.btcAmount}>Paid with multiple methods</Text>
+          ) : item.cryptoAmount ? (
+            <Text style={styles.btcAmount}>{cryptoAmount}</Text>
           ) : null}
         </View>
 
@@ -59,17 +86,55 @@ export function ActivityDetailView({ item, onClose }: ActivityDetailViewProps) {
           subtitle={getActivityStatusDescription(item.status)}
         />
 
-        <DetailRow icon="attach-money" title="Amount" subtitle={`${item.amount} ${item.currency}`} />
-
-        {item.btcAmount ? (
-          <DetailRow icon="currency-bitcoin" title="Bitcoin amount" subtitle={`${item.btcAmount} BTC`} />
-        ) : null}
-
         <DetailRow
-          icon="account-balance-wallet"
-          title="Payment method"
-          subtitle={getPaymentMethodLabel(item.paymentMethod)}
+          icon="attach-money"
+          title="Invoice amount"
+          subtitle={`${item.amount} ${item.currency}`}
         />
+
+        {degraded ? (
+          // Enriched fields could not be loaded — surface each as unavailable
+          // instead of hiding it, so the missing data is explicit (not fabricated).
+          <>
+            <DetailRow
+              icon="currency-bitcoin"
+              title="Amount received"
+              subtitle={UNAVAILABLE_FIELD_PLACEHOLDER}
+              hint="Details unavailable"
+            />
+            <DetailRow
+              icon="account-balance-wallet"
+              title="Payment method"
+              subtitle={UNAVAILABLE_FIELD_PLACEHOLDER}
+              hint="Details unavailable"
+            />
+          </>
+        ) : item.multiMethod ? (
+          item.breakdown.map((leg, index) => (
+            <DetailRow
+              key={`${leg.paymentMethodId ?? 'leg'}-${index}`}
+              icon={leg.paymentRail === 'lightning' ? 'bolt' : 'currency-bitcoin'}
+              title={formatCryptoAmount(leg.cryptoAmount, leg.cryptoAsset)}
+              subtitle={leg.paymentMethodLabel}
+            />
+          ))
+        ) : (
+          <>
+            {hasCrypto ? (
+              <DetailRow
+                icon="currency-bitcoin"
+                title="Amount received"
+                subtitle={cryptoAmount}
+              />
+            ) : null}
+
+            <DetailRow
+              icon="account-balance-wallet"
+              title="Payment method"
+              subtitle={paymentLabel}
+            />
+          </>
+        )}
 
         <DetailRow icon="storefront" title="Source" subtitle={getSourceFeatureLabel(item)} />
 
@@ -81,6 +146,13 @@ export function ActivityDetailView({ item, onClose }: ActivityDetailViewProps) {
 
         {item.paidAt ? (
           <DetailRow icon="payments" title="Paid" subtitle={formatActivityDateTime(item.paidAt)} />
+        ) : degraded && item.unavailableFields.includes('paidAt') ? (
+          <DetailRow
+            icon="payments"
+            title="Paid"
+            subtitle={UNAVAILABLE_FIELD_PLACEHOLDER}
+            hint="Details unavailable"
+          />
         ) : null}
 
         {item.settledAt ? (
@@ -88,6 +160,13 @@ export function ActivityDetailView({ item, onClose }: ActivityDetailViewProps) {
             icon="verified"
             title="Settled"
             subtitle={formatActivityDateTime(item.settledAt)}
+          />
+        ) : degraded && item.unavailableFields.includes('settledAt') ? (
+          <DetailRow
+            icon="verified"
+            title="Settled"
+            subtitle={UNAVAILABLE_FIELD_PLACEHOLDER}
+            hint="Details unavailable"
           />
         ) : null}
 
@@ -111,11 +190,13 @@ interface DetailRowProps {
   icon: keyof typeof MaterialIcons.glyphMap;
   title: string;
   subtitle: string;
+  /** Optional muted note under the subtitle (e.g. "Details unavailable"). */
+  hint?: string;
   trailingIcon?: keyof typeof MaterialIcons.glyphMap;
   onTrailingPress?: () => void;
 }
 
-function DetailRow({ icon, title, subtitle, trailingIcon, onTrailingPress }: DetailRowProps) {
+function DetailRow({ icon, title, subtitle, hint, trailingIcon, onTrailingPress }: DetailRowProps) {
   return (
     <View style={styles.detailRow}>
       <MaterialIcons name={icon} size={24} color={DASHBOARD_COLORS.primaryText} />
@@ -123,6 +204,7 @@ function DetailRow({ icon, title, subtitle, trailingIcon, onTrailingPress }: Det
       <View style={styles.detailContent}>
         <Text style={styles.detailTitle}>{title}</Text>
         <Text style={styles.detailSubtitle}>{subtitle}</Text>
+        {hint ? <Text style={styles.detailHint}>{hint}</Text> : null}
       </View>
 
       {trailingIcon ? (
@@ -216,6 +298,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     color: DASHBOARD_COLORS.secondaryText,
+  },
+  detailHint: {
+    fontSize: 13,
+    color: DASHBOARD_COLORS.warningText,
   },
   trailingButton: {
     width: 32,

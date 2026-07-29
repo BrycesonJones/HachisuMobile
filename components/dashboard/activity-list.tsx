@@ -8,14 +8,19 @@ import {
   View,
 } from 'react-native';
 
+import { ActivityDegradedBanner } from '@/components/dashboard/activity-degraded-banner';
 import { ActivityItemRow } from '@/components/dashboard/activity-item-row';
 import { DashboardHeader } from '@/components/dashboard/dashboard-header';
 import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
-import { groupActivityByMonth } from '@/lib/transactions/activity-utils';
-import type { ActivityItem } from '@/types/activity';
+import {
+  getActivityDegradedBannerCopy,
+  groupActivityByMonth,
+} from '@/lib/transactions/activity-utils';
+import type { ActivityFeedEnrichment, ActivityItem } from '@/types/activity';
 
 interface ActivityListProps {
   items: ActivityItem[];
+  enrichment: ActivityFeedEnrichment;
   loading: boolean;
   refreshing: boolean;
   error: string | null;
@@ -25,6 +30,7 @@ interface ActivityListProps {
 
 export function ActivityList({
   items,
+  enrichment,
   loading,
   refreshing,
   error,
@@ -33,6 +39,7 @@ export function ActivityList({
 }: ActivityListProps) {
   const sections = groupActivityByMonth(items);
   const isEmpty = items.length === 0;
+  const degradedCopy = getActivityDegradedBannerCopy(enrichment, items.length);
 
   return (
     <SectionList
@@ -46,6 +53,12 @@ export function ActivityList({
           <View style={styles.titleRow}>
             <Text style={styles.pageTitle}>Activity</Text>
           </View>
+          {degradedCopy ? (
+            <ActivityDegradedBanner
+              message={degradedCopy.message}
+              onRetry={degradedCopy.showRetry ? onRefresh : undefined}
+            />
+          ) : null}
         </View>
       }
       ListEmptyComponent={

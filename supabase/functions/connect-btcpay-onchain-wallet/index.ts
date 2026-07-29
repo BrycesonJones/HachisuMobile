@@ -26,6 +26,7 @@ import {
   BtcpayConfigError,
   classifyDerivation,
   getBtcpayConfig,
+  getOnChainWallet,
   maskExtendedKey,
   setOnChainWallet,
 } from '../_shared/btcpay-client.ts';
@@ -139,6 +140,48 @@ Deno.serve(async (req) => {
     const message =
       err instanceof BtcpayConfigError ? err.message : 'BTCPay is not configured.';
     return jsonResponse({ ok: false, error: message }, 500);
+  }
+
+  // 4b. REPLACEMENT-GUARD: connect may ONLY configure a store that has no
+  //     on-chain wallet yet. If a wallet already exists, connect would overwrite
+  //     it while bypassing every replacement safeguard (preview proof, same-
+  //     wallet detection, idempotency, concurrency lock, reconciliation), so we
+  //     refuse and direct the merchant to the staged replacement flow.
+  //
+  //     Existence is decided by the AUTHORITATIVE BTCPay payment-method state,
+  //     not the client-supplied/cached onchain_status. A BTCPay lookup FAILURE is
+  //     a hard error — it must never be read as "no wallet exists" (which would
+  //     re-open the overwrite path). A disabled-but-configured wallet counts as
+  //     configured. We do not touch the existing wallet when rejecting.
+  try {
+    const existing = await getOnChainWallet(config, store.btcpay_store_id);
+    if (existing.configured) {
+      await logEvent({
+        eventType: 'onchain_wallet_connect_rejected',
+        status: 'rejected',
+        message: 'Connect rejected: store already has a configured on-chain wallet. Use replace.',
+        btcpayStoreId: store.btcpay_store_id,
+      });
+      return jsonResponse(
+        {
+          ok: false,
+          code: 'WALLET_ALREADY_CONNECTED',
+          error:
+            'This store already has a Bitcoin wallet connected. Use Replace wallet to change it.',
+        },
+        409,
+      );
+    }
+  } catch (err) {
+    const isApiError = err instanceof BtcpayApiError;
+    console.error(
+      `[connect-onchain] store=${store.id} existence check failed: ${isApiError ? `HTTP ${err.status}` : String(err)}`,
+    );
+    // Do NOT proceed on an inconclusive lookup — refusing is the safe default.
+    return jsonResponse(
+      { ok: false, error: 'Could not verify the store wallet state. Please try again.' },
+      502,
+    );
   }
 
   const { provider, addressType } = classifyDerivation(extendedPublicKey);

@@ -23,6 +23,7 @@ import { useActiveStore } from '@/contexts/active-store-context';
 import {
   getOnchainWalletSettings,
   removeOnchainWallet,
+  resyncOnchainWallet,
   updateOnchainWalletSettings,
   type OnchainWalletStatus,
 } from '@/lib/btcpay/onchain-wallet';
@@ -35,9 +36,10 @@ const ERROR_COLOR = '#F87171';
 export default function BtcWalletSettingsScreen() {
   const router = useRouter();
   const { refetch: refetchStores } = useActiveStore();
-  const { storeId, storeName } = useLocalSearchParams<{
+  const { storeId, storeName, reconcile } = useLocalSearchParams<{
     storeId?: string;
     storeName?: string;
+    reconcile?: string;
   }>();
 
   const [loading, setLoading] = useState(true);
@@ -48,7 +50,10 @@ export default function BtcWalletSettingsScreen() {
 
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [resyncing, setResyncing] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Set when the merchant arrives here from a reconcile-required replacement.
+  const [needsReconcile, setNeedsReconcile] = useState(reconcile === '1');
 
   const load = useCallback(async () => {
     if (!storeId) return;
@@ -85,15 +90,35 @@ export default function BtcWalletSettingsScreen() {
     router.back();
   }
 
+  async function handleResync() {
+    if (!storeId || resyncing) return;
+    setResyncing(true);
+    setSaveError(null);
+    const result = await resyncOnchainWallet(storeId);
+    setResyncing(false);
+    if (!result.ok) {
+      setSaveError(result.error ?? 'Could not re-check the wallet status.');
+      return;
+    }
+    setNeedsReconcile(false);
+    setStatus(result.status);
+    setEnabled(result.enabled);
+    setLabel(result.label ?? storeName ?? '');
+    await refetchStores();
+  }
+
   function confirmReplace() {
     Alert.alert(
-      'Replace Bitcoin wallet?',
-      'Replacing this wallet will disconnect the current Bitcoin wallet from this store. Future invoices will use addresses from the new wallet.',
+      `Replace the Bitcoin wallet for ${storeName ?? 'this store'}?`,
+      'Before you continue, please understand:\n\n' +
+        '• Your existing funds are NOT moved. Hachisu never transfers Bitcoin between wallets.\n' +
+        '• After replacement, future payments go to the NEW wallet. You must control and verify it.\n' +
+        '• Your current wallet stays active until the replacement fully succeeds.\n' +
+        '• Replacing does not recover funds already sent to another wallet.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Replace wallet',
-          style: 'destructive',
+          text: 'Continue to Replace',
           onPress: () =>
             router.push({
               pathname: '/account/import-xpub',
@@ -129,7 +154,7 @@ export default function BtcWalletSettingsScreen() {
     router.back();
   }
 
-  const busy = saving || removing;
+  const busy = saving || removing || resyncing;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -161,6 +186,33 @@ export default function BtcWalletSettingsScreen() {
             </View>
           ) : (
             <>
+              {needsReconcile ? (
+                <View style={styles.reconcileBox}>
+                  <Text style={styles.reconcileTitle}>Verifying wallet status</Text>
+                  <Text style={styles.reconcileText}>
+                    Your last replacement may have updated the wallet at BTCPay but couldn&apos;t be
+                    confirmed in the app. Re-check the status below before making any further
+                    changes. Do not start another replacement yet.
+                  </Text>
+                  <Pressable
+                    onPress={handleResync}
+                    disabled={busy}
+                    style={({ pressed }) => [
+                      styles.reconcileButton,
+                      busy && styles.buttonDisabled,
+                      pressed && !busy && styles.pressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Re-check wallet status">
+                    {resyncing ? (
+                      <ActivityIndicator color={COLORS.background} size="small" />
+                    ) : (
+                      <Text style={styles.primaryButtonText}>Re-check wallet status</Text>
+                    )}
+                  </Pressable>
+                </View>
+              ) : null}
+
               {status === 'not_connected' ? (
                 <Text style={styles.notice}>
                   No Bitcoin wallet is connected to this store yet.
@@ -224,8 +276,12 @@ export default function BtcWalletSettingsScreen() {
 
               <Pressable
                 onPress={confirmReplace}
-                disabled={busy}
-                style={({ pressed }) => [styles.secondaryButton, pressed && !busy && styles.pressed]}
+                disabled={busy || status === 'not_connected'}
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  (busy || status === 'not_connected') && styles.buttonDisabled,
+                  pressed && !busy && styles.pressed,
+                ]}
                 accessibilityRole="button"
                 accessibilityLabel="Replace wallet">
                 <MaterialIcons name="swap-horiz" size={20} color={COLORS.primaryText} />
@@ -294,6 +350,32 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 14,
     color: COLORS.secondaryText,
+  },
+  reconcileBox: {
+    marginTop: 24,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#F5A623',
+    backgroundColor: 'rgba(245, 166, 35, 0.08)',
+    gap: 12,
+  },
+  reconcileTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#F5A623',
+  },
+  reconcileText: {
+    fontSize: 13,
+    color: COLORS.secondaryText,
+    lineHeight: 19,
+  },
+  reconcileButton: {
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: COLORS.cream,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   toggleRow: {
     flexDirection: 'row',

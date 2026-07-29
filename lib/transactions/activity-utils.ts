@@ -1,7 +1,10 @@
 import type {
   ActivityDisplayStatus,
+  ActivityFeedEnrichment,
   ActivityItem,
-  ActivityPaymentMethod,
+  PaymentAsset,
+  PaymentMethodLabel,
+  PaymentRail,
 } from '@/types/activity';
 
 const MONTH_NAMES = [
@@ -91,15 +94,52 @@ export function groupActivityByMonth(items: ActivityItem[]): ActivitySection[] {
   return sections;
 }
 
-export function getPaymentMethodLabel(method: ActivityPaymentMethod): string {
-  switch (method) {
-    case 'BTC':
-      return 'Bitcoin (on-chain)';
-    case 'BTC-LN':
-      return 'Lightning';
+/**
+ * Formats an exact crypto amount with its asset, e.g. "0.000125 BTC" or
+ * "0.000125 L-BTC". String-only arithmetic (never floating point):
+ *  - preserves up to 8 decimals, trims trailing zeros,
+ *  - never rounds a small nonzero value down to zero,
+ *  - returns "—" when the amount or asset is unavailable (never fabricates "BTC").
+ */
+export function formatCryptoAmount(
+  amount: string | null | undefined,
+  asset: PaymentAsset | null | undefined,
+): string {
+  if (!amount || !asset) return '—';
+  const trimmed = amount.trim();
+  if (!/^\d+(\.\d+)?$/.test(trimmed)) return '—';
+
+  const [intPart, fracRaw = ''] = trimmed.split('.');
+  // Cap at 8 decimals WITHOUT rounding (truncate), then trim trailing zeros.
+  let frac = fracRaw.slice(0, 8).replace(/0+$/, '');
+  // Guard: if truncation zeroed a value that was nonzero within 8dp, keep the raw
+  // (trimmed) fraction so a real small amount never renders as a whole number.
+  if (frac === '' && /[1-9]/.test(fracRaw.slice(0, 8))) frac = fracRaw.slice(0, 8);
+  const display = frac ? `${intPart}.${frac}` : intPart;
+  return `${display} ${asset}`;
+}
+
+/** Fallback rail label when the server-authored `paymentMethodLabel` is absent. */
+export function getPaymentRailLabel(rail: PaymentRail): string {
+  switch (rail) {
+    case 'onchain':
+      return 'Bitcoin · On-chain';
+    case 'lightning':
+      return 'Bitcoin · Lightning';
+    case 'liquid':
+      return 'Liquid';
     case 'unknown':
-      return 'Bitcoin';
+      return 'Payment method unavailable';
   }
+}
+
+/**
+ * The user-facing payment-method label for an activity item. Prefers the
+ * authoritative server-authored label; falls back to the rail (older cached
+ * records may predate `paymentMethodLabel`). Never defaults to "BTC".
+ */
+export function getActivityPaymentLabel(item: ActivityItem): PaymentMethodLabel | string {
+  return item.paymentMethodLabel ?? getPaymentRailLabel(item.paymentRail ?? 'unknown');
 }
 
 export function getSourceFeatureLabel(item: ActivityItem): string {
@@ -142,6 +182,50 @@ export function getActivityStatusDescription(status: ActivityItem['status']): st
     case 'failed':
       return 'Payment could not be completed';
   }
+}
+
+/** Placeholder for an enriched field that could not be loaded. Distinct from a
+ * genuine zero/empty value — never render "0" or "0 BTC" in its place. */
+export const UNAVAILABLE_FIELD_PLACEHOLDER = '—';
+
+/** True when THIS item's payment details failed to enrich (base record is still
+ * valid and shown). Drives the item-level "some details unavailable" marker. */
+export function isItemEnrichmentDegraded(item: ActivityItem): boolean {
+  return item.enrichmentStatus === 'failed' || item.enrichmentStatus === 'partial';
+}
+
+export interface ActivityDegradedBannerCopy {
+  message: string;
+  /** Whether to offer a Retry action (only when something can actually recover). */
+  showRetry: boolean;
+}
+
+/**
+ * Feed-level degraded-state copy, or null when the feed is fully loaded / empty /
+ * nothing-to-enrich. Deliberately non-alarming: base activity DID load; only some
+ * payment details are missing, so it never implies payments are gone. Retry is
+ * offered only when at least one failure is retryable.
+ */
+export function getActivityDegradedBannerCopy(
+  enrichment: ActivityFeedEnrichment | undefined,
+  itemCount: number,
+): ActivityDegradedBannerCopy | null {
+  if (!enrichment || itemCount === 0) return null;
+  const showRetry = enrichment.retryableCount > 0;
+  if (enrichment.status === 'partial') {
+    return {
+      message: 'Some payment details could not be loaded. Pull to refresh and try again.',
+      showRetry,
+    };
+  }
+  if (enrichment.status === 'failed') {
+    return {
+      message:
+        'Payment activity loaded, but some details are unavailable. Pull to refresh and try again.',
+      showRetry,
+    };
+  }
+  return null;
 }
 
 export function getDisplayStatusTone(
