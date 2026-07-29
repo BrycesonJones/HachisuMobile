@@ -1373,3 +1373,369 @@ export async function removeLightningPaymentMethod(
     `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}/payment-methods/${LIGHTNING_PAYMENT_METHOD_ID}`,
   );
 }
+
+// ---------------------------------------------------------------------------
+// Pay Button (mobile Pay Button screen)
+// ---------------------------------------------------------------------------
+//
+// BTCPay's store-level "Pay Button" is enabled by the store setting
+// "Allow anyone to create invoices" — Greenfield `anyoneCanCreateInvoice` (bool)
+// on StoreBaseData. This is the exact toggle behind the green "Enable" button on
+// BTCPay's Pay Button page. We read it with GET /api/v1/stores/{id} and flip it
+// with a full-store PUT (BTCPay's store update is a full replace, so we echo the
+// current store object back with only this field changed — the same approach as
+// setStoreLightningDescriptionTemplate). BTCPay stays the source of truth: the
+// caller re-reads the store after the PUT to confirm the authoritative value.
+
+/** Reads the store's Pay Button state (anyoneCanCreateInvoice) from a store object. */
+export function readStorePayButtonEnabled(store: BtcpayStore): boolean {
+  return (store as Record<string, unknown>).anyoneCanCreateInvoice === true;
+}
+
+/**
+ * Reads the store and returns whether the Pay Button (anyoneCanCreateInvoice) is
+ * enabled, along with the full store object (so callers can echo it on a PUT).
+ * Throws BtcpayApiError if the store is missing (404) or on other failures.
+ */
+export async function getStorePayButton(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+): Promise<{ enabled: boolean; store: BtcpayStore }> {
+  const store = await getStore(config, btcpayStoreId);
+  if (!store) {
+    throw new BtcpayApiError(
+      `BTCPay store ${btcpayStoreId} was not found.`,
+      404,
+      null,
+    );
+  }
+  return { enabled: readStorePayButtonEnabled(store), store };
+}
+
+/**
+ * Enables/disables the Pay Button by setting anyoneCanCreateInvoice on the store.
+ * BTCPay's store PUT is a full update, so we echo the current store object back
+ * with only anyoneCanCreateInvoice changed — preserving all other settings.
+ * Returns BTCPay's updated store object.
+ */
+export async function setStorePayButtonEnabled(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  currentStore: BtcpayStore,
+  enabled: boolean,
+): Promise<BtcpayStore> {
+  const body: Record<string, unknown> = {
+    ...(currentStore as Record<string, unknown>),
+    anyoneCanCreateInvoice: enabled,
+  };
+  delete body.id; // id is the path param, not part of the update body.
+  const parsed = await btcpayPut(
+    config,
+    `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}`,
+    body,
+  );
+  const store = parsed as Partial<BtcpayStore> | null;
+  if (!store || typeof store !== 'object') {
+    throw new BtcpayApiError('BTCPay returned an unexpected store payload.', 200, parsed);
+  }
+  return store as BtcpayStore;
+}
+
+// ---------------------------------------------------------------------------
+// Pay Button output generation (HTML snippet / Link / LNURL)
+// ---------------------------------------------------------------------------
+//
+// IMPORTANT: BTCPay exposes NO Greenfield (or any HTTP) endpoint that returns the
+// Pay Button's generated HTML/link. In BTCPay the output is built entirely in the
+// browser by wwwroot/paybutton/paybutton.js (the `inputChanges` function) inside
+// the store's Pay Button admin page — there is nothing server-side to fetch.
+// So we DERIVE the output here, server-side, from BTCPay-confirmed source-of-truth
+// data (real base URL from env, store id resolved from the owned row, and only
+// after confirming anyoneCanCreateInvoice). The format below mirrors paybutton.js
+// field-for-field so a merchant pasting it gets BTCPay's real behavior:
+//
+//   Form:  POST {root}/api/v1/invoices  with hidden inputs storeId,
+//          [checkoutDesc], and (fixed) price + currency. Submit is the pay image.
+//          orderId is intentionally NOT embedded here (reusable public code must
+//          not carry a single static order id).
+//   Link:  GET  {root}/api/v1/invoices?storeId=..&currency=..[&price=..][&orderId=..]
+//          — the PayButtonHandle endpoint accepts GET, creates the invoice and
+//          redirects to checkout (jsonResponse is intentionally omitted, as in
+//          paybutton.js). This is the one-time shareable link + QR payload; the
+//          orderId rides here (single use), not in the embeddable form.
+//   LNURL: paybutton.js builds it from the store LNURL-pay endpoint
+//          (Url.Action("GetLNUrlForStore","UILNURL",…,"lnurlp") ->
+//          lnurlp://{host}/{cryptoCode}/lnurl/{storeId}/pay?currency=&amount=&orderId=).
+//          We only return it when Lightning (BTC-LN) is actually enabled for the
+//          store; otherwise lnurl is null.
+//
+// Only the invoice-affecting fields that BTCPay's PayButtonViewModel supports are
+// emitted (storeId, price, currency, orderId, checkoutDesc). No invented fields.
+
+/** Default on-chain crypto code BTCPay uses when building the store LNURL route. */
+const PAY_BUTTON_DEFAULT_CRYPTO = 'BTC';
+
+/** HTML-escapes a value exactly like paybutton.js `esc()` (& ' " < >). */
+function escapePayButtonHtml(input: unknown): string {
+  return ('' + input)
+    .replace(/&/g, '&amp;')
+    .replace(/'/g, '&apos;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/** Builds the currency <select>, mirroring paybutton.js `addSelectCurrency`. */
+function buildCurrencySelect(currency: string): string {
+  const safe = currency.replace(/[^a-z]/gi, '').toUpperCase();
+  const defaults = ['USD', 'GBP', 'EUR', 'BTC'];
+  const options = defaults.map(
+    (c) => `      <option value="${c}"${c === safe ? ' selected' : ''}>${c}</option>`,
+  );
+  if (!defaults.includes(safe)) {
+    options.unshift(`      <option value="${safe}" selected>${safe}</option>`);
+  }
+  return `    <select name="currency">\n${options.join('\n')}\n    </select>\n`;
+}
+
+// Slider defaults. BTCPay's Pay Button admin page seeds a slider with
+// Min=1, Max=20, Step="1" (UIPayButtonController.PayButton). We use those same
+// defaults rather than inventing merchant-facing min/max/step fields — the payer
+// picks a value in that range with the slider.
+const SLIDER_MIN = 1;
+const SLIDER_MAX = 20;
+const SLIDER_STEP = 1;
+
+// The exact progressive-enhancement scripts BTCPay appends for a slider button
+// (Views/PayButton.cshtml templates `price-slider` + `price-input`). They keep the
+// range slider and the number field in sync and clamp to min/max. Copied verbatim
+// so a pasted slider snippet behaves identically to BTCPay's own output.
+const SLIDER_SCRIPT =
+  `<script>\n` +
+  `    function handleSliderChange(event) {\n` +
+  `        event.preventDefault();\n` +
+  `        const root = event.target.closest('.btcpay-form');\n` +
+  `        const el = root.querySelector('.btcpay-input-price');\n` +
+  `        const price = parseInt(el.value);\n` +
+  `        const min = parseInt(event.target.getAttribute('min')) || 1;\n` +
+  `        const max = parseInt(event.target.getAttribute('max'));\n` +
+  `        if (price < min) { el.value = min; } else if (price > max) { el.value = max; }\n` +
+  `        root.querySelector('.btcpay-input-range').value = el.value;\n` +
+  `    }\n` +
+  `    function handleSliderInput(event) {\n` +
+  `        event.target.closest('.btcpay-form').querySelector('.btcpay-input-price').value = event.target.value;\n` +
+  `    }\n` +
+  `    function handlePriceInput(event) {\n` +
+  `        event.preventDefault();\n` +
+  `        const root = event.target.closest('.btcpay-form');\n` +
+  `        const price = parseInt(event.target.dataset.price);\n` +
+  `        if (isNaN(event.target.value)) root.querySelector('.btcpay-input-price').value = price;\n` +
+  `        const min = parseInt(event.target.getAttribute('min')) || 1;\n` +
+  `        const max = parseInt(event.target.getAttribute('max'));\n` +
+  `        if (event.target.value < min) { event.target.value = min; } else if (event.target.value > max) { event.target.value = max; }\n` +
+  `    }\n` +
+  `    document.querySelectorAll(".btcpay-form .btcpay-input-range").forEach(function(el) {\n` +
+  `        if (!el.dataset.initialized) { el.addEventListener('input', handleSliderInput); el.dataset.initialized = true; }\n` +
+  `    });\n` +
+  `    document.querySelectorAll(".btcpay-form .btcpay-input-price").forEach(function(el) {\n` +
+  `        if (!el.dataset.initialized) { el.addEventListener('input', handlePriceInput); el.addEventListener('change', handleSliderChange); el.dataset.initialized = true; }\n` +
+  `    });\n` +
+  `</script>`;
+
+// The exact scripts BTCPay appends for a custom-amount button (Views/PayButton.cshtml
+// templates `price-buttons` + `price-input`): the +/- steppers and the number-field
+// clamp. Copied verbatim so a pasted custom snippet behaves like BTCPay's output.
+const CUSTOM_SCRIPT =
+  `<script>\n` +
+  `    function handlePlusMinus(event) {\n` +
+  `        event.preventDefault();\n` +
+  `        const root = event.target.closest('.btcpay-form');\n` +
+  `        const el = root.querySelector('.btcpay-input-price');\n` +
+  `        const step = parseInt(event.target.dataset.step) || 1;\n` +
+  `        const min = parseInt(event.target.dataset.min) || 1;\n` +
+  `        const max = parseInt(event.target.dataset.max);\n` +
+  `        const type = event.target.dataset.type;\n` +
+  `        const price = parseInt(el.value) || min;\n` +
+  `        if (type === '-') { el.value = price - step < min ? min : price - step; }\n` +
+  `        else if (type === '+') { el.value = price + step > max ? max : price + step; }\n` +
+  `    }\n` +
+  `    function handlePriceInput(event) {\n` +
+  `        event.preventDefault();\n` +
+  `        const root = event.target.closest('.btcpay-form');\n` +
+  `        const price = parseInt(event.target.dataset.price);\n` +
+  `        if (isNaN(event.target.value)) root.querySelector('.btcpay-input-price').value = price;\n` +
+  `        const min = parseInt(event.target.getAttribute('min')) || 1;\n` +
+  `        const max = parseInt(event.target.getAttribute('max'));\n` +
+  `        if (event.target.value < min) { event.target.value = min; } else if (event.target.value > max) { event.target.value = max; }\n` +
+  `    }\n` +
+  `    document.querySelectorAll(".btcpay-form .plus-minus").forEach(function(el) {\n` +
+  `        if (!el.dataset.initialized) { el.addEventListener('click', handlePlusMinus); el.dataset.initialized = true; }\n` +
+  `    });\n` +
+  `    document.querySelectorAll(".btcpay-form .btcpay-input-price").forEach(function(el) {\n` +
+  `        if (!el.dataset.initialized) { el.addEventListener('input', handlePriceInput); el.dataset.initialized = true; }\n` +
+  `    });\n` +
+  `</script>`;
+
+/** Formats a validated numeric value for an HTML attribute (trims float noise). */
+function fmtNum(n: number): string {
+  return String(Number(n.toFixed(8)));
+}
+
+export interface PayButtonOutputParams {
+  btcpayStoreId: string;
+  /** Uppercased currency code (e.g. "USD"). */
+  currency: string;
+  /** Positive numeric string for a FIXED amount; null for custom/slider. */
+  price: string | null;
+  /** Range config for custom/slider (validated numbers); null for fixed. */
+  min: number | null;
+  max: number | null;
+  step: number | null;
+  checkoutDesc: string | null;
+  orderId: string | null;
+  /**
+   * 'fixed'  -> hidden price + currency.
+   * 'custom' -> payer-editable price field with +/- steppers, bounded by min/max/step.
+   * 'slider' -> payer-editable price field + range slider, bounded by min/max/step.
+   * Custom and slider use the merchant's configured min/max/step (no default fallback).
+   */
+  buttonType: 'fixed' | 'custom' | 'slider';
+  /** When true, an LNURL is derived from the store's LNURL-pay endpoint. */
+  lightningAvailable: boolean;
+}
+
+export interface PayButtonOutput {
+  htmlCode: string;
+  linkUrl: string;
+  lnurl: string | null;
+  /**
+   * Honest notes about what the returned output cannot reproduce (e.g. the public
+   * GET link can't carry custom/slider range interactivity). Shown to the merchant;
+   * never used to fake behavior.
+   */
+  limitations: string[];
+}
+
+/**
+ * Derives BTCPay's Pay Button HTML snippet + shareable Link (+ optional LNURL)
+ * server-side, matching paybutton.js. `config.serverUrl` must be the real BTCPay
+ * base URL and `params.btcpayStoreId` the server-resolved store id. For custom and
+ * slider, `min`/`max`/`step` are the merchant's validated values — NOT defaults.
+ */
+export function buildPayButtonOutput(
+  config: BtcpayConfig,
+  params: PayButtonOutputParams,
+): PayButtonOutput {
+  const root = config.serverUrl; // already trailing-slash-stripped by getBtcpayConfig
+  const actionUrl = `${root}/api/v1/invoices`;
+  const payImageUrl = `${root}/img/paybutton/pay.svg`;
+  const { btcpayStoreId, currency, price, min, max, step, checkoutDesc, orderId, buttonType } =
+    params;
+  const limitations: string[] = [];
+
+  const hidden = (name: string, value: string) =>
+    `  <input type="hidden" name="${escapePayButtonHtml(name)}" value="${escapePayButtonHtml(value)}" />\n`;
+
+  // Form (matches paybutton.js field order: storeId, checkoutDesc, then
+  // amount/currency, then the pay image submit).
+  //
+  // NOTE: we intentionally do NOT emit orderId in the embeddable <form>. This HTML
+  // is meant to be pasted onto a public website and reused by many customers, so a
+  // single static orderId would tag every payment with the same id (confusing
+  // reporting / duplicate-looking orders). BTCPay's own default Pay Button also
+  // omits orderId unless the merchant explicitly sets one. The orderId is instead
+  // carried only on the one-time shareable Link below. (Activity source detection
+  // does NOT rely on the orderId — see get-btcpay-store-activity deriveSourceFeature.)
+  let html =
+    `<form method="POST" action="${escapePayButtonHtml(actionUrl)}" class="btcpay-form btcpay-form--block">\n` +
+    hidden('storeId', btcpayStoreId);
+  if (checkoutDesc) html += hidden('checkoutDesc', checkoutDesc);
+
+  let appendScript = '';
+  if (buttonType === 'fixed') {
+    // Fixed amount: price + currency travel as hidden inputs.
+    if (price) html += hidden('price', price);
+    html += hidden('currency', currency);
+  } else if (buttonType === 'custom') {
+    // Custom amount: +/- steppers around a payer-editable price field, bounded by
+    // the merchant's min/max/step. Mirrors paybutton.js buttonType==1. `max` is a
+    // real numeric value here (validated max>min) — never max="none".
+    const mn = fmtNum(min ?? 1);
+    const mx = fmtNum(max ?? 20);
+    const st = fmtNum(step ?? 1);
+    const plusMinus = (type: '-' | '+') =>
+      `      <button class="plus-minus" type="button" data-type="${type}" data-step="${st}" data-min="${mn}" data-max="${mx}">${type}</button>\n`;
+    html +=
+      '  <div class="btcpay-custom-container">\n    <div class="btcpay-custom">\n' +
+      plusMinus('-') +
+      `      <input class="btcpay-input-price" type="number" name="price" min="${mn}" max="${mx}" step="${st}" value="${mn}" data-price="${mn}" style="width:3em;" />\n` +
+      plusMinus('+') +
+      '    </div>\n' +
+      buildCurrencySelect(currency) +
+      '  </div>\n';
+    appendScript = `\n${CUSTOM_SCRIPT}`;
+  } else {
+    // Slider: payer-editable price field + a range slider, bounded by the
+    // merchant's min/max/step. Mirrors paybutton.js buttonType==2, including the
+    // sync/clamp script. `max` is a real numeric value — never max="none".
+    const mn = fmtNum(min ?? SLIDER_MIN);
+    const mx = fmtNum(max ?? SLIDER_MAX);
+    const st = fmtNum(step ?? SLIDER_STEP);
+    html +=
+      '  <div class="btcpay-custom-container">\n' +
+      `      <input class="btcpay-input-price" type="number" name="price" min="${mn}" max="${mx}" step="${st}" value="${mn}" data-price="${mn}" style="width:209px;" />\n` +
+      buildCurrencySelect(currency) +
+      `    <input type="range" class="btcpay-input-range" min="${mn}" max="${mx}" step="${st}" value="${mn}" style="width:209px;margin-bottom:15px;" />\n` +
+      '  </div>\n';
+    appendScript = `\n${SLIDER_SCRIPT}`;
+  }
+
+  html +=
+    `  <input type="image" class="submit" name="submit" src="${escapePayButtonHtml(payImageUrl)}" style="width:209px" alt="Pay with Hachisu">\n` +
+    '</form>' +
+    appendScript;
+
+  // Shareable Link (GET). PayButtonHandle accepts GET, so opening this creates the
+  // invoice and redirects to checkout. jsonResponse is omitted (as in paybutton.js).
+  //
+  // IMPORTANT: BTCPay's public invoice endpoint (UIPublicPayButtonController) reads
+  // ONLY a single `price` (+ currency/orderId/checkoutDesc) — it does NOT accept
+  // min/max/step (those are purely the HTML widget's client-side config). So a link
+  // cannot reproduce custom/slider interactivity. For fixed we carry the price; for
+  // custom/slider we emit an amount-selectable (price-less) link and record an honest
+  // limitation rather than pretend the range is enforced.
+  const linkParams = new URLSearchParams();
+  linkParams.set('storeId', btcpayStoreId);
+  linkParams.set('currency', currency);
+  if (buttonType === 'fixed' && price) {
+    linkParams.set('price', price);
+  } else if (buttonType === 'custom' || buttonType === 'slider') {
+    limitations.push(
+      `BTCPay's public payment link can't carry ${
+        buttonType === 'slider' ? 'slider' : 'custom amount'
+      } min/max/step, so the Link and QR open an amount-selectable checkout where the ` +
+        `customer enters any amount. The generated HTML code includes the full ${
+          buttonType === 'slider' ? 'slider' : 'custom amount'
+        } behavior.`,
+    );
+  }
+  if (orderId) linkParams.set('orderId', orderId);
+  if (checkoutDesc) linkParams.set('checkoutDesc', checkoutDesc);
+  const linkUrl = `${actionUrl}?${linkParams.toString()}`;
+
+  // LNURL — only when Lightning is actually enabled for the store. Derived from
+  // the store LNURL-pay endpoint exactly as paybutton.js does (lnurlp scheme).
+  let lnurl: string | null = null;
+  if (params.lightningAvailable) {
+    const host = root.replace(/^https?:\/\//i, '');
+    let lnurlResult =
+      `lnurlp://${host}/${PAY_BUTTON_DEFAULT_CRYPTO}/lnurl/${encodeURIComponent(btcpayStoreId)}/pay?`;
+    if (currency) lnurlResult += `&currency=${encodeURIComponent(currency)}`;
+    if (buttonType === 'fixed' && price) lnurlResult += `&amount=${encodeURIComponent(price)}`;
+    if (orderId) lnurlResult += `&orderId=${encodeURIComponent(orderId)}`;
+    lnurl = lnurlResult.replace('?&', '?');
+  }
+
+  return { htmlCode: html, linkUrl, lnurl, limitations };
+}
+
