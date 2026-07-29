@@ -143,6 +143,10 @@ export type Database = {
           onchain_provider: string | null
           onchain_status: string
           onchain_wallet_configured_at: string | null
+          pay_button_enabled: boolean
+          pay_button_error: string | null
+          pay_button_last_synced_at: string | null
+          pay_button_status: string
           preferred_price_source: string
           profile_id: string | null
           store_provisioning_status: string
@@ -172,6 +176,10 @@ export type Database = {
           onchain_provider?: string | null
           onchain_status?: string
           onchain_wallet_configured_at?: string | null
+          pay_button_enabled?: boolean
+          pay_button_error?: string | null
+          pay_button_last_synced_at?: string | null
+          pay_button_status?: string
           preferred_price_source?: string
           profile_id?: string | null
           store_provisioning_status?: string
@@ -201,6 +209,10 @@ export type Database = {
           onchain_provider?: string | null
           onchain_status?: string
           onchain_wallet_configured_at?: string | null
+          pay_button_enabled?: boolean
+          pay_button_error?: string | null
+          pay_button_last_synced_at?: string | null
+          pay_button_status?: string
           preferred_price_source?: string
           profile_id?: string | null
           store_provisioning_status?: string
