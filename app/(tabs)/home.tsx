@@ -9,7 +9,6 @@ import { BitcoinDashboardView } from '@/components/dashboard/bitcoin-dashboard-v
 import { useDashboardTab } from '@/components/dashboard/dashboard-tab-context';
 import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
 import { useActiveStore } from '@/contexts/active-store-context';
-import { bitcoinBalance } from '@/data/bitcoin-balance';
 
 export default function MerchantDashboardScreen() {
   const { activeTab } = useDashboardTab();
@@ -34,7 +33,7 @@ export default function MerchantDashboardScreen() {
           </Animated.View>
         ) : (
           <Animated.View key="bitcoin" entering={FadeIn.duration(200)} style={styles.view}>
-            <BitcoinDashboardView balance={bitcoinBalance} />
+            <BitcoinDashboardView />
           </Animated.View>
         )}
       </View>

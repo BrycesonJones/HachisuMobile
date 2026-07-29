@@ -1,31 +1,43 @@
+import { useFocusEffect } from '@react-navigation/native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useRef } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { AccountProfileHub } from '@/components/account/account-profile-hub';
 import { PaymentFeaturesSection } from '@/components/dashboard/payment-features-section';
 import { StoreSelector } from '@/components/dashboard/store-selector';
 import { WalletIndicator } from '@/components/dashboard/wallet-indicator';
 import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
-import type { BitcoinBalance } from '@/data/bitcoin-balance';
+import { useActiveStore } from '@/contexts/active-store-context';
+import { useStoreBalance, type BalanceViewState } from '@/hooks/use-store-balance';
+import { formatBtcSymbol, formatFiat } from '@/lib/btcpay/balance-format';
 
-interface BitcoinDashboardViewProps {
-  balance: BitcoinBalance;
-}
-
-function formatUsd(value: number): string {
-  return value.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  });
-}
-
-function formatBtc(value: number): string {
-  return `₿${value.toFixed(8)}`;
-}
-
-export function BitcoinDashboardView({ balance }: BitcoinDashboardViewProps) {
+export function BitcoinDashboardView() {
   const router = useRouter();
+  const { activeStore } = useActiveStore();
+  const { state, refreshing, refetch } = useStoreBalance(activeStore);
+
+  // Revalidate the balance when the dashboard regains focus (but not on the very
+  // first focus — the hook already loads on mount / store change).
+  const firstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) {
+        firstFocus.current = false;
+        return;
+      }
+      refetch();
+    }, [refetch]),
+  );
 
   return (
     <View style={styles.root}>
@@ -49,22 +61,108 @@ export function BitcoinDashboardView({ balance }: BitcoinDashboardViewProps) {
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refetch}
+            tintColor={DASHBOARD_COLORS.primaryText}
+            colors={[DASHBOARD_COLORS.primaryText]}
+          />
+        }>
         <StoreSelector />
 
         <WalletIndicator />
 
-        <View style={styles.balance}>
-          <Text style={styles.usdValue}>{formatUsd(balance.usdValue)}</Text>
-          <Text style={styles.btcAmount} numberOfLines={1} adjustsFontSizeToFit>
-            {formatBtc(balance.btcAmount)}
-          </Text>
-        </View>
+        <BalanceBlock state={state} onRetry={refetch} />
 
         <PaymentFeaturesSection />
       </ScrollView>
     </View>
   );
+}
+
+interface BalanceBlockProps {
+  state: BalanceViewState;
+  onRetry: () => void;
+}
+
+/**
+ * Renders the primary balance area. Every wallet state is visually distinct so a
+ * disconnected/disabled wallet, a loading state, a fetch error, and a real zero
+ * balance are never confused. A real BTC balance is never replaced by "$0.00".
+ */
+function BalanceBlock({ state, onRetry }: BalanceBlockProps) {
+  switch (state.kind) {
+    case 'no-store':
+      // The create/select-store UI lives in the StoreSelector above.
+      return null;
+
+    case 'not-connected':
+      return (
+        <View style={styles.balance}>
+          <Text style={styles.stateTitle}>No Bitcoin wallet connected</Text>
+          <Text style={styles.stateSubtitle}>
+            Connect a wallet in Wallets above to see this store’s balance.
+          </Text>
+        </View>
+      );
+
+    case 'disabled':
+      return (
+        <View style={styles.balance}>
+          <Text style={styles.stateTitle}>Bitcoin wallet disabled</Text>
+          <Text style={styles.stateSubtitle}>
+            Enable the wallet in its settings to track your balance.
+          </Text>
+        </View>
+      );
+
+    case 'loading':
+      return (
+        <View style={[styles.balance, styles.balanceLoading]}>
+          <ActivityIndicator color={DASHBOARD_COLORS.primaryText} />
+        </View>
+      );
+
+    case 'error':
+      return (
+        <View style={styles.balance}>
+          <Text style={styles.stateTitle}>Couldn’t load balance</Text>
+          <Text style={styles.stateSubtitle}>{state.message}</Text>
+          <Pressable
+            onPress={onRetry}
+            style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading balance">
+            <Text style={styles.retryLabel}>Try again</Text>
+          </Pressable>
+        </View>
+      );
+
+    case 'ready': {
+      const { balance } = state;
+      // Primary balance is the CONFIRMED (spendable) amount.
+      const fiat = formatFiat(balance.confirmedSats, balance.rate, balance.currency);
+      const hasPending = balance.unconfirmedSats > 0;
+      return (
+        <View style={styles.balance}>
+          <Text style={styles.usdValue}>{fiat ?? '—'}</Text>
+          <Text style={styles.btcAmount} numberOfLines={1} adjustsFontSizeToFit>
+            {formatBtcSymbol(balance.confirmedSats)}
+          </Text>
+          {fiat == null ? (
+            <Text style={styles.pending}>Live price unavailable</Text>
+          ) : null}
+          {hasPending ? (
+            <Text style={styles.pending}>
+              {formatBtcSymbol(balance.unconfirmedSats)} pending
+            </Text>
+          ) : null}
+        </View>
+      );
+    }
+  }
 }
 
 const styles = StyleSheet.create({
@@ -103,6 +201,10 @@ const styles = StyleSheet.create({
     paddingBottom: 52,
     gap: 10,
   },
+  // Keep the balance area a stable height while loading so nothing jumps.
+  balanceLoading: {
+    minHeight: 150,
+  },
   usdValue: {
     fontSize: 20,
     fontWeight: '500',
@@ -113,5 +215,34 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: DASHBOARD_COLORS.primaryText,
     letterSpacing: -1,
+  },
+  pending: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: DASHBOARD_COLORS.mutedText,
+  },
+  stateTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: DASHBOARD_COLORS.primaryText,
+    textAlign: 'center',
+  },
+  stateSubtitle: {
+    fontSize: 14,
+    color: DASHBOARD_COLORS.secondaryText,
+    textAlign: 'center',
+    paddingHorizontal: 12,
+  },
+  retryButton: {
+    marginTop: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: DASHBOARD_COLORS.iconBackground,
+  },
+  retryLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: DASHBOARD_COLORS.primaryText,
   },
 });
