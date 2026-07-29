@@ -9,35 +9,27 @@ interface PayButtonPreviewProps {
   buttonType: PayButtonType;
   price: string;
   currency: string;
-  sliderMin: string;
-  sliderMax: string;
+  min: string;
+  max: string;
+  step: string;
 }
 
+const TRACK_WIDTH = 200;
+const KNOB_SIZE = 18;
+
 /**
- * Static, Hachisu-branded preview of the Pay Button. The amount area updates
- * locally based on the selected button type:
- *   - fixed:  open input mock — customer pays any amount
- *   - custom: stepper mock around the merchant-set amount
- *   - slider: range track mock
- * Everything here is decorative — nothing is pressable, no BTCPay branding, and
- * no external assets.
+ * Static, Hachisu-branded preview of the Pay Button. Purely visual — it never
+ * creates an invoice or calls the backend. The amount area mirrors what the payer
+ * sees for the selected button type:
+ *   - fixed:  the amount the merchant set (or "Enter a price" when blank)
+ *   - custom: a stepper mock (− value +) the payer adjusts, within Min/Max/Step
+ *   - slider: a value + slider track/thumb, within Min/Max/Step
+ * Invalid/blank inputs degrade to a safe placeholder instead of crashing.
  */
-export function PayButtonPreview({
-  buttonType,
-  price,
-  currency,
-  sliderMin,
-  sliderMax,
-}: PayButtonPreviewProps) {
+export function PayButtonPreview(props: PayButtonPreviewProps) {
   return (
     <View style={styles.card}>
-      <AmountArea
-        buttonType={buttonType}
-        price={price}
-        currency={currency}
-        sliderMin={sliderMin}
-        sliderMax={sliderMax}
-      />
+      <AmountArea {...props} />
       {/* Decorative only — intentionally not pressable. */}
       <View
         style={styles.button}
@@ -49,15 +41,63 @@ export function PayButtonPreview({
   );
 }
 
-function AmountArea({
-  buttonType,
-  price,
-  currency,
-  sliderMin,
-  sliderMax,
-}: PayButtonPreviewProps) {
+interface Range {
+  minN: number;
+  maxN: number;
+  stepN: number;
+  valid: boolean;
+}
+
+/** Parses min/max/step and reports whether they form a usable range. */
+function parseRange(min: string, max: string, step: string): Range {
+  const minN = Number(min);
+  const maxN = Number(max);
+  const stepN = Number(step);
+  const valid =
+    Number.isFinite(minN) &&
+    minN > 0 &&
+    Number.isFinite(maxN) &&
+    maxN > minN &&
+    Number.isFinite(stepN) &&
+    stepN > 0;
+  return { minN, maxN, stepN, valid };
+}
+
+/** Snaps a value onto the min + k*step grid, clamped to [min, max]. */
+function snapToStep(value: number, { minN, maxN, stepN }: Range): number {
+  const steps = Math.round((value - minN) / stepN);
+  const v = Math.min(maxN, Math.max(minN, minN + steps * stepN));
+  return Number(v.toFixed(6));
+}
+
+/** Trims float noise for display (e.g. 10.50 -> "10.5", 20 -> "20"). */
+function formatAmount(n: number): string {
+  return String(Number(n.toFixed(2)));
+}
+
+function AmountArea({ buttonType, price, currency, min, max, step }: PayButtonPreviewProps) {
+  // Fixed — customer pays exactly the amount the merchant set.
+  if (buttonType === 'fixed') {
+    const valid = isValidAmount(price);
+    return (
+      <View style={styles.amountArea}>
+        <View style={styles.valueBox}>
+          <Text style={valid ? styles.valueText : styles.placeholderText}>
+            {valid ? price.trim() : 'Enter a price'}
+          </Text>
+        </View>
+        {valid ? <Text style={styles.currencyLabel}>{currency}</Text> : null}
+      </View>
+    );
+  }
+
+  const range = parseRange(min, max, step);
+  const helper = range.valid
+    ? `Min ${formatAmount(range.minN)} · Max ${formatAmount(range.maxN)} · Step ${formatAmount(range.stepN)}`
+    : 'Enter a valid range.';
+
+  // Custom — payer adjusts the amount with steppers; preview starts at Min.
   if (buttonType === 'custom') {
-    const value = isValidAmount(price) ? String(Number(price)) : '0';
     return (
       <View style={styles.amountArea}>
         <View style={styles.stepperRow}>
@@ -65,41 +105,40 @@ function AmountArea({
             <Text style={styles.stepperGlyph}>–</Text>
           </View>
           <View style={styles.valueBox}>
-            <Text style={styles.valueText}>{value}</Text>
+            <Text style={range.valid ? styles.valueText : styles.placeholderText}>
+              {range.valid ? formatAmount(range.minN) : 'Enter amount'}
+            </Text>
           </View>
           <View style={[styles.stepperButton, styles.stepperButtonAccent]}>
             <Text style={styles.stepperGlyph}>+</Text>
           </View>
         </View>
         <Text style={styles.currencyLabel}>{currency}</Text>
+        <Text style={styles.rangeHelper}>{helper}</Text>
       </View>
     );
   }
 
-  if (buttonType === 'slider') {
-    const min = Number(sliderMin);
-    const max = Number(sliderMax);
-    const valid = Number.isFinite(min) && Number.isFinite(max) && max > min && min > 0;
-    return (
-      <View style={styles.amountArea}>
-        <View style={styles.track}>
-          <View style={styles.trackFill} />
-          <View style={styles.knob} />
-        </View>
-        <Text style={styles.rangeText}>
-          {valid ? `$${min} – $${max} ${currency}` : `Choose an amount range`}
-        </Text>
-      </View>
-    );
-  }
-
-  // fixed — customer pays any amount
+  // Slider — payer picks a value; preview shows the snapped midpoint + thumb.
+  const value = range.valid ? snapToStep((range.minN + range.maxN) / 2, range) : null;
+  const fraction =
+    value != null && range.maxN > range.minN
+      ? (value - range.minN) / (range.maxN - range.minN)
+      : 0;
+  const knobLeft = fraction * (TRACK_WIDTH - KNOB_SIZE);
   return (
     <View style={styles.amountArea}>
-      <View style={styles.inputMock}>
-        <Text style={styles.inputPlaceholder}>Enter amount</Text>
-        <Text style={styles.inputCurrency}>{currency}</Text>
+      <View style={styles.valueBox}>
+        <Text style={value != null ? styles.valueText : styles.placeholderText}>
+          {value != null ? formatAmount(value) : 'Enter amount'}
+        </Text>
       </View>
+      <Text style={styles.currencyLabel}>{currency}</Text>
+      <View style={styles.track}>
+        <View style={[styles.trackFill, { width: knobLeft + KNOB_SIZE / 2 }]} />
+        <View style={[styles.knob, { left: knobLeft }]} />
+      </View>
+      <Text style={styles.rangeHelper}>{helper}</Text>
     </View>
   );
 }
@@ -117,6 +156,38 @@ const styles = StyleSheet.create({
   amountArea: {
     alignItems: 'center',
     marginBottom: 20,
+  },
+  valueBox: {
+    minWidth: 72,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    backgroundColor: COLORS.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: COLORS.cardBorder,
+  },
+  valueText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.primaryText,
+  },
+  placeholderText: {
+    fontSize: 16,
+    color: COLORS.mutedText,
+  },
+  currencyLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    color: COLORS.secondaryText,
+    marginTop: 8,
+  },
+  rangeHelper: {
+    fontSize: 12,
+    color: COLORS.mutedText,
+    marginTop: 12,
   },
   // Custom amount stepper
   stepperRow: {
@@ -142,80 +213,28 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.primaryText,
   },
-  valueBox: {
-    minWidth: 72,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-    backgroundColor: COLORS.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: COLORS.cardBorder,
-  },
-  valueText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.primaryText,
-  },
-  currencyLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-    color: COLORS.secondaryText,
-    marginTop: 8,
-  },
-  // Fixed (open) input mock
-  inputMock: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minWidth: 200,
-    height: 48,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    backgroundColor: COLORS.cardAlt,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: COLORS.cardBorder,
-  },
-  inputPlaceholder: {
-    fontSize: 16,
-    color: COLORS.mutedText,
-  },
-  inputCurrency: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.secondaryText,
-  },
   // Slider mock
   track: {
-    width: 200,
+    width: TRACK_WIDTH,
     height: 6,
     borderRadius: 3,
     backgroundColor: COLORS.cardBorder,
     justifyContent: 'center',
+    marginTop: 16,
   },
   trackFill: {
     position: 'absolute',
     left: 0,
-    width: 80,
     height: 6,
     borderRadius: 3,
     backgroundColor: HachisuColors.cream,
   },
   knob: {
     position: 'absolute',
-    left: 72,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: KNOB_SIZE,
+    height: KNOB_SIZE,
+    borderRadius: KNOB_SIZE / 2,
     backgroundColor: HachisuColors.cream,
-  },
-  rangeText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: COLORS.secondaryText,
-    marginTop: 16,
   },
   // Pay button
   button: {

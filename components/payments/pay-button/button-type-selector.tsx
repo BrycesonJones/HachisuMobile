@@ -12,9 +12,9 @@ interface ButtonTypeOption {
 }
 
 const OPTIONS: readonly ButtonTypeOption[] = [
-  { id: 'fixed', title: 'Fixed amount', description: 'Customer chooses how much to pay.' },
-  { id: 'custom', title: 'Custom amount', description: 'Customer pays the amount you set.' },
-  { id: 'slider', title: 'Slider', description: 'Customer chooses an amount within a range.' },
+  { id: 'fixed', title: 'Fixed amount', description: 'Customer pays the amount you set.' },
+  { id: 'custom', title: 'Custom amount', description: 'Customer chooses how much to pay.' },
+  { id: 'slider', title: 'Slider', description: 'Customer chooses an amount with a slider.' },
 ];
 
 interface ButtonTypeSelectorProps {
