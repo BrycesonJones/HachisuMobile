@@ -17,8 +17,8 @@ interface SupportedPaymentMethodsProps {
 }
 
 const METHODS: readonly { key: TransactionCurrencyKey; label: string }[] = [
-  { key: 'lightning', label: 'Bitcoin Lightning' },
   { key: 'onchain', label: 'Bitcoin On-chain' },
+  { key: 'lightning', label: 'Bitcoin Lightning' },
 ];
 
 /**
