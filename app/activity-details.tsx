@@ -8,6 +8,7 @@ import { ActivityDetailView } from '@/components/dashboard/activity-detail-view'
 import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
 import { useAuth } from '@/contexts/auth-context';
 import { useActivityDetail } from '@/hooks/use-activity-detail';
+import { useSafeTopInset } from '@/hooks/use-safe-top-inset';
 import { ACTIVITY_ROUTE } from '@/lib/auth/onboarding-routing';
 import type { ActivityDetailErrorCode } from '@/types/activity';
 
@@ -167,10 +168,14 @@ interface DetailMessageStateProps {
 }
 
 function DetailMessageState({ title, subtitle, onReturn, onRetry }: DetailMessageStateProps) {
+  // Same fullScreenModal 0-inset correction as the detail view: an untappable
+  // close control on an ERROR state would leave no way off the screen at all.
+  const safeTop = useSafeTopInset();
+
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
-      <View style={styles.header}>
-        <CloseButton onPress={onReturn} />
+    <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
+      <View style={[styles.header, { paddingTop: safeTop + HEADER_TOP_GAP }]}>
+        <CloseButton onPress={onReturn} accessibilityLabel="Return to Activity" />
       </View>
       <View style={styles.centered}>
         <Text style={styles.stateTitle}>{title}</Text>
@@ -198,6 +203,9 @@ function DetailMessageState({ title, subtitle, onReturn, onRetry }: DetailMessag
   );
 }
 
+/** Breathing room between the system status area and the close control. */
+const HEADER_TOP_GAP = 8;
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -205,7 +213,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 4,
+    // paddingTop is applied inline from the safe-area inset.
     paddingBottom: 8,
   },
   centered: {

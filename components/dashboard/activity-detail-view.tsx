@@ -7,6 +7,7 @@ import { ActivityDegradedBanner } from '@/components/dashboard/activity-degraded
 import { InvoiceShareActions } from '@/components/dashboard/invoice-share-actions';
 import { CloseButton } from '@/components/auth/close-button';
 import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
+import { useSafeTopInset } from '@/hooks/use-safe-top-inset';
 import {
   formatActivityAmount,
   formatActivityDateTime,
@@ -46,14 +47,22 @@ export function ActivityDetailView({
   // lookup can't read as an ordinary payment with no details.
   const degraded = isItemEnrichmentDegraded(item);
 
+  // This screen is presented as a fullScreenModal, where iOS reports a 0 top
+  // inset — so the header is padded from a window-derived inset instead of
+  // relying on SafeAreaView's 'top' edge (see useSafeTopInset).
+  const safeTop = useSafeTopInset();
+
   async function handleCopyInvoiceId() {
     await Clipboard.setStringAsync(item.btcpayInvoiceId);
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
-      <View style={styles.header}>
-        <CloseButton onPress={onClose} />
+    <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
+      <View style={[styles.header, { paddingTop: safeTop + HEADER_TOP_GAP }]}>
+        <CloseButton
+          onPress={onClose}
+          accessibilityLabel="Close payment details and return to Activity"
+        />
       </View>
 
       <ScrollView
@@ -242,6 +251,9 @@ function DetailRow({ icon, title, subtitle, hint, trailingIcon, onTrailingPress 
   );
 }
 
+/** Breathing room between the system status area and the close control. */
+const HEADER_TOP_GAP = 8;
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -249,7 +261,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 4,
+    // paddingTop is applied inline from the safe-area inset.
     paddingBottom: 8,
   },
   scrollView: {
