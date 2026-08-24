@@ -2,15 +2,9 @@
  * beyond shape checks — real validation happens server-side later. */
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const URL_RE = /^https?:\/\/[^\s.]+\.[^\s]+$/i;
 
 export function isValidEmail(value: string): boolean {
   return EMAIL_RE.test(value.trim());
-}
-
-/** Basic URL shape only: http(s):// + a dotted host. */
-export function looksLikeUrl(value: string): boolean {
-  return URL_RE.test(value.trim());
 }
 
 /** Amount must parse to a finite number greater than zero. */
