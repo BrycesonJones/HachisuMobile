@@ -1,8 +1,8 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
-  Alert,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -16,7 +16,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CurrencySelect } from '@/components/account/currency-select';
 import { PrimaryButton } from '@/components/auth/primary-button';
-import { CollapsibleSection } from '@/components/payments/invoices/create/collapsible-section';
 import { InvoiceFormField } from '@/components/payments/invoices/create/invoice-form-field';
 import { generateInvoiceOrderId } from '@/components/payments/invoices/create/order-id';
 import {
@@ -27,12 +26,18 @@ import {
 import {
   isValidAmount,
   isValidEmail,
-  looksLikeUrl,
 } from '@/components/payments/invoices/create/validation';
 import { COLORS } from '@/constants/colors';
 import { HachisuColors } from '@/constants/hachisu-colors';
 import { DEFAULT_CURRENCY } from '@/constants/currencies';
 import { useActiveStore } from '@/contexts/active-store-context';
+import { markStoreActivityStale } from '@/lib/btcpay/activity-cache';
+import {
+  createInvoice,
+  newInvoiceIdempotencyKey,
+  type CreateInvoiceErrorCode,
+  type InvoicePaymentRail,
+} from '@/lib/btcpay/invoices';
 
 export default function CreateInvoiceScreen() {
   const router = useRouter();
@@ -48,10 +53,19 @@ export default function CreateInvoiceScreen() {
   const [orderId, setOrderId] = useState(generateInvoiceOrderId);
   const [itemDescription, setItemDescription] = useState('');
   const [buyerEmail, setBuyerEmail] = useState('');
-  const [notificationUrl, setNotificationUrl] = useState('');
-  const [notificationEmail, setNotificationEmail] = useState('');
   const [transactionCurrencies, setTransactionCurrencies] =
     useState<TransactionCurrencySelection>({ lightning: true, onchain: true });
+
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitErrorCode, setSubmitErrorCode] = useState<CreateInvoiceErrorCode | null>(null);
+  /** Set once BTCPay holds a real invoice for this form, INCLUDING the
+   * created-but-unsynced case — it is what stops a second create. */
+  const [createdInvoiceId, setCreatedInvoiceId] = useState<string | null>(null);
+
+  // Refs, not state: these must be correct within a single tap, before re-render.
+  const submittingRef = useRef(false);
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   function toggleTransactionCurrency(key: TransactionCurrencyKey) {
     setTransactionCurrencies((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -70,33 +84,111 @@ export default function CreateInvoiceScreen() {
     buyerEmail.length > 0 && !isValidEmail(buyerEmail)
       ? 'Enter a valid email address.'
       : null;
-  const notificationEmailError =
-    notificationEmail.length > 0 && !isValidEmail(notificationEmail)
-      ? 'Enter a valid email address.'
-      : null;
-  const notificationUrlError =
-    notificationUrl.length > 0 && !looksLikeUrl(notificationUrl)
-      ? 'Enter a valid URL (https://…).'
-      : null;
 
   const hasTransactionCurrency =
     transactionCurrencies.lightning || transactionCurrencies.onchain;
 
-  const canSubmit =
+  const formValid =
     isValidAmount(amount) &&
     currency.length > 0 &&
     hasTransactionCurrency &&
-    !buyerEmailError &&
-    !notificationEmailError &&
-    !notificationUrlError;
+    !buyerEmailError;
 
-  function handleCreate() {
-    if (!canSubmit) return;
-    // Placeholder only — no Greenfield call, no backend, no fake invoice id.
-    Alert.alert(
-      'Create Invoice',
-      'Invoice creation coming soon. This form will create a Bitcoin invoice for the active store.',
-    );
+  const canSubmit = formValid && !!activeStore && !submitting && !createdInvoiceId;
+
+  /**
+   * Creates the invoice for real: one Edge Function call that authenticates the
+   * merchant, resolves this store's BTCPay id server-side, creates the invoice in
+   * BTCPay, records it, and returns the normalized result.
+   *
+   * Duplicate protection is layered. The button is disabled while submitting and
+   * a ref rejects a tap that lands before React re-renders, but the AUTHORITATIVE
+   * guarantee is the server's unique (store, idempotency key) row — so a retry of
+   * this same attempt returns the SAME invoice instead of creating a second one.
+   */
+  async function handleCreate() {
+    if (!canSubmit || !activeStore) return;
+    if (submittingRef.current) return; // Beats the re-render on a fast double tap.
+    submittingRef.current = true;
+
+    // One key per submission ATTEMPT, reused across retries of that attempt.
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = newInvoiceIdempotencyKey();
+    }
+
+    const rails: InvoicePaymentRail[] = [];
+    if (transactionCurrencies.onchain) rails.push('onchain');
+    if (transactionCurrencies.lightning) rails.push('lightning');
+
+    setSubmitting(true);
+    setSubmitError(null);
+    setSubmitErrorCode(null);
+
+    try {
+      const result = await createInvoice({
+        merchantStoreId: activeStore.id,
+        idempotencyKey: idempotencyKeyRef.current,
+        amount: amount.trim(),
+        currency,
+        description: itemDescription,
+        orderId,
+        buyerEmail,
+        paymentRails: rails,
+      });
+
+      if (result.ok) {
+        // The invoice exists in BTCPay. Retire this attempt's key so a later
+        // invoice from this screen can never collide with it.
+        idempotencyKeyRef.current = null;
+        setCreatedInvoiceId(result.invoice.btcpayInvoiceId);
+
+        // Feed the invoice into the EXISTING Activity pipeline (it re-fetches
+        // from the backend; nothing is synthesized locally).
+        markStoreActivityStale(activeStore.id);
+
+        router.replace({
+          pathname: '/activity-details',
+          params: {
+            merchantStoreId: activeStore.id,
+            invoiceId: result.invoice.btcpayInvoiceId,
+            source: 'invoice',
+          },
+        });
+        return;
+      }
+
+      // Created in BTCPay but not synced locally: the invoice is REAL. Keep the
+      // form intact, surface a recovery path, and never invite a second create.
+      if (result.code === 'INVOICE_CREATED_SYNC_FAILED' && result.invoice) {
+        idempotencyKeyRef.current = null;
+        setCreatedInvoiceId(result.invoice.btcpayInvoiceId);
+        markStoreActivityStale(activeStore.id);
+      }
+      setSubmitError(result.message);
+      setSubmitErrorCode(result.code);
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : 'Invoice could not be created right now. Try again.',
+      );
+      setSubmitErrorCode('NETWORK_ERROR');
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  }
+
+  /** Recovery action after a created-but-unsynced result: go look at the real
+   * invoice rather than creating another one. */
+  function viewCreatedInvoice() {
+    if (!activeStore || !createdInvoiceId) return;
+    router.replace({
+      pathname: '/activity-details',
+      params: {
+        merchantStoreId: activeStore.id,
+        invoiceId: createdInvoiceId,
+        source: 'invoice',
+      },
+    });
   }
 
   return (
@@ -204,39 +296,55 @@ export default function CreateInvoiceScreen() {
             error={buyerEmailError}
           />
 
-          {/* Invoice notifications (collapsible, optional) */}
-          <View style={styles.notificationsBlock}>
-            <CollapsibleSection title="Invoice Notifications">
-              <InvoiceFormField
-                label="Notification URL"
-                value={notificationUrl}
-                onChangeText={setNotificationUrl}
-                placeholder="https://example.com/webhook"
-                keyboardType="url"
-                autoCapitalize="none"
-                autoCorrect={false}
-                error={notificationUrlError}
+          {submitError ? (
+            <View style={styles.errorCard}>
+              <MaterialIcons
+                name={createdInvoiceId ? 'info-outline' : 'error-outline'}
+                size={18}
+                color={createdInvoiceId ? COLORS.secondaryText : '#F87171'}
               />
-              <InvoiceFormField
-                label="Notification Email"
-                value={notificationEmail}
-                onChangeText={setNotificationEmail}
-                placeholder="notifications@example.com"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                error={notificationEmailError}
-              />
-              <Text style={styles.helperText}>Receive updates for this invoice.</Text>
-            </CollapsibleSection>
-          </View>
+              <View style={styles.errorTextBlock}>
+                <Text style={styles.errorText}>{submitError}</Text>
+                {submitErrorCode === 'NO_PAYMENT_METHOD_AVAILABLE' ? (
+                  <Text style={styles.errorHint}>
+                    BTCPay decides which payment methods a store can offer. Connect
+                    a Bitcoin wallet (or set up Lightning) in Account settings,
+                    then try again.
+                  </Text>
+                ) : null}
+                {createdInvoiceId ? (
+                  <Pressable
+                    onPress={viewCreatedInvoice}
+                    style={({ pressed }) => [styles.recoveryButton, pressed && styles.pressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel="View the created invoice">
+                    <Text style={styles.recoveryLabel}>View the created invoice</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
+
+          {!activeStore ? (
+            <Text style={styles.inlineError}>
+              Select a store before creating an invoice.
+            </Text>
+          ) : null}
 
           <View style={styles.createButton}>
             <PrimaryButton
-              label="Create Invoice"
+              label={submitting ? 'Creating Invoice…' : 'Create Invoice'}
               onPress={handleCreate}
               disabled={!canSubmit}
             />
+            {submitting ? (
+              <View style={styles.submittingRow}>
+                <ActivityIndicator size="small" color={COLORS.secondaryText} />
+                <Text style={styles.submittingText}>
+                  Creating your invoice in BTCPay…
+                </Text>
+              </View>
+            ) : null}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -341,15 +449,50 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: HachisuColors.cream,
   },
-  notificationsBlock: {
-    marginTop: 24,
-  },
   createButton: {
     marginTop: 32,
   },
-  helperText: {
+  submittingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+  submittingText: {
     fontSize: 13,
-    color: COLORS.mutedText,
-    marginTop: 16,
+    color: COLORS.secondaryText,
+  },
+  errorCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 24,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: COLORS.card,
+  },
+  errorTextBlock: {
+    flex: 1,
+  },
+  errorText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: COLORS.primaryText,
+  },
+  errorHint: {
+    marginTop: 6,
+    fontSize: 12,
+    lineHeight: 17,
+    color: COLORS.secondaryText,
+  },
+  recoveryButton: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+  },
+  recoveryLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: HachisuColors.cream,
   },
 });

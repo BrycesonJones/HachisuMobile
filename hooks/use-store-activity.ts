@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 import { fetchStoreActivity } from '@/lib/btcpay/activity';
-import { cacheActivityItems } from '@/lib/btcpay/activity-cache';
+import { cacheActivityItems, subscribeActivityStale } from '@/lib/btcpay/activity-cache';
 import type { ActivityFeedEnrichment } from '@/types/activity';
 import type { ActivityItem } from '@/types/activity';
 
@@ -108,6 +108,15 @@ export function useStoreActivity(merchantStoreId: string | null): UseStoreActivi
     });
     return () => sub.remove();
   }, [load]);
+
+  // An in-app action that changed this store's BTCPay activity (e.g. creating an
+  // invoice) marks it stale; re-run the normal fetch so the new record appears
+  // without waiting for a restart or a manual pull-to-refresh.
+  useEffect(() => {
+    return subscribeActivityStale((staleStoreId) => {
+      if (staleStoreId === merchantStoreId) void load(true);
+    });
+  }, [load, merchantStoreId]);
 
   const refetch = useCallback(() => load(true), [load]);
 

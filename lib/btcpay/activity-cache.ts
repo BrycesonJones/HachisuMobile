@@ -38,3 +38,39 @@ export function getCachedActivityItem(
 export function upsertActivityItem(merchantStoreId: string, item: ActivityItem): void {
   cache.set(keyFor(merchantStoreId, item.btcpayInvoiceId), item);
 }
+
+// ---------------------------------------------------------------------------
+// Staleness signal
+// ---------------------------------------------------------------------------
+//
+// When the app itself causes a store's BTCPay activity to change (creating an
+// invoice, for example), the Activity feed must not wait for a restart or a
+// manual pull-to-refresh. Rather than introducing a second activity system, this
+// is a minimal notification into the EXISTING pipeline: a producer marks a store
+// stale and the existing useStoreActivity hook re-runs its normal fetch.
+//
+// Deliberately not a cache write: the new record is fetched from the backend
+// (BTCPay stays authoritative) instead of being synthesized locally.
+
+type StaleListener = (merchantStoreId: string) => void;
+
+const staleListeners = new Set<StaleListener>();
+
+/** Subscribes to stale notifications. Returns an unsubscribe function. */
+export function subscribeActivityStale(listener: StaleListener): () => void {
+  staleListeners.add(listener);
+  return () => {
+    staleListeners.delete(listener);
+  };
+}
+
+/** Marks a store's activity stale so any mounted feed for it re-fetches. */
+export function markStoreActivityStale(merchantStoreId: string): void {
+  for (const listener of [...staleListeners]) {
+    try {
+      listener(merchantStoreId);
+    } catch {
+      // A misbehaving subscriber must never break the producer's flow.
+    }
+  }
+}

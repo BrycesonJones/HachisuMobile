@@ -6,7 +6,7 @@
 // Payment-method identifiers observed in this deployment (source-verified against
 // _shared/btcpay-client.ts and the installed Boltz plugin):
 //   BTC-CHAIN / BTC-OnChain / BTC  -> Bitcoin, on-chain
-//   BTC-LN / BTC-LightningNetwork  -> Bitcoin, Lightning
+//   BTC-LN / BTC-LNURL / BTC-LightningNetwork -> Bitcoin, Lightning
 //   LBTC-CHAIN / LBTC-* / LBTC     -> Liquid (L-BTC). Not currently exposed as an
 //                                     invoice payment method (Liquid lives inside
 //                                     the Boltz daemon as the merchant's settlement
@@ -137,7 +137,10 @@ function railToken(id: string): 'lightning' | 'onchain' | null {
   const parts = id.split('-').slice(1);
   if (parts.length === 0) return null; // bare coin code, e.g. "BTC"
   const sub = parts.join('-');
-  if (sub === 'LN' || sub.startsWith('LIGHTNING')) return 'lightning';
+  // LNURL is a Lightning payment method (the deployed BTCPay reports BTC-LNURL
+  // alongside BTC-LN as an instance-supported method), so it must classify as
+  // lightning — falling through would label it as ordinary on-chain BTC.
+  if (sub === 'LN' || sub === 'LNURL' || sub.startsWith('LIGHTNING')) return 'lightning';
   if (sub === 'CHAIN' || sub === 'ONCHAIN') return 'onchain';
   return null;
 }

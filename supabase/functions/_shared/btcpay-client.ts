@@ -2099,3 +2099,231 @@ export async function getInvoicePaymentMethods(
     parsed,
   );
 }
+
+// ---------------------------------------------------------------------------
+// Store payment methods (which rails a store can actually expose on checkout)
+// ---------------------------------------------------------------------------
+//
+// Greenfield:
+//   GET /api/v1/stores/{storeId}/payment-methods[?onlyEnabled=true]
+//        -> [{ paymentMethodId: "BTC-CHAIN", enabled: true, ... }]
+//
+// BTCPay owns this configuration, so it is read here rather than inferred from
+// Hachisu's cached onchain_status/lightning_status columns. Verified against the
+// deployed BTCPay 2.4.3 (server info reports BTC-CHAIN, BTC-LN, BTC-LNURL as the
+// instance's supported methods).
+
+export interface StorePaymentMethod {
+  paymentMethodId: string;
+  enabled: boolean;
+}
+
+/**
+ * Lists the store's ENABLED payment-method ids. Throws BtcpayApiError on a
+ * non-2xx or unexpected payload — a failed lookup must never be interpreted by
+ * the caller as "this store has no payment methods."
+ */
+export async function listStoreEnabledPaymentMethods(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  opts: BtcpayGetOptions = {},
+): Promise<StorePaymentMethod[]> {
+  const { status, ok, parsed } = await btcpayGet(
+    config,
+    `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}/payment-methods?onlyEnabled=true`,
+    opts,
+  );
+  if (!ok) {
+    throw new BtcpayApiError(
+      `BTCPay store payment-method lookup failed (HTTP ${status}).`,
+      status,
+      parsed,
+    );
+  }
+  if (!Array.isArray(parsed)) {
+    throw new BtcpayApiError(
+      'BTCPay returned an unexpected payment-methods payload.',
+      status,
+      parsed,
+    );
+  }
+  const methods: StorePaymentMethod[] = [];
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== 'object') continue;
+    const id = (entry as { paymentMethodId?: unknown }).paymentMethodId;
+    if (typeof id !== 'string' || !id) continue;
+    // ?onlyEnabled=true already filters, but re-check rather than assume.
+    const enabled = (entry as { enabled?: unknown }).enabled !== false;
+    if (!enabled) continue;
+    methods.push({ paymentMethodId: id, enabled: true });
+  }
+  return methods;
+}
+
+// ---------------------------------------------------------------------------
+// Invoice creation
+// ---------------------------------------------------------------------------
+//
+// Greenfield (verified against the DEPLOYED BTCPay 2.4.3 OpenAPI document, not
+// assumed from documentation):
+//   POST /api/v1/stores/{storeId}/invoices
+//        permission: btcpay.store.cancreateinvoice
+//        body: CreateInvoiceRequest = InvoiceDataBase + {
+//                amount?: string(decimal), currency?: string,
+//                additionalSearchTerms?: string[] }
+//              InvoiceDataBase = { metadata?, checkout?, receipt? }
+//              CheckoutOptions = { speedPolicy?, paymentMethods?[],
+//                defaultPaymentMethod?, lazyPaymentMethods?, expirationMinutes?,
+//                monitoringMinutes?, paymentTolerance?, redirectURL?,
+//                redirectAutomatically?, defaultLanguage? }
+//              InvoiceMetadata = free-form object; documented keys include
+//                orderId, itemDesc, itemCode, buyerEmail, posData, receiptData.
+//        -> InvoiceData { id, storeId, amount, currency, status, createdTime,
+//                         expirationTime, checkoutLink, metadata, checkout, ... }
+//
+// CreateInvoiceRequest is additionalProperties:FALSE, so only the fields above
+// may be sent. In particular the deployed API has NO notificationURL and NO
+// notificationEmail field anywhere (grep of the OpenAPI document: 0 hits) —
+// those belonged to the legacy BitPay-compatible API. Hachisu therefore keeps
+// the merchant's notification URL/email as its own metadata and never forwards
+// them here.
+//
+// There is also NO idempotency header on this operation, so duplicate protection
+// has to be owned by Hachisu (a unique (merchant_store_id, idempotency_key) row),
+// not delegated to BTCPay.
+
+export interface CreateInvoiceMetadata {
+  orderId?: string;
+  itemDesc?: string;
+  buyerEmail?: string;
+  /** Hachisu marker so the Activity feed can attribute the invoice to this feature. */
+  hachisuSource?: string;
+  [key: string]: unknown;
+}
+
+export interface CreateInvoiceCheckout {
+  /** Exact BTCPay payment-method ids, e.g. ["BTC-CHAIN", "BTC-LN"]. Omit to let
+   * BTCPay expose every method enabled on the store. */
+  paymentMethods?: string[];
+  expirationMinutes?: number;
+}
+
+export interface CreateInvoiceInput {
+  /** Decimal string, e.g. "12.50". Never a JS number — no float rounding. */
+  amount: string;
+  currency: string;
+  metadata?: CreateInvoiceMetadata;
+  checkout?: CreateInvoiceCheckout;
+  additionalSearchTerms?: string[];
+}
+
+/**
+ * Creates an invoice in a BTCPay store and returns BTCPay's InvoiceData.
+ *
+ * Throws BtcpayApiError on a non-2xx response (body captured for diagnostics) or
+ * when the response is not a usable invoice object — the caller must never
+ * fabricate an invoice id from a malformed success.
+ */
+export async function createStoreInvoice(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  input: CreateInvoiceInput,
+): Promise<BtcpayInvoice> {
+  const body: Record<string, unknown> = {
+    amount: input.amount,
+    currency: input.currency,
+  };
+  if (input.metadata && Object.keys(input.metadata).length > 0) {
+    body.metadata = input.metadata;
+  }
+  if (input.checkout && Object.keys(input.checkout).length > 0) {
+    body.checkout = input.checkout;
+  }
+  if (input.additionalSearchTerms && input.additionalSearchTerms.length > 0) {
+    body.additionalSearchTerms = input.additionalSearchTerms;
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `${config.serverUrl}/api/v1/stores/${encodeURIComponent(btcpayStoreId)}/invoices`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `token ${config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      },
+    );
+  } catch (cause) {
+    throw new BtcpayApiError(
+      `Could not reach BTCPay Server at ${config.serverUrl}.`,
+      0,
+      { cause: String(cause) },
+    );
+  }
+
+  const rawText = await response.text();
+  let parsed: unknown = rawText;
+  try {
+    parsed = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    // Leave parsed as the raw text.
+  }
+
+  if (!response.ok) {
+    throw new BtcpayApiError(
+      `BTCPay invoice creation failed (HTTP ${response.status}).`,
+      response.status,
+      parsed,
+    );
+  }
+
+  const invoice = parsed as Partial<BtcpayInvoice> | null;
+  if (!invoice || typeof invoice !== 'object' || typeof invoice.id !== 'string' || !invoice.id) {
+    throw new BtcpayApiError(
+      'BTCPay returned an unexpected invoice payload (no id).',
+      response.status,
+      parsed,
+    );
+  }
+  return invoice as BtcpayInvoice;
+}
+
+// ---------------------------------------------------------------------------
+// Checkout link safety
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns BTCPay's invoice checkout link only if it is safe to hand to a merchant
+ * (who will then send it to a paying customer), otherwise null.
+ *
+ * The link is generated by BTCPay itself, but Hachisu re-checks it before letting
+ * it out of the backend: it must parse, and its ORIGIN must equal the configured
+ * BTCPAY_SERVER_URL's origin. That means a misconfigured or tampered BTCPay
+ * response can never turn Hachisu's share/open actions into a redirect to an
+ * attacker-controlled payment page. Because the configured server is https, the
+ * origin check enforces https implicitly without breaking a local http config.
+ *
+ * Never fabricate a link from hostname + invoice id — an absent/rejected link is
+ * reported as null so the UI can say so instead of sending a customer somewhere
+ * wrong.
+ */
+export function sanitizeCheckoutLink(
+  link: unknown,
+  serverUrl: string,
+): string | null {
+  if (typeof link !== 'string' || !link.trim()) return null;
+  let candidate: URL;
+  let expected: URL;
+  try {
+    candidate = new URL(link.trim());
+    expected = new URL(serverUrl);
+  } catch {
+    return null;
+  }
+  if (candidate.origin !== expected.origin) return null;
+  if (candidate.username || candidate.password) return null;
+  return candidate.toString();
+}

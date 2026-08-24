@@ -286,14 +286,22 @@ export function toDisplayStatus(status: NormalizedStatus): DisplayStatus {
   }
 }
 
-/** Best-effort detection of which feature created the invoice. Pay Button and a
- * manually created invoice are indistinguishable in Greenfield metadata, so the
- * generic case is reported as 'unknown' rather than guessed. */
+/** Detection of which feature created the invoice. Invoices Hachisu itself
+ * created carry an explicit marker; for everything else this stays best-effort,
+ * and a Pay Button payment vs. an invoice created outside the app remain
+ * indistinguishable in Greenfield metadata, so that case is reported as
+ * 'unknown' rather than guessed. */
 function deriveSourceFeature(
   invoice: BtcpayInvoice,
   metadata: Record<string, unknown>,
   orderId: string | null,
 ): SourceFeature {
+  // An invoice created by Hachisu's Create Invoice screen stamps its own marker
+  // into BTCPay's (free-form) invoice metadata, so it can be attributed exactly
+  // rather than guessed. Anything without a marker keeps the previous behavior.
+  const hachisuSource = strOrNull(metadata.hachisuSource);
+  if (hachisuSource === 'invoice') return 'invoice';
+
   if (metadata.paymentRequestId != null) return 'request';
   if (
     metadata.appId != null ||
