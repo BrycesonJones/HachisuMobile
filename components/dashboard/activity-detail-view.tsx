@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ActivityDegradedBanner } from '@/components/dashboard/activity-degraded-banner';
+import { InvoiceShareActions } from '@/components/dashboard/invoice-share-actions';
 import { CloseButton } from '@/components/auth/close-button';
 import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
 import {
@@ -24,9 +25,17 @@ interface ActivityDetailViewProps {
   /** When provided, the degraded banner offers a Retry that re-fetches this record
    * (the detail screen has no pull-to-refresh of its own). */
   onRetryDetails?: () => void;
+  /** True while the authoritative fetch is in flight. Lets the invoice actions
+   * distinguish "the checkout link is still resolving" from "it is unavailable". */
+  isFetching?: boolean;
 }
 
-export function ActivityDetailView({ item, onClose, onRetryDetails }: ActivityDetailViewProps) {
+export function ActivityDetailView({
+  item,
+  onClose,
+  onRetryDetails,
+  isFetching,
+}: ActivityDetailViewProps) {
   const amount = formatActivityAmount(item.amount, item.currency);
   const cryptoAmount = formatCryptoAmount(item.cryptoAmount, item.cryptoAsset);
   const hasCrypto = item.multiMethod || item.cryptoAmount != null;
@@ -181,6 +190,17 @@ export function ActivityDetailView({ item, onClose, onRetryDetails }: ActivityDe
           trailingIcon="content-copy"
           onTrailingPress={handleCopyInvoiceId}
         />
+
+        {/* Invoice delivery. BTCPay does not send the invoice to the buyer — the
+            merchant shares the checkout link. Only for invoices Hachisu created,
+            so records from other features are unaffected. */}
+        {item.sourceFeature === 'invoice' ? (
+          <InvoiceShareActions
+            item={item}
+            isFetching={isFetching}
+            onRetry={onRetryDetails}
+          />
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

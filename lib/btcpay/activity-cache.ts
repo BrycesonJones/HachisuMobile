@@ -1,4 +1,9 @@
-import type { ActivityItem } from '@/types/activity';
+import type { CreatedInvoice } from '@/lib/btcpay/invoices';
+import type {
+  ActivityDisplayStatus,
+  ActivityItem,
+  ActivityStatus,
+} from '@/types/activity';
 
 // A lightweight in-memory registry of the most recently loaded Activity items,
 // scoped by (merchantStoreId, invoiceId). The Activity list populates it on every
@@ -72,5 +77,83 @@ export function markStoreActivityStale(merchantStoreId: string): void {
     } catch {
       // A misbehaving subscriber must never break the producer's flow.
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Seeding a just-created invoice
+// ---------------------------------------------------------------------------
+
+/**
+ * Seeds the cache from the authoritative create-invoice response so the Payment
+ * Details screen can paint — and share the checkout URL — without waiting for a
+ * second backend round-trip for data Hachisu already holds.
+ *
+ * This is still only initial data: useActivityDetail always fetches the
+ * authoritative record and overwrites this entry. It is therefore written to be
+ * conservative and never optimistic:
+ *   - Payment fields (crypto amount, asset, rail, paidAt, settledAt) are null /
+ *     unknown, because a brand-new invoice has no payment. Nothing is fabricated.
+ *   - `enrichmentStatus` is 'not_required' — there is genuinely nothing to
+ *     enrich yet, which is different from "enrichment failed".
+ *   - If BTCPay reported a status this mapping does not recognize, NOTHING is
+ *     seeded and the screen simply waits for the authoritative fetch, rather
+ *     than guessing a status.
+ */
+export function seedCreatedInvoice(
+  merchantStoreId: string,
+  invoice: CreatedInvoice,
+): void {
+  const mapped = mapBtcpayStatus(invoice.status);
+  if (!mapped) return; // Unknown/absent status — never guess; let the fetch decide.
+
+  const item: ActivityItem = {
+    id: invoice.btcpayInvoiceId,
+    type: 'invoice',
+    btcpayInvoiceId: invoice.btcpayInvoiceId,
+    status: mapped.status,
+    displayStatus: mapped.displayStatus,
+    amount: invoice.amount,
+    currency: invoice.currency,
+    cryptoAmount: null,
+    cryptoAsset: null,
+    paymentRail: 'unknown',
+    paymentMethodId: null,
+    paymentMethodLabel: 'Payment method unavailable',
+    multiMethod: false,
+    breakdown: [],
+    title: 'Invoice',
+    description: invoice.description,
+    orderId: invoice.orderId,
+    createdAt: invoice.createdAt,
+    expiresAt: invoice.expiresAt,
+    paidAt: null,
+    settledAt: null,
+    checkoutUrl: invoice.checkoutUrl,
+    sourceFeature: 'invoice',
+    rawStatus: invoice.status ?? '',
+    enrichmentStatus: 'not_required',
+    unavailableFields: [],
+  };
+  upsertActivityItem(merchantStoreId, item);
+}
+
+/** Maps BTCPay's raw invoice status to Hachisu's normalized pair. Mirrors the
+ * backend's normalizeStatus for the statuses a NEWLY created invoice can carry;
+ * anything else returns null so the caller declines to seed. */
+function mapBtcpayStatus(
+  raw: string | null,
+): { status: ActivityStatus; displayStatus: ActivityDisplayStatus } | null {
+  switch ((raw ?? '').trim().toLowerCase()) {
+    case 'new':
+      return { status: 'new', displayStatus: 'Pending' };
+    case 'processing':
+      return { status: 'processing', displayStatus: 'Processing' };
+    case 'expired':
+      return { status: 'expired', displayStatus: 'Expired' };
+    case 'invalid':
+      return { status: 'invalid', displayStatus: 'Failed' };
+    default:
+      return null;
   }
 }

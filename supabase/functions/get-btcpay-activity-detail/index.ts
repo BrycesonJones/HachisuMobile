@@ -186,7 +186,7 @@ Deno.serve(async (req) => {
   }
 
   // 7. Normalize with the SHARED core (identical shape to the feed items).
-  const item = normalizeInvoice(invoice, outcome);
+  const item = normalizeInvoice(invoice, outcome, { serverUrl: config.serverUrl });
 
   console.log(
     `[activity-detail] user=${user.id} store=${store.id} btcpayStore=${store.btcpay_store_id} ` +

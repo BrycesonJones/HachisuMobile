@@ -31,7 +31,7 @@ import { COLORS } from '@/constants/colors';
 import { HachisuColors } from '@/constants/hachisu-colors';
 import { DEFAULT_CURRENCY } from '@/constants/currencies';
 import { useActiveStore } from '@/contexts/active-store-context';
-import { markStoreActivityStale } from '@/lib/btcpay/activity-cache';
+import { markStoreActivityStale, seedCreatedInvoice } from '@/lib/btcpay/activity-cache';
 import {
   createInvoice,
   newInvoiceIdempotencyKey,
@@ -142,6 +142,12 @@ export default function CreateInvoiceScreen() {
         idempotencyKeyRef.current = null;
         setCreatedInvoiceId(result.invoice.btcpayInvoiceId);
 
+        // Seed the detail cache from the authoritative create response so the
+        // Payment Details screen paints — and can share the checkout URL —
+        // without a second round-trip for data we already hold. The screen still
+        // fetches the authoritative record and overwrites this.
+        seedCreatedInvoice(activeStore.id, result.invoice);
+
         // Feed the invoice into the EXISTING Activity pipeline (it re-fetches
         // from the backend; nothing is synthesized locally).
         markStoreActivityStale(activeStore.id);
@@ -162,6 +168,9 @@ export default function CreateInvoiceScreen() {
       if (result.code === 'INVOICE_CREATED_SYNC_FAILED' && result.invoice) {
         idempotencyKeyRef.current = null;
         setCreatedInvoiceId(result.invoice.btcpayInvoiceId);
+        // The invoice exists in BTCPay and is payable, so it is still seeded and
+        // shareable even though Hachisu's own record did not finish syncing.
+        seedCreatedInvoice(activeStore.id, result.invoice);
         markStoreActivityStale(activeStore.id);
       }
       setSubmitError(result.message);

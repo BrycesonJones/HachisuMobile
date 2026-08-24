@@ -179,7 +179,9 @@ Deno.serve(async (req) => {
     // 6. Normalize, preserving original order. Each item carries an explicit
     // enrichmentStatus so the client never infers failure from a null field.
     const items = invoices.map((invoice) =>
-      normalizeInvoice(invoice, invoice.id ? outcomes.get(invoice.id) : undefined),
+      normalizeInvoice(invoice, invoice.id ? outcomes.get(invoice.id) : undefined, {
+        serverUrl: config.serverUrl,
+      }),
     );
 
     // Feed-level rollup from the enrichment outcomes.

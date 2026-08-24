@@ -20,6 +20,7 @@ import {
   BtcpayApiError,
   BtcpayTimeoutError,
   getInvoicePaymentMethods,
+  sanitizeCheckoutLink,
   type BtcpayConfig,
   type BtcpayInvoice,
   type BtcpayInvoicePaymentMethod,
@@ -155,9 +156,16 @@ export interface ActivityItem {
 // Normalization
 // ---------------------------------------------------------------------------
 
+export interface NormalizeInvoiceOptions {
+  /** Configured BTCPay server URL. When given, the invoice's checkout link is
+   * only surfaced if it belongs to that origin (see sanitizeCheckoutLink). */
+  serverUrl?: string;
+}
+
 export function normalizeInvoice(
   invoice: BtcpayInvoice,
   outcome: EnrichmentOutcome | undefined,
+  options: NormalizeInvoiceOptions = {},
 ): ActivityItem {
   const rawStatus = rawStatusOf(invoice);
   const status = normalizeStatus(rawStatus);
@@ -186,7 +194,11 @@ export function normalizeInvoice(
     orderId,
     createdAt,
     expiresAt,
-    checkoutUrl: strOrNull(invoice.checkoutLink),
+    // Origin-checked against the configured BTCPay server when available, so a
+    // link the merchant may share with a customer can never point elsewhere.
+    checkoutUrl: options.serverUrl
+      ? sanitizeCheckoutLink(invoice.checkoutLink, options.serverUrl)
+      : strOrNull(invoice.checkoutLink),
     sourceFeature: source,
     rawStatus,
   };

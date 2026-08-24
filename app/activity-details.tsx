@@ -39,7 +39,7 @@ export default function ActivityDetailsScreen() {
   // Only issue the fetch once authenticated with well-formed params; otherwise the
   // hook stays idle and the screen renders the auth/invalid-route state instead.
   const enabled = isAuthenticated && paramsValid;
-  const { item, isLoading, error, refetch } = useActivityDetail(
+  const { item, isLoading, isFetching, error, refetch } = useActivityDetail(
     enabled ? merchantStoreId : null,
     enabled ? invoiceId : null,
   );
@@ -73,7 +73,14 @@ export default function ActivityDetailsScreen() {
   // --- Success (cached initial data or authoritative fetch). Takes priority over a
   // background-refresh error so valid data is never replaced by a transient failure. ---
   if (item) {
-    return <ActivityDetailView item={item} onClose={returnToActivity} onRetryDetails={refetch} />;
+    return (
+      <ActivityDetailView
+        item={item}
+        onClose={returnToActivity}
+        onRetryDetails={refetch}
+        isFetching={isFetching}
+      />
+    );
   }
 
   // --- Loading: a fetch is in flight and there is nothing to show yet. ---
