@@ -1,8 +1,8 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
-  Alert,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -32,6 +32,13 @@ import { COLORS } from '@/constants/colors';
 import { HachisuColors } from '@/constants/hachisu-colors';
 import { DEFAULT_CURRENCY } from '@/constants/currencies';
 import { useActiveStore } from '@/contexts/active-store-context';
+import { upsertPaymentRequest } from '@/lib/btcpay/payment-request-cache';
+import {
+  createPaymentRequest,
+  newPaymentRequestIdempotencyKey,
+  type CustomerDataOption,
+  type PaymentRequestErrorCode,
+} from '@/lib/btcpay/payment-requests';
 
 const EXPIRATION_OPTIONS: readonly SelectOption[] = [
   { id: 'none', label: 'No expiration' },
@@ -39,6 +46,21 @@ const EXPIRATION_OPTIONS: readonly SelectOption[] = [
   { id: '7d', label: '7 days' },
   { id: '30d', label: '30 days' },
 ];
+
+/** Whole hours per UI option; null = the request never expires. The backend
+ * validates hours and computes BTCPay's expiryDate from them. */
+const EXPIRATION_HOURS: Record<string, number | null> = {
+  none: null,
+  '24h': 24,
+  '7d': 7 * 24,
+  '30d': 30 * 24,
+};
+
+const CUSTOMER_DATA_BY_ID: Record<string, CustomerDataOption> = {
+  none: 'none',
+  email: 'email',
+  shipping: 'shipping',
+};
 
 const CUSTOMER_DATA_OPTIONS: readonly SelectOption[] = [
   { id: 'none', label: 'Do not request any information' },
@@ -64,10 +86,20 @@ export default function CreatePaymentRequestScreen() {
   const [recipientEmail, setRecipientEmail] = useState('');
   const [memo, setMemo] = useState('');
 
-  const amountRequired = !allowCustomAmount;
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitErrorCode, setSubmitErrorCode] = useState<PaymentRequestErrorCode | null>(null);
+  /** Set once BTCPay holds a real payment request for this form, INCLUDING the
+   * created-but-unsynced case — it is what stops a second create. */
+  const [createdRequestId, setCreatedRequestId] = useState<string | null>(null);
 
-  // Show an amount error when the field has content that isn't a positive
-  // number, or (when required) leave it unmarked until the user engages.
+  // Refs, not state: these must be correct within a single tap, before re-render.
+  const submittingRef = useRef(false);
+  const idempotencyKeyRef = useRef<string | null>(null);
+
+  // BTCPay requires a positive amount on EVERY payment request (verified against
+  // the deployed server) — "allow custom amounts" governs how customers may pay
+  // against it (their own or partial amounts), not whether an amount exists.
   const amountError =
     amount.length > 0 && !isValidAmount(amount)
       ? 'Enter an amount greater than 0.'
@@ -77,27 +109,112 @@ export default function CreatePaymentRequestScreen() {
       ? 'Enter a valid email address.'
       : null;
 
-  const amountValid = amountRequired
-    ? isValidAmount(amount)
-    : amount.trim().length === 0 || isValidAmount(amount);
-
-  const canSubmit =
+  const formValid =
     title.trim().length > 0 &&
     currency.length > 0 &&
-    amountValid &&
+    isValidAmount(amount) &&
     !recipientEmailError;
+
+  const canSubmit = formValid && !!activeStore && !submitting && !createdRequestId;
 
   function regenerateReferenceId() {
     setReferenceId(generatePaymentRequestReferenceId());
   }
 
-  function handleCreate() {
-    if (!canSubmit) return;
-    // Placeholder only — no BTCPay call, no backend, no fake payment link.
-    Alert.alert(
-      'Create Payment Request',
-      'Payment request creation coming soon. This form will create a long-lived Bitcoin payment link for the active store.',
-    );
+  /**
+   * Creates the payment request for real: one Edge Function call that
+   * authenticates the merchant, resolves this store's BTCPay id server-side,
+   * creates the request in BTCPay, records it, and returns the normalized model
+   * including the authoritative public payment page URL.
+   *
+   * Duplicate protection is layered exactly like Create Invoice: disabled
+   * button + a ref that beats the re-render, with the AUTHORITATIVE guarantee
+   * being the server's unique (store, idempotency key) row — a retry of this
+   * same attempt returns the SAME request instead of creating a second one.
+   */
+  async function handleCreate() {
+    if (!canSubmit || !activeStore) return;
+    if (submittingRef.current) return; // Beats the re-render on a fast double tap.
+    submittingRef.current = true;
+
+    // One key per submission ATTEMPT, reused across retries of that attempt.
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = newPaymentRequestIdempotencyKey();
+    }
+
+    setSubmitting(true);
+    setSubmitError(null);
+    setSubmitErrorCode(null);
+
+    try {
+      const result = await createPaymentRequest({
+        merchantStoreId: activeStore.id,
+        idempotencyKey: idempotencyKeyRef.current,
+        title: title.trim(),
+        amount: amount.trim(),
+        currency,
+        allowCustomAmounts: allowCustomAmount,
+        memo,
+        referenceId,
+        recipientEmail,
+        expiresInHours: EXPIRATION_HOURS[expirationId] ?? null,
+        customerDataOption: CUSTOMER_DATA_BY_ID[customerDataId] ?? 'none',
+      });
+
+      if (result.ok) {
+        // The request exists in BTCPay. Retire this attempt's key so a later
+        // request from this screen can never collide with it.
+        idempotencyKeyRef.current = null;
+        setCreatedRequestId(result.paymentRequest.btcpayPaymentRequestId);
+
+        // Seed the detail cache from the authoritative create response so the
+        // detail screen paints — and can share the request URL — without a
+        // second round-trip. The screen still fetches the authoritative record.
+        upsertPaymentRequest(activeStore.id, result.paymentRequest);
+
+        router.replace({
+          pathname: '/payments/requests/detail',
+          params: {
+            merchantStoreId: activeStore.id,
+            paymentRequestId: result.paymentRequest.btcpayPaymentRequestId,
+          },
+        });
+        return;
+      }
+
+      // Created in BTCPay but not synced locally: the request is REAL. Keep the
+      // form intact, surface a recovery path, and never invite a second create.
+      if (result.code === 'PAYMENT_REQUEST_CREATED_SYNC_FAILED' && result.paymentRequest) {
+        idempotencyKeyRef.current = null;
+        setCreatedRequestId(result.paymentRequest.btcpayPaymentRequestId);
+        upsertPaymentRequest(activeStore.id, result.paymentRequest);
+      }
+      setSubmitError(result.message);
+      setSubmitErrorCode(result.code);
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error
+          ? err.message
+          : 'Payment request could not be created right now. Try again.',
+      );
+      setSubmitErrorCode('NETWORK_ERROR');
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  }
+
+  /** Recovery action after a created-but-unsynced result: go look at the real
+   * request rather than creating another one. */
+  function viewCreatedRequest() {
+    if (!activeStore || !createdRequestId) return;
+    router.replace({
+      pathname: '/payments/requests/detail',
+      params: {
+        merchantStoreId: activeStore.id,
+        paymentRequestId: createdRequestId,
+      },
+    });
   }
 
   return (
@@ -145,7 +262,7 @@ export default function CreatePaymentRequestScreen() {
 
           <InvoiceFormField
             label="Amount"
-            required={amountRequired}
+            required
             value={amount}
             onChangeText={setAmount}
             placeholder="0.00"
@@ -165,7 +282,7 @@ export default function CreatePaymentRequestScreen() {
           <View style={styles.toggleBlock}>
             <ToggleRow
               label="Allow customer to choose amount"
-              description="Useful for donations, tips, or flexible service payments."
+              description="Customers can pay their own or partial amounts toward the requested amount. Useful for donations, tips, or flexible service payments."
               value={allowCustomAmount}
               onValueChange={setAllowCustomAmount}
             />
@@ -220,15 +337,60 @@ export default function CreatePaymentRequestScreen() {
             error={recipientEmailError}
           />
           <Text style={styles.helperText}>
-            Optional. Used for sending the payment request later.
+            Optional. Saved with the request and attached to payments made
+            through it. Hachisu does not send the request by email — share the
+            payment link after creating it.
           </Text>
+
+          {submitError ? (
+            <View style={styles.errorCard}>
+              <MaterialIcons
+                name={createdRequestId ? 'info-outline' : 'error-outline'}
+                size={18}
+                color={createdRequestId ? COLORS.secondaryText : '#F87171'}
+              />
+              <View style={styles.errorTextBlock}>
+                <Text style={styles.errorText}>{submitError}</Text>
+                {submitErrorCode === 'NO_PAYMENT_METHOD_AVAILABLE' ? (
+                  <Text style={styles.errorHint}>
+                    BTCPay decides which payment methods a store can offer.
+                    Connect a Bitcoin wallet (or set up Lightning) in Account
+                    settings, then try again.
+                  </Text>
+                ) : null}
+                {createdRequestId ? (
+                  <Pressable
+                    onPress={viewCreatedRequest}
+                    style={({ pressed }) => [styles.recoveryButton, pressed && styles.pressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel="View the created payment request">
+                    <Text style={styles.recoveryLabel}>View the created request</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
+
+          {!activeStore ? (
+            <Text style={styles.inlineError}>
+              Select a store before creating a payment request.
+            </Text>
+          ) : null}
 
           <View style={styles.createButton}>
             <PrimaryButton
-              label="Create Request"
+              label={submitting ? 'Creating Request…' : 'Create Request'}
               onPress={handleCreate}
               disabled={!canSubmit}
             />
+            {submitting ? (
+              <View style={styles.submittingRow}>
+                <ActivityIndicator size="small" color={COLORS.secondaryText} />
+                <Text style={styles.submittingText}>
+                  Creating your payment request in BTCPay…
+                </Text>
+              </View>
+            ) : null}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -339,5 +501,53 @@ const styles = StyleSheet.create({
   },
   createButton: {
     marginTop: 32,
+  },
+  submittingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+  submittingText: {
+    fontSize: 13,
+    color: COLORS.secondaryText,
+  },
+  inlineError: {
+    marginTop: 10,
+    fontSize: 13,
+    color: '#F87171',
+  },
+  errorCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 24,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: COLORS.card,
+  },
+  errorTextBlock: {
+    flex: 1,
+  },
+  errorText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: COLORS.primaryText,
+  },
+  errorHint: {
+    marginTop: 6,
+    fontSize: 12,
+    lineHeight: 17,
+    color: COLORS.secondaryText,
+  },
+  recoveryButton: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+  },
+  recoveryLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: HachisuColors.cream,
   },
 });
