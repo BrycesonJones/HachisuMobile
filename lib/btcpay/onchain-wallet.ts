@@ -43,6 +43,8 @@ export interface ConnectOnchainWalletInput {
 export interface ConnectOnchainWalletResult {
   ok: boolean;
   error: string | null;
+  /** Machine-readable code, e.g. WALLET_ALREADY_CONNECTED when connect is refused. */
+  code?: string | null;
 }
 
 /**
@@ -115,18 +117,29 @@ export async function previewOnchainWallet(
   const extendedPublicKey = input.extendedPublicKey.trim();
 
   if (isDevAuthActive()) {
+    // Mirror the server connect-guard: a connected store can't use connect preview.
+    const devStore = getDevStores().find((s) => s.id === merchantStoreId) ?? null;
+    if (devStore?.onchain_status === 'connected') {
+      return {
+        ok: false,
+        code: 'WALLET_ALREADY_CONNECTED',
+        error: 'This store already has a Bitcoin wallet connected. Use Replace wallet to change it.',
+        addresses: [],
+      };
+    }
     // Simulate BTCPay-derived addresses (0/0 … 0/9). Not real addresses.
     const { addressType } = devClassify(extendedPublicKey);
     const addresses: PreviewAddress[] = Array.from({ length: 10 }, (_, i) => ({
       keyPath: `0/${i}`,
       address: `bc1qdev${extendedPublicKey.slice(4, 10).toLowerCase()}${i}xxxxxxxxxxxxxxxxxxxx`,
     }));
-    return { ok: true, error: null, addressType, addresses };
+    return { ok: true, error: null, code: null, addressType, addresses };
   }
 
   const { data, error } = await supabase.functions.invoke<{
     ok?: boolean;
     error?: string;
+    code?: string;
     addressType?: string;
     addresses?: PreviewAddress[];
   }>('preview-btcpay-onchain-wallet', {
@@ -167,6 +180,15 @@ export async function connectOnchainWallet(
   const extendedPublicKey = input.extendedPublicKey.trim();
 
   if (isDevAuthActive()) {
+    // Mirror the server connect-guard: never overwrite an already-connected store.
+    const devStore = getDevStores().find((s) => s.id === merchantStoreId) ?? null;
+    if (devStore?.onchain_status === 'connected') {
+      return {
+        ok: false,
+        code: 'WALLET_ALREADY_CONNECTED',
+        error: 'This store already has a Bitcoin wallet connected. Use Replace wallet to change it.',
+      };
+    }
     const { provider, addressType } = devClassify(extendedPublicKey);
     updateDevStore(merchantStoreId, {
       onchain_status: 'connected',
@@ -176,29 +198,30 @@ export async function connectOnchainWallet(
       wallet_status: 'payment_destination_connected',
     });
     syncDevProfileSummary();
-    return { ok: true, error: null };
+    return { ok: true, error: null, code: null };
   }
 
-  const { data, error } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>(
-    'connect-btcpay-onchain-wallet',
-    {
-      method: 'POST',
-      body: { merchantStoreId, extendedPublicKey, confirmedAddresses: input.confirmedAddresses },
-    },
-  );
+  const { data, error } = await supabase.functions.invoke<{
+    ok?: boolean;
+    error?: string;
+    code?: string;
+  }>('connect-btcpay-onchain-wallet', {
+    method: 'POST',
+    body: { merchantStoreId, extendedPublicKey, confirmedAddresses: input.confirmedAddresses },
+  });
 
   if (error) {
-    const message = await extractFunctionError(error, 'Connection failed.');
-    if (isProfileDebugEnabled) console.log('[btcpay] connect-onchain error', message);
-    return { ok: false, error: message };
+    const detail = await extractFunctionErrorDetail(error, 'Connection failed.');
+    if (isProfileDebugEnabled) console.log('[btcpay] connect-onchain error', detail);
+    return { ok: false, error: detail.message, code: detail.code };
   }
 
   if (isProfileDebugEnabled) {
     console.log('[btcpay] connect-onchain result', { ok: data?.ok, error: data?.error });
   }
 
-  if (!data?.ok) return { ok: false, error: data?.error ?? 'Connection failed.' };
-  return { ok: true, error: null };
+  if (!data?.ok) return { ok: false, error: data?.error ?? 'Connection failed.', code: data?.code ?? null };
+  return { ok: true, error: null, code: null };
 }
 
 // ---------------------------------------------------------------------------

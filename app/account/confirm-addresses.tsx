@@ -105,6 +105,15 @@ export default function ConfirmAddressesScreen() {
     setLoading(false);
 
     if (!result.ok) {
+      // The store already has a wallet (raced/stale) — connect must not overwrite.
+      // Route to settings so the merchant uses the staged replacement flow.
+      if (result.code === 'WALLET_ALREADY_CONNECTED') {
+        router.replace({
+          pathname: '/account/btc-wallet-settings',
+          params: { storeId: params.storeId, storeName: params.storeName ?? '' },
+        });
+        return;
+      }
       setError(result.error ?? 'Could not connect the wallet. Please try again.');
       return;
     }

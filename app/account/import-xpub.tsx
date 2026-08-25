@@ -111,6 +111,15 @@ export default function ImportXpubScreen() {
     setLoading(false);
 
     if (!result.ok) {
+      // Connect refused because the store already has a wallet (stale UI / route /
+      // direct call). Send the merchant to settings to use the replacement flow.
+      if (!isReplace && result.code === 'WALLET_ALREADY_CONNECTED') {
+        router.replace({
+          pathname: '/account/btc-wallet-settings',
+          params: { storeId, storeName: storeName ?? '' },
+        });
+        return;
+      }
       setError(result.error ?? 'Could not read that key. Please check it and try again.');
       return;
     }
