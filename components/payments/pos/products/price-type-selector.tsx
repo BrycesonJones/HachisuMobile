@@ -9,11 +9,13 @@ interface PriceTypeOption {
   label: string;
 }
 
+// Labels mirror BTCPay's POS price types (Custom = BTCPay's any-amount/Topup);
+// Free stays a separate Hachisu option and syncs as Fixed with price 0.
 const OPTIONS: readonly PriceTypeOption[] = [
   { id: 'fixed', label: 'Fixed' },
+  { id: 'minimum', label: 'Minimum' },
+  { id: 'any', label: 'Custom' },
   { id: 'free', label: 'Free' },
-  { id: 'any', label: 'Any amount' },
-  { id: 'minimum', label: 'Minimum amount' },
 ];
 
 interface PriceTypeSelectorProps {
@@ -27,7 +29,7 @@ interface PriceTypeSelectorProps {
  */
 export function PriceTypeSelector({ value, onChange }: PriceTypeSelectorProps) {
   return (
-    <View style={styles.row}>
+    <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="Price type">
       {OPTIONS.map((option) => {
         const selected = option.id === value;
         return (

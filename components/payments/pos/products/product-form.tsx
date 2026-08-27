@@ -17,13 +17,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CurrencySelect } from '@/components/account/currency-select';
 import { PrimaryButton } from '@/components/auth/primary-button';
 import { InvoiceFormField } from '@/components/payments/invoices/create/invoice-form-field';
-import { isValidAmount } from '@/components/payments/invoices/create/validation';
 import {
   generateProductIdFromTitle,
   isValidProductId,
 } from '@/components/payments/pos/products/product-id';
 import { PriceTypeSelector } from '@/components/payments/pos/products/price-type-selector';
 import {
+  isValidProductPrice,
   priceTypeNeedsAmount,
   type PosProduct,
   type ProductPriceType,
@@ -39,8 +39,8 @@ const DESCRIPTION_LIMIT = 300;
 const PRICE_TYPE_HELP: Record<ProductPriceType, string> = {
   fixed: 'Customers pay the exact price.',
   free: 'The product is free.',
-  any: 'Customers choose any amount.',
-  minimum: 'Customers must pay at least this amount.',
+  any: 'Customer chooses the amount.',
+  minimum: 'Customers can pay this amount or more.',
 };
 
 interface ProductFormProps {
@@ -100,8 +100,8 @@ export function ProductForm({
       ? 'Use lowercase letters, numbers, and hyphens only.'
       : null;
   const priceError =
-    priceShown && price.length > 0 && !isValidAmount(price)
-      ? 'Enter an amount greater than 0.'
+    priceShown && price.length > 0 && !isValidProductPrice(price)
+      ? 'Enter an amount greater than 0, with up to 2 decimals.'
       : null;
   const inventoryValid = inventory.trim() === '' || /^\d+$/.test(inventory.trim());
   const inventoryError =
@@ -112,7 +112,7 @@ export function ProductForm({
   const canSave =
     name.trim().length > 0 &&
     isValidProductId(productId.trim()) &&
-    (!priceShown || isValidAmount(price)) &&
+    (!priceShown || isValidProductPrice(price)) &&
     currency.length > 0 &&
     inventoryValid;
 
@@ -135,7 +135,7 @@ export function ProductForm({
     if (!onDelete) return;
     Alert.alert(
       'Delete product?',
-      'This product will be removed from the local POS product list.',
+      'This product will be removed from the menu when you save.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: onDelete },
@@ -210,7 +210,7 @@ export function ProductForm({
           {priceShown ? (
             <>
               <InvoiceFormField
-                label="Price"
+                label={priceType === 'minimum' ? 'Minimum Price' : 'Price'}
                 required
                 value={price}
                 onChangeText={setPrice}
@@ -222,9 +222,16 @@ export function ProductForm({
               />
               <View style={styles.fieldBlock}>
                 <Text style={styles.fieldLabel}>
-                  Currency <Text style={styles.required}>*</Text>
+                  Pricing Currency <Text style={styles.required}>*</Text>
                 </Text>
-                <CurrencySelect value={currency} onChange={setCurrency} />
+                <CurrencySelect
+                  value={currency}
+                  onChange={setCurrency}
+                  label="Pricing currency"
+                />
+                <Text style={styles.helperText}>
+                  Set prices in this currency. Customers still pay in Bitcoin.
+                </Text>
               </View>
             </>
           ) : null}

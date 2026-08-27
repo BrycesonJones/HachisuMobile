@@ -8,11 +8,15 @@ import { SUPPORTED_CURRENCIES, currencyLabel } from '@/constants/currencies';
 interface CurrencySelectProps {
   value: string;
   onChange: (code: string) => void;
+  /** Field name announced to screen readers and shown as the picker title.
+   * Contexts where "Default currency" is inaccurate (e.g. the POS's pricing
+   * denomination) pass their own, such as "Pricing currency". */
+  label?: string;
 }
 
 // Currency picker. Backed by SUPPORTED_CURRENCIES (USD today) and built to grow
 // — adding currencies to the constant is all that's needed.
-export function CurrencySelect({ value, onChange }: CurrencySelectProps) {
+export function CurrencySelect({ value, onChange, label = 'Default currency' }: CurrencySelectProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -21,7 +25,7 @@ export function CurrencySelect({ value, onChange }: CurrencySelectProps) {
         onPress={() => setOpen(true)}
         style={({ pressed }) => [styles.field, pressed && styles.fieldPressed]}
         accessibilityRole="button"
-        accessibilityLabel={`Default currency: ${value}. Tap to change.`}>
+        accessibilityLabel={`${label}: ${value}. Tap to change.`}>
         <Text style={styles.fieldValue}>
           {value} · {currencyLabel(value)}
         </Text>
@@ -31,7 +35,7 @@ export function CurrencySelect({ value, onChange }: CurrencySelectProps) {
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
           <Pressable style={styles.sheet} onPress={() => {}}>
-            <Text style={styles.sheetTitle}>Default currency</Text>
+            <Text style={styles.sheetTitle}>{label}</Text>
             {SUPPORTED_CURRENCIES.map((c) => {
               const selected = c.code === value;
               return (
