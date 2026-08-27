@@ -1,6 +1,16 @@
-// Mobile-side shape of a BTCPay-derived Activity item. Mirrors the normalized
-// output of the get-btcpay-store-activity Edge Function. BTCPay is the source of
-// truth; the app only ever renders these normalized records (never raw BTCPay JSON).
+// Mobile-side shapes of BTCPay-derived records. BTCPay Server is the source of
+// truth; the app only ever renders these normalized records (never raw BTCPay
+// JSON), and never re-derives a status, rail, or asset from a raw string.
+//
+// Two distinct models live here, and they are deliberately NOT the same dataset:
+//
+//   ActivityItem       — an INVOICE lifecycle record (created/unpaid/processing/
+//                        settled/expired/invalid). Backs the Invoices screen and
+//                        the invoice half of the payment detail screen.
+//   StoreActivityEvent — a PAYMENT: one financially meaningful transaction the
+//                        store actually received. Backs the Activity feed. An
+//                        expired unpaid invoice is an ActivityItem with no
+//                        StoreActivityEvent.
 
 export type ActivityStatus =
   | 'new'
@@ -17,6 +27,20 @@ export type ActivityDisplayStatus =
   | 'Settled'
   | 'Expired'
   | 'Failed';
+
+/**
+ * BTCPay's invoice EXCEPTION status (`additionalStatus`) — its second status
+ * axis, and the only authoritative way to tell a plainly settled invoice from
+ * one paid late, partially, or over. Kept separate from the primary status.
+ */
+export type InvoiceExceptionStatus =
+  | 'none'
+  | 'paidPartial'
+  | 'paidLate'
+  | 'paidOver'
+  | 'marked'
+  | 'invalid'
+  | 'unknown';
 
 /** Settlement asset of a received crypto payment. Distinct from invoice currency. */
 export type PaymentAsset = 'BTC' | 'L-BTC';
@@ -49,14 +73,12 @@ export type ActivitySourceFeature =
   | 'unknown';
 
 /**
- * Whether an item's/feed's enriched (payment-detail) fields loaded. Enrichment is
- * a SEPARATE stage from base retrieval: a base success is never shown as fully
- * complete when enrichment failed silently. `null` enriched fields alone are
+ * Whether an item's enriched (payment-detail) fields loaded. List endpoints now
+ * receive payments inline from BTCPay in the SAME request as the invoices, so
+ * they report 'complete'/'not_required' and have no partial-failure mode; the
+ * single-invoice detail endpoint still fetches payment details separately and
+ * reports 'failed' when that call fails. `null` enriched fields alone are
  * ambiguous (unpaid vs. lookup-failed), so this status disambiguates.
- *   complete     — every required enrichment succeeded
- *   partial      — some succeeded, some failed
- *   failed       — all required enrichment failed (base records still valid)
- *   not_required — no items needed enrichment
  */
 export type EnrichmentStatus = 'complete' | 'partial' | 'failed' | 'not_required';
 
@@ -68,15 +90,7 @@ export type UnavailableActivityField =
   | 'paidAt'
   | 'settledAt';
 
-/** Feed-level enrichment rollup (aggregate counts only; no raw error details). */
-export interface ActivityFeedEnrichment {
-  status: EnrichmentStatus;
-  attemptedCount: number;
-  succeededCount: number;
-  failedCount: number;
-  retryableCount: number;
-}
-
+/** An INVOICE lifecycle record. */
 export interface ActivityItem {
   id: string;
   type: 'invoice';
@@ -87,6 +101,12 @@ export interface ActivityItem {
   amount: string;
   /** Invoice pricing currency, e.g. "USD". NOT the settlement asset. */
   currency: string;
+  /** Amount received so far in the pricing currency; null when not reported. */
+  paidAmount: string | null;
+  /** BTCPay's exception status — paid late/partial/over, marked, invalid. */
+  exceptionStatus: InvoiceExceptionStatus;
+  /** Number of payments BTCPay has recorded against this invoice. */
+  paymentCount: number;
   /** Crypto amount actually received (single-asset invoices), as a string. */
   cryptoAmount: string | null;
   /** Settlement asset of the received crypto. Null when unknown/unavailable. */
@@ -105,7 +125,7 @@ export interface ActivityItem {
   orderId: string | null;
   /** ISO timestamp. */
   createdAt: string;
-  /** ISO timestamp the invoice expires/expired, when known. Present on detail fetches. */
+  /** ISO timestamp the invoice expires/expired, when known. */
   expiresAt?: string | null;
   paidAt: string | null;
   settledAt: string | null;
@@ -118,9 +138,53 @@ export interface ActivityItem {
   unavailableFields: UnavailableActivityField[];
 }
 
-export interface StoreActivityRange {
-  startDate: string;
-  endDate: string;
+// ---------------------------------------------------------------------------
+// Activity: PAYMENT events
+// ---------------------------------------------------------------------------
+
+/** THIS payment's status. BTCPay records Settled | Processing | Invalid. */
+export type PaymentEventStatus = 'settled' | 'processing' | 'invalid';
+export type PaymentEventDisplayStatus = 'Settled' | 'Processing' | 'Failed';
+
+/**
+ * One financially meaningful payment received by the store. The Activity feed is
+ * a list of these — NOT of invoices — so two payments against one invoice are
+ * two rows and an unpaid invoice is no row at all.
+ */
+export interface StoreActivityEvent {
+  /** Stable unique key `${invoiceId}:${paymentId}` — never deduped by invoice. */
+  id: string;
+  type: 'payment';
+  btcpayInvoiceId: string;
+  paymentId: string;
+  status: PaymentEventStatus;
+  displayStatus: PaymentEventDisplayStatus;
+  /** ISO timestamp the payment was received. The feed's sort key. */
+  receivedAt: string;
+  invoiceCreatedAt: string;
+  /** This payment's value in the invoice currency (value x rate). Null when
+   * BTCPay reported no rate — never fabricated. */
+  fiatAmount: string | null;
+  fiatCurrency: string;
+  /** The full invoice price, for comparison against this payment. */
+  invoiceAmount: string;
+  invoiceStatus: ActivityStatus;
+  invoiceDisplayStatus: ActivityDisplayStatus;
+  invoiceExceptionStatus: InvoiceExceptionStatus;
+  /** This payment's crypto amount, exactly as BTCPay reported it. */
+  cryptoAmount: string;
+  cryptoAsset: PaymentAsset | null;
+  paymentRail: PaymentRail;
+  paymentMethodId: string | null;
+  paymentMethodLabel: PaymentMethodLabel;
+  fee: string | null;
+  rate: string | null;
+  address: string | null;
+  orderId: string | null;
+  paymentRequestId: string | null;
+  description: string | null;
+  sourceFeature: ActivitySourceFeature;
+  title: string;
 }
 
 export interface StoreActivityResponse {
@@ -128,22 +192,33 @@ export interface StoreActivityResponse {
   merchantStoreId: string;
   btcpayStoreId: string;
   source: 'btcpay';
-  range: StoreActivityRange;
+  items: StoreActivityEvent[];
+  /** Opaque cursor for the next page, or null when history is exhausted. */
+  nextCursor: string | null;
+  error?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Invoices list
+// ---------------------------------------------------------------------------
+
+export interface StoreInvoicesResponse {
+  ok: boolean;
+  merchantStoreId: string;
+  btcpayStoreId: string;
+  source: 'btcpay';
   items: ActivityItem[];
-  /** Feed-level enrichment rollup. Optional for back-compat with older responses. */
-  enrichment?: ActivityFeedEnrichment;
-  nextOffset: number | null;
+  nextCursor: string | null;
   error?: string;
 }
 
 // ---------------------------------------------------------------------------
 // Activity DETAIL (durable single-record retrieval).
 //
-// The detail screen routes by durable identifiers (merchantStoreId + invoiceId)
-// and fetches the authoritative record from get-btcpay-activity-detail, so a
-// payment detail survives app restarts, bundle reloads, deep links, and cache
-// loss. The returned `item` is the SAME normalized ActivityItem shape as the
-// feed, so a cached list item is valid initial data for the detail screen.
+// The detail screen routes by durable identifiers (merchantStoreId + invoiceId,
+// plus an optional paymentId) and fetches the authoritative record from
+// get-btcpay-activity-detail, so a payment detail survives app restarts, bundle
+// reloads, deep links, and cache loss.
 // ---------------------------------------------------------------------------
 
 /** Non-sensitive error codes the detail endpoint returns; each maps to a screen state. */
@@ -164,7 +239,34 @@ export interface ActivityDetailResponse {
   btcpayStoreId?: string;
   source?: 'btcpay';
   item?: ActivityItem;
+  /** Every payment recorded against the invoice (empty when it has none). */
+  events?: StoreActivityEvent[];
   /** Present only on failures. */
   code?: ActivityDetailErrorCode;
+  error?: string;
+}
+
+/** The full detail payload: the invoice plus its individual payments. */
+export interface ActivityDetail {
+  item: ActivityItem;
+  events: StoreActivityEvent[];
+}
+
+// ---------------------------------------------------------------------------
+// Reporting CSV export
+// ---------------------------------------------------------------------------
+
+export interface StoreReportExportResponse {
+  ok: boolean;
+  merchantStoreId?: string;
+  source?: 'btcpay';
+  /** Server-authored, path-safe filename. */
+  filename?: string;
+  csv?: string;
+  rowCount?: number;
+  invoiceCount?: number;
+  range?: { startDate: string; endDate: string };
+  /** True when the export hit its server-side invoice bound. */
+  truncated?: boolean;
   error?: string;
 }

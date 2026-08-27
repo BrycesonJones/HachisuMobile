@@ -15,7 +15,8 @@ import type { ActivityDetailErrorCode } from '@/types/activity';
 /**
  * Durable Activity DETAIL screen.
  *
- * The route carries stable identifiers (merchantStoreId + invoiceId) so a payment
+ * The route carries stable identifiers (merchantStoreId + invoiceId, and
+ * optionally the paymentId that was tapped) so a payment
  * detail is recoverable from the backend after an app restart, a bundle reload, a
  * deep link, or a cleared in-memory cache — the screen never depends on the
  * Activity LIST having been visited first, and it NEVER silently navigates back
@@ -30,17 +31,22 @@ export default function ActivityDetailsScreen() {
   const params = useLocalSearchParams<{
     merchantStoreId?: string;
     invoiceId?: string;
+    paymentId?: string;
     source?: string;
   }>();
 
   const merchantStoreId = normalizeParam(params.merchantStoreId);
   const invoiceId = normalizeParam(params.invoiceId);
+  // Optional: which payment of the invoice the user tapped. Display-only — the
+  // backend returns every payment of the invoice regardless, so an unknown or
+  // absent id simply highlights nothing.
+  const paymentId = normalizeParam(params.paymentId);
   const paramsValid = merchantStoreId != null && invoiceId != null;
 
   // Only issue the fetch once authenticated with well-formed params; otherwise the
   // hook stays idle and the screen renders the auth/invalid-route state instead.
   const enabled = isAuthenticated && paramsValid;
-  const { item, isLoading, isFetching, error, refetch } = useActivityDetail(
+  const { item, events, isLoading, isFetching, error, refetch } = useActivityDetail(
     enabled ? merchantStoreId : null,
     enabled ? invoiceId : null,
   );
@@ -77,6 +83,8 @@ export default function ActivityDetailsScreen() {
     return (
       <ActivityDetailView
         item={item}
+        events={events}
+        focusPaymentId={paymentId}
         onClose={returnToActivity}
         onRetryDetails={refetch}
         isFetching={isFetching}

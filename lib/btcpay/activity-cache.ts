@@ -5,15 +5,19 @@ import type {
   ActivityStatus,
 } from '@/types/activity';
 
-// A lightweight in-memory registry of the most recently loaded Activity items,
-// scoped by (merchantStoreId, invoiceId). The Activity list populates it on every
-// fetch and the detail screen reads it for immediate initial data before the
-// authoritative single-record fetch resolves.
+// A lightweight in-memory registry of the most recently loaded INVOICE records,
+// scoped by (merchantStoreId, invoiceId). The Invoices list populates it on
+// every fetch and the payment detail screen reads it for immediate initial data
+// before the authoritative single-record fetch resolves.
 //
-// It is an OPTIMIZATION, never the source of truth: a miss must trigger a backend
-// fetch, not a failure. Keys are scoped by store because a BTCPay invoice id is
-// only guaranteed unique WITHIN a store — an invoice id alone could otherwise
-// collide across two of the merchant's stores.
+// It is an OPTIMIZATION, never the source of truth: a miss must trigger a
+// backend fetch, not a failure. Keys are scoped by store because a BTCPay
+// invoice id is only guaranteed unique WITHIN a store — an invoice id alone
+// could otherwise collide across two of the merchant's stores.
+//
+// Deliberately NOT cached: payment events. The Activity feed is paginated and
+// its pages are owned by the query cache in use-store-activity; caching payments
+// here as well would create a second, divergent copy of financial records.
 const cache = new Map<string, ActivityItem>();
 
 function keyFor(merchantStoreId: string, invoiceId: string): string {
@@ -44,15 +48,24 @@ export function upsertActivityItem(merchantStoreId: string, item: ActivityItem):
   cache.set(keyFor(merchantStoreId, item.btcpayInvoiceId), item);
 }
 
+/** Drops every cached record for a store. Used when a store's data is known to
+ * have changed, so a stale invoice can never be shown as current. */
+export function clearStoreActivityCache(merchantStoreId: string): void {
+  const prefix = `${merchantStoreId}::`;
+  for (const key of [...cache.keys()]) {
+    if (key.startsWith(prefix)) cache.delete(key);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Staleness signal
 // ---------------------------------------------------------------------------
 //
-// When the app itself causes a store's BTCPay activity to change (creating an
-// invoice, for example), the Activity feed must not wait for a restart or a
-// manual pull-to-refresh. Rather than introducing a second activity system, this
-// is a minimal notification into the EXISTING pipeline: a producer marks a store
-// stale and the existing useStoreActivity hook re-runs its normal fetch.
+// When the app itself causes a store's BTCPay data to change (creating an
+// invoice, for example), the Invoices and Activity surfaces must not wait for a
+// restart or a manual pull-to-refresh. Rather than introducing a second activity
+// system, this is a minimal notification into the EXISTING pipelines: a producer
+// marks a store stale and every mounted list for it re-runs its normal fetch.
 //
 // Deliberately not a cache write: the new record is fetched from the backend
 // (BTCPay stays authoritative) instead of being synthesized locally.
@@ -69,7 +82,7 @@ export function subscribeActivityStale(listener: StaleListener): () => void {
   };
 }
 
-/** Marks a store's activity stale so any mounted feed for it re-fetches. */
+/** Marks a store's data stale so any mounted list for it re-fetches. */
 export function markStoreActivityStale(merchantStoreId: string): void {
   for (const listener of [...staleListeners]) {
     try {
@@ -115,6 +128,9 @@ export function seedCreatedInvoice(
     displayStatus: mapped.displayStatus,
     amount: invoice.amount,
     currency: invoice.currency,
+    paidAmount: null,
+    exceptionStatus: 'none',
+    paymentCount: 0,
     cryptoAmount: null,
     cryptoAsset: null,
     paymentRail: 'unknown',

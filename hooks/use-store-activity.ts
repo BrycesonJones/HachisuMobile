@@ -1,124 +1,55 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { AppState } from 'react-native';
 
+import {
+  usePaginatedStoreList,
+  type UsePaginatedStoreListResult,
+} from '@/hooks/use-paginated-store-list';
 import { fetchStoreActivity } from '@/lib/btcpay/activity';
-import { cacheActivityItems, subscribeActivityStale } from '@/lib/btcpay/activity-cache';
-import type { ActivityFeedEnrichment } from '@/types/activity';
-import type { ActivityItem } from '@/types/activity';
+import type { StoreActivityEvent } from '@/types/activity';
 
-const NOT_REQUIRED_ENRICHMENT: ActivityFeedEnrichment = {
-  status: 'not_required',
-  attemptedCount: 0,
-  succeededCount: 0,
-  failedCount: 0,
-  retryableCount: 0,
-};
-
-export interface UseStoreActivityResult {
-  items: ActivityItem[];
-  /** Feed-level enrichment rollup for the currently displayed items. */
-  enrichment: ActivityFeedEnrichment;
-  /** Initial / store-switch load. */
-  loading: boolean;
-  /** Pull-to-refresh load (keeps existing items visible). */
-  refreshing: boolean;
-  error: string | null;
-  refetch: () => Promise<void>;
-}
+export type UseStoreActivityResult = UsePaginatedStoreListResult<StoreActivityEvent>;
 
 /**
- * Loads BTCPay-derived Activity for a merchant store.
+ * Loads the store's PAYMENT activity — the financially meaningful transactions
+ * BTCPay recorded — with durable cursor pagination (no 30-day window, no
+ * 25-item ceiling).
  *
- * Store isolation: when `merchantStoreId` changes, items are cleared IMMEDIATELY
- * (synchronously, before the network call) so Store A's activity can never flash
- * under Store B. Pass null to stay idle/empty (e.g. no store connected yet).
+ * Store isolation: when `merchantStoreId` changes, items are cleared
+ * IMMEDIATELY (synchronously, before the network call) so store A's activity can
+ * never flash under store B. Pass null to stay idle/empty.
  */
 export function useStoreActivity(merchantStoreId: string | null): UseStoreActivityResult {
-  const [items, setItems] = useState<ActivityItem[]>([]);
-  const [enrichment, setEnrichment] = useState<ActivityFeedEnrichment>(
-    NOT_REQUIRED_ENRICHMENT,
-  );
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Guards against a stale response from a previous store overwriting the newer
-  // store's data if the user switches mid-request.
-  const requestStoreRef = useRef<string | null>(null);
-  // Latest enrichment status, read by the focus listener without re-subscribing.
-  const enrichmentStatusRef = useRef(enrichment.status);
-  enrichmentStatusRef.current = enrichment.status;
-
-  const load = useCallback(
-    async (isRefresh: boolean) => {
-      if (!merchantStoreId) {
-        setItems([]);
-        setEnrichment(NOT_REQUIRED_ENRICHMENT);
-        setError(null);
-        setLoading(false);
-        setRefreshing(false);
-        return;
-      }
-
-      requestStoreRef.current = merchantStoreId;
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
-
-      try {
-        const { items: fetched, enrichment: fetchedEnrichment } =
-          await fetchStoreActivity(merchantStoreId);
-        if (requestStoreRef.current !== merchantStoreId) return; // superseded
-        cacheActivityItems(merchantStoreId, fetched);
-        setItems(fetched);
-        setEnrichment(fetchedEnrichment);
-      } catch (e) {
-        if (requestStoreRef.current !== merchantStoreId) return; // superseded
-        setError(e instanceof Error ? e.message : 'Could not load activity.');
-        setItems([]);
-        setEnrichment(NOT_REQUIRED_ENRICHMENT);
-      } finally {
-        if (requestStoreRef.current === merchantStoreId) {
-          setLoading(false);
-          setRefreshing(false);
-        }
-      }
+  const fetchPage = useCallback(
+    async (cursor: string | null) => {
+      if (!merchantStoreId) return { items: [], nextCursor: null };
+      return fetchStoreActivity(merchantStoreId, { cursor });
     },
     [merchantStoreId],
   );
 
-  // Clear immediately on store change, then load fresh for the new store.
-  useEffect(() => {
-    setItems([]);
-    setEnrichment(NOT_REQUIRED_ENRICHMENT);
-    setError(null);
-    load(false);
-  }, [load]);
+  const list = usePaginatedStoreList<StoreActivityEvent>({
+    merchantStoreId,
+    fetchPage,
+    keyOf: eventKey,
+    fallbackError: 'Could not load activity.',
+  });
 
-  // Degraded (partial/failed) data is never left stale: when the app returns to
-  // the foreground, silently re-run to try to recover the missing details. A
-  // fully complete feed is not re-fetched on focus (no infinite-stale, no churn).
+  // Payment status changes on BTCPay's side (a processing payment confirming,
+  // for instance) without any action in the app, so returning to the foreground
+  // re-checks the first page rather than trusting what was loaded earlier.
+  const { refresh } = list;
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'active') return;
-      const status = enrichmentStatusRef.current;
-      if (status === 'partial' || status === 'failed') {
-        void load(true);
-      }
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && merchantStoreId) void refresh();
     });
-    return () => sub.remove();
-  }, [load]);
+    return () => subscription.remove();
+  }, [refresh, merchantStoreId]);
 
-  // An in-app action that changed this store's BTCPay activity (e.g. creating an
-  // invoice) marks it stale; re-run the normal fetch so the new record appears
-  // without waiting for a restart or a manual pull-to-refresh.
-  useEffect(() => {
-    return subscribeActivityStale((staleStoreId) => {
-      if (staleStoreId === merchantStoreId) void load(true);
-    });
-  }, [load, merchantStoreId]);
+  return list;
+}
 
-  const refetch = useCallback(() => load(true), [load]);
-
-  return { items, enrichment, loading, refreshing, error, refetch };
+/** Payment-scoped identity: two payments on one invoice are two distinct rows. */
+function eventKey(event: StoreActivityEvent): string {
+  return event.id;
 }

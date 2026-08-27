@@ -16,10 +16,15 @@
 //   3. Look up merchant_stores; confirm ownership.        STORE_NOT_FOUND / _ACCESS_DENIED
 //   4. Resolve btcpay_store_id server-side (never trust client).
 //   5. Fetch the ONE invoice, bound to the resolved store.  INVOICE_NOT_FOUND / FETCH_FAILED
-//   6. Best-effort, failure-isolated enrichment (payment detail).
-//   7. Normalize with the SHARED core and return the item. Partial enrichment is
-//      surfaced (enrichmentStatus) — never turned into a full-screen failure and
-//      never allowed to overwrite the authoritative invoice status.
+//   6. Best-effort, failure-isolated enrichment (payment detail). This runs for
+//      EVERY invoice, not only settled/processing ones: BTCPay leaves a
+//      PARTIALLY paid invoice in `New` until it expires, so a status-based skip
+//      would hide real payments on New/Expired/Invalid invoices.
+//   7. Normalize with the SHARED core and return the item, plus the invoice's
+//      individual payment events (the same payment-level records the Activity
+//      feed and the CSV export are built from). Partial enrichment is surfaced
+//      (enrichmentStatus) — never turned into a full-screen failure and never
+//      allowed to overwrite the authoritative invoice status.
 //
 // Payload: { merchantStoreId, invoiceId, source? }  (source is display-only; the
 // backend derives the authoritative record type).
@@ -41,11 +46,9 @@ import {
 import {
   enrichOne,
   normalizeInvoice,
-  normalizeStatus,
-  rawStatusOf,
-  requiresEnrichment,
   type EnrichmentOutcome,
 } from '../_shared/activity-normalize.ts';
+import { toActivityEvents } from '../_shared/report-rows.ts';
 
 const DETAIL_TIMEOUT_MS = 8_000;
 
@@ -169,12 +172,10 @@ Deno.serve(async (req) => {
     });
   }
 
-  // 6. Failure-isolated enrichment. Only invoices whose base status implies a
-  // payment exists are enriched; a failure is CAPTURED (not thrown) so the base
-  // record still renders with an explicit degraded (partial) enrichment status.
-  const baseStatus = normalizeStatus(rawStatusOf(invoice));
+  // 6. Failure-isolated enrichment. A failure is CAPTURED (not thrown) so the
+  // base record still renders with an explicit degraded enrichment status.
   let outcome: EnrichmentOutcome | undefined;
-  if (invoice.id && requiresEnrichment(baseStatus)) {
+  if (invoice.id) {
     outcome = await enrichOne(config, store.btcpay_store_id, invoice);
     if (!outcome.ok) {
       console.error(
@@ -185,13 +186,16 @@ Deno.serve(async (req) => {
     }
   }
 
-  // 7. Normalize with the SHARED core (identical shape to the feed items).
+  // 7. Normalize with the SHARED core (identical shape to the feed items), and
+  // derive this invoice's individual payments so the detail screen can show a
+  // specific payment — and every payment of a multi-payment invoice.
   const item = normalizeInvoice(invoice, outcome, { serverUrl: config.serverUrl });
+  const events = outcome?.ok ? toActivityEvents(invoice, outcome.methods) : [];
 
   console.log(
     `[activity-detail] user=${user.id} store=${store.id} btcpayStore=${store.btcpay_store_id} ` +
       `invoice=${invoiceId} status=${item.status} enrichment=${item.enrichmentStatus} ` +
-      `durationMs=${Date.now() - startedAt}`,
+      `payments=${events.length} durationMs=${Date.now() - startedAt}`,
   );
 
   return jsonResponse({
@@ -200,6 +204,7 @@ Deno.serve(async (req) => {
     btcpayStoreId: store.btcpay_store_id,
     source: 'btcpay',
     item,
+    events,
   });
 });
 

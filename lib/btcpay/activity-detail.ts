@@ -1,9 +1,9 @@
 import { isDevAuthActive } from '@/lib/auth/dev-session';
 import { supabase } from '@/lib/supabase';
 import type {
+  ActivityDetail,
   ActivityDetailErrorCode,
   ActivityDetailResponse,
-  ActivityItem,
 } from '@/types/activity';
 
 /**
@@ -62,7 +62,7 @@ async function readDetailError(
 export async function fetchActivityDetail(
   merchantStoreId: string,
   invoiceId: string,
-): Promise<ActivityItem> {
+): Promise<ActivityDetail> {
   if (isDevAuthActive()) {
     throw new ActivityDetailError('INVOICE_NOT_FOUND', 'Payment details are not available here.');
   }
@@ -89,5 +89,7 @@ export async function fetchActivityDetail(
     );
   }
 
-  return data.item;
+  // `events` is every payment recorded against the invoice; an empty array is a
+  // real answer (an unpaid invoice), not a missing field.
+  return { item: data.item, events: data.events ?? [] };
 }

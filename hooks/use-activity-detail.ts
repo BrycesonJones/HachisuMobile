@@ -5,11 +5,14 @@ import {
   upsertActivityItem,
 } from '@/lib/btcpay/activity-cache';
 import { ActivityDetailError, fetchActivityDetail } from '@/lib/btcpay/activity-detail';
-import type { ActivityItem } from '@/types/activity';
+import type { ActivityItem, StoreActivityEvent } from '@/types/activity';
 
 export interface UseActivityDetailResult {
   /** Best available record: cached initial data first, then the authoritative fetch. */
   item: ActivityItem | null;
+  /** Every payment recorded against the invoice, newest first. Empty until the
+   * authoritative fetch resolves — the cache holds invoices, not payments. */
+  events: StoreActivityEvent[];
   /** A fetch is in flight and there is nothing to show yet (no cached initial data). */
   isLoading: boolean;
   /** Any fetch (including a background refresh over cached data) is in flight. */
@@ -41,6 +44,7 @@ export function useActivityDetail(
     merchantStoreId && invoiceId ? getCachedActivityItem(merchantStoreId, invoiceId) : undefined;
 
   const [item, setItem] = useState<ActivityItem | null>(cached ?? null);
+  const [events, setEvents] = useState<StoreActivityEvent[]>([]);
   const [isFetching, setIsFetching] = useState(false);
   const [error, setError] = useState<ActivityDetailError | null>(null);
 
@@ -62,8 +66,13 @@ export function useActivityDetail(
     try {
       const fetched = await fetchActivityDetail(merchantStoreId, invoiceId);
       if (requestKeyRef.current !== key) return; // superseded
-      upsertActivityItem(merchantStoreId, fetched);
-      setItem(fetched);
+      upsertActivityItem(merchantStoreId, fetched.item);
+      setItem(fetched.item);
+      setEvents(
+        [...fetched.events].sort(
+          (a, b) => toTime(b.receivedAt) - toTime(a.receivedAt),
+        ),
+      );
       setError(null);
     } catch (e) {
       if (requestKeyRef.current !== key) return; // superseded
@@ -80,6 +89,7 @@ export function useActivityDetail(
   useEffect(() => {
     // Reset to the new pair's cached seed (never leak the previous record).
     setItem(merchantStoreId && invoiceId ? getCachedActivityItem(merchantStoreId, invoiceId) ?? null : null);
+    setEvents([]);
     setError(null);
     load();
   }, [load, merchantStoreId, invoiceId]);
@@ -94,9 +104,15 @@ export function useActivityDetail(
 
   return {
     item,
+    events,
     isLoading: isFetching && item == null && error == null,
     isFetching,
     error: visibleError,
     refetch,
   };
+}
+
+function toTime(iso: string): number {
+  const time = new Date(iso).getTime();
+  return Number.isNaN(time) ? 0 : time;
 }

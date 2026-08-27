@@ -12,16 +12,25 @@ import {
   formatActivityAmount,
   formatActivityDateTime,
   formatCryptoAmount,
+  formatEventAmount,
   getActivityPaymentLabel,
   getActivityStatusDescription,
+  getExceptionStatusNote,
+  getPaymentEventStatusDescription,
   getSourceFeatureLabel,
   isItemEnrichmentDegraded,
   UNAVAILABLE_FIELD_PLACEHOLDER,
 } from '@/lib/transactions/activity-utils';
-import type { ActivityItem } from '@/types/activity';
+import type { ActivityItem, StoreActivityEvent } from '@/types/activity';
 
 interface ActivityDetailViewProps {
   item: ActivityItem;
+  /** Every payment recorded against this invoice, newest first. One invoice can
+   * legitimately have several (partial payments, a top-up after underpayment). */
+  events: StoreActivityEvent[];
+  /** The payment the user tapped in the Activity feed, if any — highlighted so a
+   * multi-payment invoice opens on the right transaction. */
+  focusPaymentId?: string | null;
   onClose: () => void;
   /** When provided, the degraded banner offers a Retry that re-fetches this record
    * (the detail screen has no pull-to-refresh of its own). */
@@ -33,6 +42,8 @@ interface ActivityDetailViewProps {
 
 export function ActivityDetailView({
   item,
+  events,
+  focusPaymentId,
   onClose,
   onRetryDetails,
   isFetching,
@@ -46,6 +57,9 @@ export function ActivityDetailView({
   // (never fabricated) rather than hiding them, so a settled invoice with a failed
   // lookup can't read as an ordinary payment with no details.
   const degraded = isItemEnrichmentDegraded(item);
+  // BTCPay's own exception status: the difference between a plainly settled
+  // invoice and one that was underpaid, overpaid, or paid after expiry.
+  const exceptionNote = getExceptionStatusNote(item.exceptionStatus);
 
   // This screen is presented as a fullScreenModal, where iOS reports a 0 top
   // inset — so the header is padded from a window-derived inset instead of
@@ -102,6 +116,7 @@ export function ActivityDetailView({
           icon="check-circle"
           title={item.displayStatus}
           subtitle={getActivityStatusDescription(item.status)}
+          hint={exceptionNote ?? undefined}
         />
 
         <DetailRow
@@ -188,6 +203,15 @@ export function ActivityDetailView({
           />
         ) : null}
 
+        {item.paidAmount ? (
+          <DetailRow
+            icon="account-balance"
+            title="Amount paid"
+            subtitle={formatActivityAmount(item.paidAmount, item.currency)}
+            hint={exceptionNote ?? undefined}
+          />
+        ) : null}
+
         {item.orderId ? (
           <DetailRow icon="tag" title="Order ID" subtitle={item.orderId} />
         ) : null}
@@ -199,6 +223,35 @@ export function ActivityDetailView({
           trailingIcon="content-copy"
           onTrailingPress={handleCopyInvoiceId}
         />
+
+        {/* Individual payments. An invoice is not always one payment: partial
+            payments, a follow-up top-up, or an invalid payment each appear here
+            as their own record, keyed by BTCPay's own payment id. */}
+        {events.length > 0 ? (
+          <>
+            <View style={styles.divider} />
+            <Text style={styles.sectionTitle}>
+              {events.length === 1 ? 'Payment' : `Payments (${events.length})`}
+            </Text>
+            {events.map((event) => (
+              <DetailRow
+                key={event.id}
+                icon={event.paymentRail === 'lightning' ? 'bolt' : 'currency-bitcoin'}
+                title={`${formatEventAmount(event)} · ${formatCryptoAmount(
+                  event.cryptoAmount,
+                  event.cryptoAsset,
+                )}`}
+                subtitle={`${getActivityPaymentLabel(event)} · ${formatActivityDateTime(
+                  event.receivedAt,
+                )}`}
+                hint={
+                  (event.paymentId === focusPaymentId ? 'This payment · ' : '') +
+                  getPaymentEventStatusDescription(event)
+                }
+              />
+            ))}
+          </>
+        ) : null}
 
         {/* Invoice delivery. BTCPay does not send the invoice to the buyer — the
             merchant shares the checkout link. Only for invoices Hachisu created,

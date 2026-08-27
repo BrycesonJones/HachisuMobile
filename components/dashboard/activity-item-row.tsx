@@ -4,26 +4,34 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
 import { HachisuColors } from '@/constants/hachisu-colors';
 import {
-  formatActivityAmount,
   formatActivityListDate,
-  isItemEnrichmentDegraded,
-  isMutedActivity,
+  formatEventAmount,
+  getActivityPaymentLabel,
+  getExceptionStatusNote,
+  isMutedEvent,
 } from '@/lib/transactions/activity-utils';
-import type { ActivityItem } from '@/types/activity';
+import type { StoreActivityEvent } from '@/types/activity';
 
 interface ActivityItemRowProps {
-  item: ActivityItem;
-  onPress: (item: ActivityItem) => void;
+  event: StoreActivityEvent;
+  onPress: (event: StoreActivityEvent) => void;
 }
 
-export function ActivityItemRow({ item, onPress }: ActivityItemRowProps) {
-  const muted = isMutedActivity(item.status);
-  const amount = formatActivityAmount(item.amount, item.currency);
-  const dateLabel = formatActivityListDate(item.createdAt);
-  const degraded = isItemEnrichmentDegraded(item);
+/**
+ * One PAYMENT in the Activity feed. The row stays a simple mobile summary
+ * (amount, rail, date, status) while the underlying record carries the full set
+ * of canonical identifiers — invoice id, payment id, method id, rate, fee,
+ * address — used to reconcile against BTCPay's reporting.
+ */
+export function ActivityItemRow({ event, onPress }: ActivityItemRowProps) {
+  const muted = isMutedEvent(event);
+  const amount = formatEventAmount(event);
+  const dateLabel = formatActivityListDate(event.receivedAt);
+  const paymentLabel = getActivityPaymentLabel(event);
+  const exceptionNote = getExceptionStatusNote(event.invoiceExceptionStatus);
 
   function handlePress() {
-    onPress(item);
+    onPress(event);
   }
 
   return (
@@ -32,24 +40,24 @@ export function ActivityItemRow({ item, onPress }: ActivityItemRowProps) {
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
       accessibilityRole="button"
       accessibilityLabel={
-        `${item.title}, ${amount}, ${item.displayStatus}` +
-        (degraded ? ', some payment details unavailable' : '')
+        `${event.title}, ${amount}, ${paymentLabel}, ${event.displayStatus}` +
+        (exceptionNote ? `, ${exceptionNote}` : '')
       }>
-      <ActivityAvatar item={item} muted={muted} />
+      <ActivityAvatar event={event} muted={muted} />
 
       <View style={styles.content}>
         <Text style={[styles.title, muted && styles.mutedText]} numberOfLines={1}>
-          {item.title}
+          {event.title}
         </Text>
         <Text style={[styles.subtitle, muted && styles.mutedText]} numberOfLines={1}>
-          {item.description ?? item.displayStatus}
+          {paymentLabel}
         </Text>
         <Text style={[styles.dateLine, muted && styles.mutedText]} numberOfLines={1}>
-          {dateLabel} · {item.displayStatus}
+          {dateLabel} · {event.displayStatus}
         </Text>
-        {degraded ? (
-          <Text style={styles.degradedMarker} numberOfLines={1}>
-            Some details unavailable
+        {exceptionNote ? (
+          <Text style={styles.exceptionMarker} numberOfLines={1}>
+            {exceptionNote}
           </Text>
         ) : null}
       </View>
@@ -60,12 +68,12 @@ export function ActivityItemRow({ item, onPress }: ActivityItemRowProps) {
 }
 
 interface ActivityAvatarProps {
-  item: ActivityItem;
+  event: StoreActivityEvent;
   muted: boolean;
 }
 
-function ActivityAvatar({ item, muted }: ActivityAvatarProps) {
-  const icon = item.paymentRail === 'lightning' ? 'bolt' : 'currency-bitcoin';
+function ActivityAvatar({ event, muted }: ActivityAvatarProps) {
+  const icon = event.paymentRail === 'lightning' ? 'bolt' : 'currency-bitcoin';
   return (
     <View style={[styles.avatar, muted ? styles.mutedAvatar : styles.bitcoinAvatar]}>
       <MaterialIcons name={icon} size={22} color={HachisuColors.white} />
@@ -114,7 +122,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: DASHBOARD_COLORS.secondaryText,
   },
-  degradedMarker: {
+  exceptionMarker: {
     fontSize: 13,
     color: DASHBOARD_COLORS.warningText,
   },

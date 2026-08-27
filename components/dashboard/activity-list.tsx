@@ -8,66 +8,76 @@ import {
   View,
 } from 'react-native';
 
-import { ActivityDegradedBanner } from '@/components/dashboard/activity-degraded-banner';
 import { ActivityItemRow } from '@/components/dashboard/activity-item-row';
 import { DashboardHeader } from '@/components/dashboard/dashboard-header';
+import { ExportReportButton } from '@/components/dashboard/export-report-button';
+import { ListLoadMoreFooter } from '@/components/dashboard/list-load-more-footer';
 import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
-import {
-  getActivityDegradedBannerCopy,
-  groupActivityByMonth,
-} from '@/lib/transactions/activity-utils';
-import type { ActivityFeedEnrichment, ActivityItem } from '@/types/activity';
+import { groupActivityByMonth } from '@/lib/transactions/activity-utils';
+import type { StoreActivityEvent } from '@/types/activity';
 
 interface ActivityListProps {
-  items: ActivityItem[];
-  enrichment: ActivityFeedEnrichment;
+  events: StoreActivityEvent[];
+  merchantStoreId: string | null;
   loading: boolean;
   refreshing: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
   error: string | null;
   onRefresh: () => void;
-  onItemPress: (item: ActivityItem) => void;
+  onLoadMore: () => void;
+  onItemPress: (event: StoreActivityEvent) => void;
 }
 
 export function ActivityList({
-  items,
-  enrichment,
+  events,
+  merchantStoreId,
   loading,
   refreshing,
+  loadingMore,
+  hasMore,
   error,
   onRefresh,
+  onLoadMore,
   onItemPress,
 }: ActivityListProps) {
-  const sections = groupActivityByMonth(items);
-  const isEmpty = items.length === 0;
-  const degradedCopy = getActivityDegradedBannerCopy(enrichment, items.length);
+  const sections = groupActivityByMonth(events);
+  const isEmpty = events.length === 0;
+  // An error with rows already on screen belongs to the tail (a failed
+  // load-more), so it is shown in the footer instead of replacing the list.
+  const listError = isEmpty ? error : null;
+  const footerError = isEmpty ? null : error;
 
   return (
     <SectionList
       sections={sections}
-      keyExtractor={(item) => item.id}
-      renderItem={({ item }) => <ActivityItemRow item={item} onPress={onItemPress} />}
+      keyExtractor={(event) => event.id}
+      renderItem={({ item }) => <ActivityItemRow event={item} onPress={onItemPress} />}
       renderSectionHeader={({ section }) => <SectionHeader title={section.title} />}
       ListHeaderComponent={
         <View>
           <DashboardHeader />
           <View style={styles.titleRow}>
             <Text style={styles.pageTitle}>Activity</Text>
+            <ExportReportButton merchantStoreId={merchantStoreId} />
           </View>
-          {degradedCopy ? (
-            <ActivityDegradedBanner
-              message={degradedCopy.message}
-              onRetry={degradedCopy.showRetry ? onRefresh : undefined}
-            />
-          ) : null}
         </View>
       }
       ListEmptyComponent={
-        <ActivityEmptyState
-          loading={loading}
-          error={error}
-          onRetry={onRefresh}
+        <ActivityEmptyState loading={loading} error={listError} onRetry={onRefresh} />
+      }
+      ListFooterComponent={
+        <ListLoadMoreFooter
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          error={footerError}
+          itemCount={events.length}
+          label="activity"
+          onLoadMore={onLoadMore}
         />
       }
+      onEndReached={hasMore && !loadingMore && !refreshing ? onLoadMore : undefined}
+      onEndReachedThreshold={0.5}
       stickySectionHeadersEnabled={false}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={isEmpty ? styles.emptyContentContainer : styles.contentContainer}
@@ -98,6 +108,8 @@ function ActivityEmptyState({ loading, error, onRetry }: ActivityEmptyStateProps
     );
   }
 
+  // A failure is never rendered as "no activity" — the merchant must be able to
+  // tell an empty store from data that could not be loaded.
   if (error) {
     return (
       <View style={styles.stateContainer}>
@@ -116,9 +128,9 @@ function ActivityEmptyState({ loading, error, onRetry }: ActivityEmptyStateProps
 
   return (
     <View style={styles.stateContainer}>
-      <Text style={styles.stateTitle}>No activity yet</Text>
+      <Text style={styles.stateTitle}>No payments yet</Text>
       <Text style={styles.stateSubtitle}>
-        Payments and invoices will appear here after customers pay.
+        Payments appear here once a customer pays one of your invoices.
       </Text>
     </View>
   );
@@ -145,6 +157,10 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 4,

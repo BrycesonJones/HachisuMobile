@@ -1,10 +1,12 @@
 import type {
   ActivityDisplayStatus,
-  ActivityFeedEnrichment,
   ActivityItem,
+  InvoiceExceptionStatus,
   PaymentAsset,
+  PaymentEventDisplayStatus,
   PaymentMethodLabel,
   PaymentRail,
+  StoreActivityEvent,
 } from '@/types/activity';
 
 const MONTH_NAMES = [
@@ -25,7 +27,7 @@ const MONTH_NAMES = [
 export interface ActivitySection {
   title: string;
   monthKey: string;
-  data: ActivityItem[];
+  data: StoreActivityEvent[];
 }
 
 /** Currency codes we render with a leading symbol; everything else gets a suffix. */
@@ -73,22 +75,26 @@ export function formatActivityMonthHeading(iso: string): string {
   return `${MONTH_NAMES[parsed.getMonth()]} ${parsed.getFullYear()}`;
 }
 
-/** Groups items into month sections, newest first (both within and across). */
-export function groupActivityByMonth(items: ActivityItem[]): ActivitySection[] {
-  const sorted = [...items].sort((a, b) => toTime(b.createdAt) - toTime(a.createdAt));
+/**
+ * Groups payment events into month sections, newest first (both within and
+ * across). Ordering is by the time the PAYMENT was received — the moment the
+ * money actually arrived — never by invoice creation or by fetch order.
+ */
+export function groupActivityByMonth(events: StoreActivityEvent[]): ActivitySection[] {
+  const sorted = [...events].sort((a, b) => toTime(b.receivedAt) - toTime(a.receivedAt));
 
   const sections: ActivitySection[] = [];
-  for (const item of sorted) {
-    const monthKey = getActivityMonthKey(item.createdAt);
+  for (const event of sorted) {
+    const monthKey = getActivityMonthKey(event.receivedAt);
     const existing = sections.find((section) => section.monthKey === monthKey);
     if (existing) {
-      existing.data.push(item);
+      existing.data.push(event);
       continue;
     }
     sections.push({
-      title: formatActivityMonthHeading(item.createdAt),
+      title: formatActivityMonthHeading(event.receivedAt),
       monthKey,
-      data: [item],
+      data: [event],
     });
   }
   return sections;
@@ -134,16 +140,20 @@ export function getPaymentRailLabel(rail: PaymentRail): string {
 }
 
 /**
- * The user-facing payment-method label for an activity item. Prefers the
- * authoritative server-authored label; falls back to the rail (older cached
- * records may predate `paymentMethodLabel`). Never defaults to "BTC".
+ * The user-facing payment-method label for a record. Prefers the authoritative
+ * server-authored label; falls back to the rail (older cached records may
+ * predate `paymentMethodLabel`). Never defaults to "BTC".
  */
-export function getActivityPaymentLabel(item: ActivityItem): PaymentMethodLabel | string {
-  return item.paymentMethodLabel ?? getPaymentRailLabel(item.paymentRail ?? 'unknown');
+export function getActivityPaymentLabel(
+  record: Pick<ActivityItem, 'paymentMethodLabel' | 'paymentRail'>,
+): PaymentMethodLabel | string {
+  return record.paymentMethodLabel ?? getPaymentRailLabel(record.paymentRail ?? 'unknown');
 }
 
-export function getSourceFeatureLabel(item: ActivityItem): string {
-  switch (item.sourceFeature) {
+export function getSourceFeatureLabel(
+  record: Pick<ActivityItem, 'sourceFeature'>,
+): string {
+  switch (record.sourceFeature) {
     case 'pay_button':
       return 'Pay Button';
     case 'pos':
@@ -188,44 +198,14 @@ export function getActivityStatusDescription(status: ActivityItem['status']): st
  * genuine zero/empty value — never render "0" or "0 BTC" in its place. */
 export const UNAVAILABLE_FIELD_PLACEHOLDER = '—';
 
-/** True when THIS item's payment details failed to enrich (base record is still
- * valid and shown). Drives the item-level "some details unavailable" marker. */
+/** True when THIS invoice's payment details failed to load (the base record is
+ * still valid and shown). Drives the "some details unavailable" marker.
+ *
+ * Only the single-invoice DETAIL endpoint can report this: the list endpoints
+ * receive payments inline from BTCPay in the same request as the invoices, so
+ * they have no separate stage that can partially fail. */
 export function isItemEnrichmentDegraded(item: ActivityItem): boolean {
   return item.enrichmentStatus === 'failed' || item.enrichmentStatus === 'partial';
-}
-
-export interface ActivityDegradedBannerCopy {
-  message: string;
-  /** Whether to offer a Retry action (only when something can actually recover). */
-  showRetry: boolean;
-}
-
-/**
- * Feed-level degraded-state copy, or null when the feed is fully loaded / empty /
- * nothing-to-enrich. Deliberately non-alarming: base activity DID load; only some
- * payment details are missing, so it never implies payments are gone. Retry is
- * offered only when at least one failure is retryable.
- */
-export function getActivityDegradedBannerCopy(
-  enrichment: ActivityFeedEnrichment | undefined,
-  itemCount: number,
-): ActivityDegradedBannerCopy | null {
-  if (!enrichment || itemCount === 0) return null;
-  const showRetry = enrichment.retryableCount > 0;
-  if (enrichment.status === 'partial') {
-    return {
-      message: 'Some payment details could not be loaded. Pull to refresh and try again.',
-      showRetry,
-    };
-  }
-  if (enrichment.status === 'failed') {
-    return {
-      message:
-        'Payment activity loaded, but some details are unavailable. Pull to refresh and try again.',
-      showRetry,
-    };
-  }
-  return null;
 }
 
 export function getDisplayStatusTone(
@@ -261,4 +241,79 @@ function formatTime12Hour(date: Date): string {
   const period = hours24 >= 12 ? 'PM' : 'AM';
   const hours12 = hours24 % 12 || 12;
   return `${hours12}:${minutes} ${period}`;
+}
+
+// ---------------------------------------------------------------------------
+// Payment events (the Activity feed)
+// ---------------------------------------------------------------------------
+
+/**
+ * The headline amount for a payment: what this payment was worth in the
+ * invoice's currency. Falls back to the exact crypto amount when BTCPay
+ * recorded no exchange rate — a real payment is never shown as blank, and a
+ * fiat value is never invented.
+ */
+export function formatEventAmount(event: StoreActivityEvent): string {
+  if (event.fiatAmount != null) {
+    return formatActivityAmount(event.fiatAmount, event.fiatCurrency);
+  }
+  return formatCryptoAmount(event.cryptoAmount, event.cryptoAsset);
+}
+
+export function getPaymentEventTone(
+  display: PaymentEventDisplayStatus,
+): 'positive' | 'pending' | 'muted' {
+  switch (display) {
+    case 'Settled':
+      return 'positive';
+    case 'Processing':
+      return 'pending';
+    case 'Failed':
+      return 'muted';
+  }
+}
+
+/** An invalid payment is money that did NOT land; it must not read as received. */
+export function isMutedEvent(event: StoreActivityEvent): boolean {
+  return event.status === 'invalid';
+}
+
+export function getPaymentEventStatusDescription(event: StoreActivityEvent): string {
+  switch (event.status) {
+    case 'settled':
+      return 'Payment confirmed';
+    case 'processing':
+      return 'Payment seen, awaiting confirmation';
+    case 'invalid':
+      return 'Payment was marked invalid';
+  }
+}
+
+/**
+ * The invoice-level qualifier a payment inherits — BTCPay's own exception
+ * status. Returns null for an ordinary payment so the UI adds no noise, and a
+ * short phrase when the merchant genuinely needs to know (partial, over, late).
+ */
+export function getExceptionStatusNote(status: InvoiceExceptionStatus): string | null {
+  switch (status) {
+    case 'paidPartial':
+      return 'Underpaid';
+    case 'paidOver':
+      return 'Overpaid';
+    case 'paidLate':
+      return 'Paid late';
+    case 'marked':
+      return 'Marked manually';
+    case 'invalid':
+      return 'Marked invalid';
+    case 'none':
+    case 'unknown':
+      return null;
+  }
+}
+
+/** Invoice-level qualifier for the Invoices list, e.g. "Settled · Overpaid". */
+export function getInvoiceStatusLabel(invoice: ActivityItem): string {
+  const note = getExceptionStatusNote(invoice.exceptionStatus);
+  return note ? `${invoice.displayStatus} · ${note}` : invoice.displayStatus;
 }

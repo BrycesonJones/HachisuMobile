@@ -1,27 +1,29 @@
 // Edge Function: get-btcpay-store-activity
 //
-// Powers the mobile Activity feed. BTCPay Server is the payment/reporting source
-// of truth; this function is the ONLY path the mobile app uses to read it (the app
-// never calls BTCPay directly and never sees the Greenfield key or the BTCPay
-// store id it can influence).
+// Powers the mobile Activity feed with PAYMENT events — financially meaningful
+// transactions — rather than every invoice lifecycle record. BTCPay Server is
+// the source of truth; this function is the ONLY path the mobile app uses to
+// read it (the app never calls BTCPay directly and never sees the Greenfield
+// key or a BTCPay store id it can influence).
 //
 // Flow:
-//   1. Authenticate the caller (JWT -> getUser).
-//   2. Verify the caller OWNS merchantStoreId (server-side, service role).
-//   3. Resolve btcpay_store_id from the owned row (never trust a client value).
-//   4. List the store's invoices for the requested range via Greenfield.
-//   5. Best-effort, failure-isolated enrichment (crypto amount + received date).
-//   6. Normalize into mobile-friendly Activity items and return them.
+//   1. Authenticate + verify ownership + resolve btcpay_store_id server-side
+//      (_shared/store-auth.ts — a client-supplied BTCPay id is never trusted).
+//   2. Scan the store's invoices newest-first via Greenfield with
+//      includePaymentMethods=true (verified on BTCPay 2.4.3), so payment
+//      details arrive inline — no per-invoice enrichment calls (no N+1).
+//   3. Emit one event per PAYMENT via _shared/report-rows.ts — the same
+//      derivation the CSV export uses, so Activity and the exported report
+//      reconcile by construction. Invoices with no payments emit nothing here
+//      (an expired unpaid invoice belongs in Invoices, not Activity).
+//   4. Cursor pagination: the cursor encodes how many invoices have been
+//      scanned. Each request scans bounded invoice pages until it has a full
+//      page of events or history is exhausted — durable history, no 30-day /
+//      25-item cap.
 //
-// The normalization + enrichment core lives in ../_shared/activity-normalize.ts
-// and is shared verbatim with get-btcpay-activity-detail so a record looks
-// identical whether fetched in a list page or on its own by durable id.
-//
-// Payload: { merchantStoreId, startDate?, endDate?, tab?, limit?, offset? }
+// Payload: { merchantStoreId, limit?, cursor?, startDate?, endDate? }
 // Required secrets: BTCPAY_SERVER_URL, BTCPAY_GREENFIELD_API_KEY.
 // Platform-provided: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
-
-import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 import {
@@ -31,21 +33,16 @@ import {
   listStoreInvoices,
   type BtcpayConfig,
 } from '../_shared/btcpay-client.ts';
-import {
-  ENRICH_CONCURRENCY,
-  enrichOne,
-  mapWithConcurrency,
-  normalizeInvoice,
-  normalizeStatus,
-  rawStatusOf,
-  requiresEnrichment,
-  summarizeEnrichment,
-  type EnrichmentOutcome,
-} from '../_shared/activity-normalize.ts';
+import { resolveOwnedStore } from '../_shared/store-auth.ts';
+import { toActivityEvents, type StoreActivityEvent } from '../_shared/report-rows.ts';
 
 const DEFAULT_LIMIT = 25;
-const MAX_LIMIT = 100;
-const DEFAULT_RANGE_DAYS = 30;
+const MAX_LIMIT = 50;
+/** Invoices fetched per Greenfield call while filling a page of events. */
+const INVOICE_SCAN_PAGE = 25;
+/** Upper bound of invoice pages scanned per request (backstop for stores with
+ * long runs of unpaid invoices; the cursor lets the client continue). */
+const MAX_SCAN_PAGES = 8;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -55,37 +52,12 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: 'Method not allowed' }, 405);
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-    return jsonResponse({ ok: false, error: 'Server is not configured.' }, 500);
-  }
-
-  // 1. Authenticate.
-  const authHeader = req.headers.get('Authorization') ?? '';
-  if (!authHeader.startsWith('Bearer ')) {
-    return jsonResponse({ ok: false, error: 'Missing or invalid Authorization header.' }, 401);
-  }
-  const userScoped = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-  const {
-    data: { user },
-    error: userError,
-  } = await userScoped.auth.getUser();
-  if (userError || !user) {
-    return jsonResponse({ ok: false, error: 'Not authenticated.' }, 401);
-  }
-
-  // Parse + validate the payload.
   let body: {
     merchantStoreId?: unknown;
+    limit?: unknown;
+    cursor?: unknown;
     startDate?: unknown;
     endDate?: unknown;
-    tab?: unknown;
-    limit?: unknown;
-    offset?: unknown;
   };
   try {
     body = await req.json();
@@ -93,43 +65,17 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: 'Invalid JSON body.' }, 400);
   }
 
-  const merchantStoreId =
-    typeof body.merchantStoreId === 'string' ? body.merchantStoreId.trim() : '';
-  if (!merchantStoreId) {
-    return jsonResponse({ ok: false, error: 'merchantStoreId is required.' }, 400);
-  }
+  const resolved = await resolveOwnedStore(req, body.merchantStoreId);
+  if (!resolved.ok) return resolved.response;
+  const { ctx } = resolved;
 
   const limit = clampInt(body.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
-  const offset = clampInt(body.offset, 0, 0, Number.MAX_SAFE_INTEGER);
-
-  // Resolve the date range (default: last 30 days). Range is inclusive; endDate
-  // defaults to "now" so newly created invoices are always in range.
-  const now = new Date();
-  const endDate = parseDate(body.endDate) ?? now;
-  const defaultStart = new Date(endDate.getTime() - DEFAULT_RANGE_DAYS * 86_400_000);
-  const startDate = parseDate(body.startDate) ?? defaultStart;
-
-  // 2. Verify ownership + 3. resolve btcpay_store_id server-side.
-  const admin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false },
-  });
-  const { data: store, error: storeError } = await admin
-    .from('merchant_stores')
-    .select('id, user_id, btcpay_store_id, name')
-    .eq('id', merchantStoreId)
-    .maybeSingle<{ id: string; user_id: string; btcpay_store_id: string; name: string }>();
-  if (storeError) {
-    return jsonResponse({ ok: false, error: 'Could not load the store.' }, 500);
+  const cursorSkip = decodeCursor(body.cursor);
+  if (cursorSkip === null) {
+    return jsonResponse({ ok: false, error: 'Invalid cursor.' }, 400);
   }
-  if (!store || store.user_id !== user.id) {
-    return jsonResponse({ ok: false, error: 'Store not found.' }, 404);
-  }
-  if (!store.btcpay_store_id) {
-    return jsonResponse(
-      { ok: false, error: 'This store is not connected to BTCPay yet.' },
-      409,
-    );
-  }
+  const startDate = parseDate(body.startDate);
+  const endDate = parseDate(body.endDate);
 
   let config: BtcpayConfig;
   try {
@@ -140,76 +86,54 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: message }, 500);
   }
 
-  const range = {
-    startDate: startDate.toISOString(),
-    endDate: endDate.toISOString(),
-  };
-
   try {
-    // 4. List invoices for the range (BTCPay expects unix seconds).
-    const invoices = await listStoreInvoices(config, store.btcpay_store_id, {
-      startDate: Math.floor(startDate.getTime() / 1000),
-      endDate: Math.floor(endDate.getTime() / 1000),
-      skip: offset,
-      take: limit,
-    });
+    const events: StoreActivityEvent[] = [];
+    let skip = cursorSkip;
+    let exhausted = false;
 
-    // 5. Failure-isolated enrichment. Only invoices whose base status implies a
-    // payment exists are enriched; each call is bounded by ENRICH_TIMEOUT_MS and
-    // ENRICH_CONCURRENCY, and a single failure is CAPTURED (not swallowed) so the
-    // item can be marked degraded rather than silently shown as "no payment".
-    const enrichTargets = invoices.filter(
-      (invoice) => invoice.id && requiresEnrichment(normalizeStatus(rawStatusOf(invoice))),
-    );
-    const outcomes = new Map<string, EnrichmentOutcome>();
-    await mapWithConcurrency(enrichTargets, ENRICH_CONCURRENCY, async (invoice) => {
-      const outcome = await enrichOne(config, store.btcpay_store_id, invoice);
-      outcomes.set(invoice.id, outcome);
-      if (!outcome.ok) {
-        // Per-item diagnostic. IDs + normalized code only — never keys, tokens,
-        // wallet descriptors, or raw BTCPay bodies.
-        console.error(
-          `[store-activity] enrich-fail store=${store.id} btcpayStore=${store.btcpay_store_id} ` +
-            `invoice=${invoice.id} code=${outcome.code} retryable=${outcome.retryable} ` +
-            `http=${outcome.httpStatus ?? 'n/a'}`,
-        );
+    for (let page = 0; page < MAX_SCAN_PAGES; page++) {
+      const invoices = await listStoreInvoices(config, ctx.btcpayStoreId, {
+        skip,
+        take: INVOICE_SCAN_PAGE,
+        includePaymentMethods: true,
+        startDate: startDate ? Math.floor(startDate.getTime() / 1000) : undefined,
+        endDate: endDate ? Math.floor(endDate.getTime() / 1000) : undefined,
+      });
+      // Whole invoice pages are always consumed before the cursor advances, so
+      // a payment can never fall between two pages. A page therefore returns
+      // AT LEAST `limit` events once history allows — never fewer than the
+      // invoices scanned actually contain.
+      skip += invoices.length;
+      for (const invoice of invoices) {
+        events.push(...toActivityEvents(invoice));
       }
-    });
+      if (invoices.length < INVOICE_SCAN_PAGE) {
+        exhausted = true;
+        break;
+      }
+      if (events.length >= limit) break;
+    }
 
-    // 6. Normalize, preserving original order. Each item carries an explicit
-    // enrichmentStatus so the client never infers failure from a null field.
-    const items = invoices.map((invoice) =>
-      normalizeInvoice(invoice, invoice.id ? outcomes.get(invoice.id) : undefined, {
-        serverUrl: config.serverUrl,
-      }),
-    );
+    // Events within the scanned window, ordered by when the money actually
+    // arrived (payment receivedDate), not by fetch order.
+    events.sort((a, b) => toTime(b.receivedAt) - toTime(a.receivedAt));
 
-    // Feed-level rollup from the enrichment outcomes.
-    const enrichment = summarizeEnrichment(outcomes);
-
-    // Pagination: if we filled the page, there may be more.
-    const nextOffset = invoices.length === limit ? offset + limit : null;
+    const nextCursor = exhausted ? null : encodeCursor(skip);
 
     console.log(
-      `[store-activity] user=${user.id} store=${store.id} btcpayStore=${store.btcpay_store_id} ` +
-        `range=${range.startDate}..${range.endDate} limit=${limit} offset=${offset} ` +
-        `returned=${items.length} nextOffset=${nextOffset ?? 'null'}`,
-    );
-    console.log(
-      `[store-activity] enrichment store=${store.id} attempted=${enrichment.attemptedCount} ` +
-        `succeeded=${enrichment.succeededCount} failed=${enrichment.failedCount} ` +
-        `retryable=${enrichment.retryableCount} status=${enrichment.status}`,
+      `[store-activity] user=${ctx.userId} store=${ctx.merchantStoreId} ` +
+        `btcpayStore=${ctx.btcpayStoreId} limit=${limit} cursorSkip=${cursorSkip} ` +
+        `scannedTo=${skip} events=${events.length} nextCursor=${nextCursor ?? 'null'}`,
     );
 
     return jsonResponse({
       ok: true,
-      merchantStoreId: store.id,
-      btcpayStoreId: store.btcpay_store_id,
+      merchantStoreId: ctx.merchantStoreId,
+      btcpayStoreId: ctx.btcpayStoreId,
       source: 'btcpay',
-      range,
-      items,
-      enrichment,
-      nextOffset,
+      items: events,
+      nextCursor,
+      scannedInvoices: skip - cursorSkip,
     });
   } catch (err) {
     const isApiError = err instanceof BtcpayApiError;
@@ -218,16 +142,43 @@ Deno.serve(async (req) => {
       message = 'BTCPay rejected the request (permission denied).';
     }
     console.error(
-      `[store-activity] user=${user.id} store=${store.id} btcpayStore=${store.btcpay_store_id} ` +
-        `failed: ${isApiError ? `HTTP ${err.status}` : String(err)}`,
+      `[store-activity] user=${ctx.userId} store=${ctx.merchantStoreId} ` +
+        `btcpayStore=${ctx.btcpayStoreId} failed: ${isApiError ? `HTTP ${err.status}` : String(err)}`,
     );
     return jsonResponse({ ok: false, error: message }, 502);
   }
 });
 
 // ---------------------------------------------------------------------------
-// Request-payload utilities (list-specific)
+// Request-payload utilities
 // ---------------------------------------------------------------------------
+
+/** Opaque cursor: base64url of `{ v: 1, skip: number }`. */
+function encodeCursor(skip: number): string {
+  return btoa(JSON.stringify({ v: 1, skip }));
+}
+
+/** Returns the skip for a cursor: 0 for absent, null for malformed/foreign. */
+function decodeCursor(cursor: unknown): number | null {
+  if (cursor == null || cursor === '') return 0;
+  if (typeof cursor !== 'string' || cursor.length > 200) return null;
+  try {
+    const parsed = JSON.parse(atob(cursor));
+    if (
+      parsed &&
+      parsed.v === 1 &&
+      typeof parsed.skip === 'number' &&
+      Number.isInteger(parsed.skip) &&
+      parsed.skip >= 0 &&
+      parsed.skip <= 1_000_000
+    ) {
+      return parsed.skip;
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
 
 function clampInt(value: unknown, fallback: number, min: number, max: number): number {
   const n =
@@ -250,4 +201,9 @@ function parseDate(value: unknown): Date | null {
     if (!Number.isNaN(d.getTime())) return d;
   }
   return null;
+}
+
+function toTime(iso: string): number {
+  const t = new Date(iso).getTime();
+  return Number.isNaN(t) ? 0 : t;
 }

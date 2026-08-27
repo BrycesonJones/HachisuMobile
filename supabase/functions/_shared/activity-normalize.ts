@@ -55,6 +55,42 @@ export type DisplayStatus =
   | 'Failed';
 export type SourceFeature = 'pay_button' | 'invoice' | 'pos' | 'request' | 'unknown';
 
+/**
+ * Normalized invoice EXCEPTION status (Greenfield `additionalStatus`). This is
+ * BTCPay's own second status axis and is what distinguishes a plainly settled
+ * invoice from one that was paid late, partially, or over. It is deliberately
+ * separate from the primary status rather than collapsed into it.
+ */
+export type InvoiceExceptionStatus =
+  | 'none'
+  | 'paidPartial'
+  | 'paidLate'
+  | 'paidOver'
+  | 'marked'
+  | 'invalid'
+  | 'unknown';
+
+export function normalizeExceptionStatus(raw: unknown): InvoiceExceptionStatus {
+  const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  switch (value) {
+    case '':
+    case 'none':
+      return 'none';
+    case 'paidpartial':
+      return 'paidPartial';
+    case 'paidlate':
+      return 'paidLate';
+    case 'paidover':
+      return 'paidOver';
+    case 'marked':
+      return 'marked';
+    case 'invalid':
+      return 'invalid';
+    default:
+      return 'unknown';
+  }
+}
+
 /** Top-level label; adds a multi-method value to the per-method labels. */
 export type ActivityPaymentLabel = PaymentMethodLabel | 'Paid with multiple methods';
 
@@ -122,6 +158,13 @@ export interface ActivityItem {
   amount: string;
   /** Invoice pricing currency, e.g. "USD". NOT the settlement asset. */
   currency: string;
+  /** Amount received so far, in the invoice's pricing currency. Null when
+   * BTCPay did not report it. Distinguishes partial from full payment. */
+  paidAmount: string | null;
+  /** BTCPay's exception status — paid late/partial/over, marked, invalid. */
+  exceptionStatus: InvoiceExceptionStatus;
+  /** How many payments BTCPay has recorded against this invoice. */
+  paymentCount: number;
   /** Crypto amount actually received (single-asset invoices), as a string. */
   cryptoAmount: string | null;
   /** Settlement asset of the received crypto: "BTC" | "L-BTC" | null. */
@@ -189,6 +232,9 @@ export function normalizeInvoice(
     displayStatus,
     amount: typeof invoice.amount === 'string' ? invoice.amount : '0',
     currency: typeof invoice.currency === 'string' ? invoice.currency : 'USD',
+    paidAmount: strOrNull(invoice.paidAmount),
+    exceptionStatus: normalizeExceptionStatus(invoice.additionalStatus),
+    paymentCount: countInvoicePayments(invoice, outcome),
     title: titleForSource(source),
     description: itemDesc,
     orderId,
@@ -255,12 +301,47 @@ export function rawStatusOf(invoice: BtcpayInvoice): string {
   return typeof invoice.status === 'string' ? invoice.status : 'Unknown';
 }
 
-/** Whether an invoice's base status implies a payment exists to enrich. Only
- * processing/settled invoices carry payment details; unpaid/expired/invalid have
- * nothing to enrich, so they never trigger a payment-methods request. */
-export function requiresEnrichment(status: NormalizedStatus): boolean {
-  return status === 'processing' || status === 'settled';
+/**
+ * Wraps payment methods that BTCPay already embedded in the invoice (from
+ * `includePaymentMethods=true`) as a successful enrichment outcome. This is how
+ * the list endpoints avoid an N+1 fetch: one Greenfield call returns invoices
+ * AND their payments, so there is no separate stage that can partially fail.
+ * Returns undefined when the invoice carries no embedded methods, so the caller
+ * falls back to an explicit fetch rather than treating "absent" as "none".
+ */
+export function embeddedMethodsOutcome(
+  invoice: BtcpayInvoice,
+): EnrichmentOutcome | undefined {
+  return Array.isArray(invoice.paymentMethods)
+    ? { ok: true, methods: invoice.paymentMethods }
+    : undefined;
 }
+
+/** Number of payments recorded against the invoice, from whichever authoritative
+ * source is available. Returns 0 when payment data could not be loaded — callers
+ * pair this with `enrichmentStatus`, so 0 is never read as "definitely unpaid". */
+function countInvoicePayments(
+  invoice: BtcpayInvoice,
+  outcome: EnrichmentOutcome | undefined,
+): number {
+  const methods = outcome?.ok
+    ? outcome.methods
+    : Array.isArray(invoice.paymentMethods)
+      ? invoice.paymentMethods
+      : [];
+  let total = 0;
+  for (const method of methods) {
+    if (Array.isArray(method.payments)) total += method.payments.length;
+  }
+  return total;
+}
+
+// NOTE: there is deliberately no status-based "does this invoice need payment
+// details?" predicate any more. BTCPay leaves a PARTIALLY paid invoice in `New`
+// until it expires, and an expired or invalid invoice can still hold real
+// payments, so any status-based skip silently hides money. List endpoints now
+// get payments inline (includePaymentMethods=true) and the single-invoice detail
+// endpoint always fetches them.
 
 export function normalizeStatus(raw: string): NormalizedStatus {
   switch (raw.toLowerCase()) {
@@ -302,8 +383,9 @@ export function toDisplayStatus(status: NormalizedStatus): DisplayStatus {
  * created carry an explicit marker; for everything else this stays best-effort,
  * and a Pay Button payment vs. an invoice created outside the app remain
  * indistinguishable in Greenfield metadata, so that case is reported as
- * 'unknown' rather than guessed. */
-function deriveSourceFeature(
+ * 'unknown' rather than guessed. Exported so report/event derivation
+ * (_shared/report-rows.ts) attributes records identically to the feed. */
+export function deriveSourceFeature(
   invoice: BtcpayInvoice,
   metadata: Record<string, unknown>,
   orderId: string | null,
@@ -325,7 +407,7 @@ function deriveSourceFeature(
   return 'unknown';
 }
 
-function titleForSource(source: SourceFeature): string {
+export function titleForSource(source: SourceFeature): string {
   switch (source) {
     case 'request':
       return 'Payment Request';

@@ -1991,6 +1991,8 @@ export interface BtcpayInvoice {
   storeId?: string;
   /** Fiat/display amount as a string, e.g. "1.00". */
   amount?: string;
+  /** Amount paid so far in the invoice (pricing) currency, e.g. "8.00". */
+  paidAmount?: string;
   currency?: string;
   /** New | Processing | Settled | Expired | Invalid (+ legacy Paid/Complete/Confirmed). */
   status?: string;
@@ -2002,15 +2004,24 @@ export interface BtcpayInvoice {
   type?: string;
   metadata?: Record<string, unknown> | null;
   checkout?: { paymentMethods?: string[]; [key: string]: unknown } | null;
+  /** Present only when the list was fetched with includePaymentMethods=true. */
+  paymentMethods?: BtcpayInvoicePaymentMethod[];
   [key: string]: unknown;
 }
 
 /** A single on-chain/Lightning payment recorded against an invoice. */
 export interface BtcpayInvoicePayment {
+  /** Stable payment id (e.g. "<txid>-<vout>" on-chain). */
+  id?: string;
   /** Unix seconds the payment was seen. */
   receivedDate?: number;
   value?: string;
+  /** Network/method fee recorded for this payment, in crypto units. */
+  fee?: string;
+  /** Settled | Processing | Invalid. */
   status?: string;
+  /** Destination address / Lightning invoice of the payment. */
+  destination?: string;
   [key: string]: unknown;
 }
 
@@ -2022,6 +2033,10 @@ export interface BtcpayInvoicePaymentMethod {
   cryptoCode?: string;
   paymentMethod?: string;
   currency?: string;
+  /** Exchange rate for this method (invoice currency per coin), as a string. */
+  rate?: string;
+  /** Current deposit address / payment destination for the method. */
+  destination?: string;
   /** Crypto amount due, as a string. */
   amount?: string;
   /** Crypto amount received, as a string. */
@@ -2039,6 +2054,14 @@ export interface ListInvoicesParams {
   endDate?: number;
   skip?: number;
   take?: number;
+  /** BTCPay invoice statuses to include (e.g. ["Settled"]). Server-side filter. */
+  status?: string[];
+  /** BTCPay full-text search (invoice id, order id, item description, buyer
+   * email, destination address). Server-side; never fabricated client-side. */
+  textSearch?: string;
+  /** When true, each invoice embeds its payment methods + payments, removing
+   * the need for per-invoice enrichment calls (verified on BTCPay 2.4.3). */
+  includePaymentMethods?: boolean;
 }
 
 /**
@@ -2055,6 +2078,11 @@ export async function listStoreInvoices(
   if (params.endDate != null) qs.set('endDate', String(params.endDate));
   if (params.skip != null) qs.set('skip', String(params.skip));
   if (params.take != null) qs.set('take', String(params.take));
+  for (const status of params.status ?? []) qs.append('status', status);
+  if (params.textSearch != null && params.textSearch.trim() !== '') {
+    qs.set('textSearch', params.textSearch.trim());
+  }
+  if (params.includePaymentMethods) qs.set('includePaymentMethods', 'true');
   const query = qs.toString();
   const path =
     `/api/v1/stores/${encodeURIComponent(btcpayStoreId)}/invoices` +
