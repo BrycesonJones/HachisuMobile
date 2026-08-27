@@ -15,7 +15,6 @@ import {
 import { AccountProfileHub } from '@/components/account/account-profile-hub';
 import { PaymentFeaturesSection } from '@/components/dashboard/payment-features-section';
 import { StoreSelector } from '@/components/dashboard/store-selector';
-import { WalletActionsSection } from '@/components/dashboard/wallet-actions-section';
 import { WalletIndicator } from '@/components/dashboard/wallet-indicator';
 import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
 import { useActiveStore } from '@/contexts/active-store-context';
@@ -78,8 +77,6 @@ export function BitcoinDashboardView() {
         <BalanceBlock state={state} onRetry={refetch} />
 
         <PaymentFeaturesSection />
-
-        <WalletActionsSection />
       </ScrollView>
     </View>
   );
