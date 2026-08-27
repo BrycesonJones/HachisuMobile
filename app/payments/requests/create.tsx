@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -70,6 +70,13 @@ const CUSTOMER_DATA_OPTIONS: readonly SelectOption[] = [
 
 export default function CreatePaymentRequestScreen() {
   const router = useRouter();
+
+  // Deep links and restarts can land here with no back history — fall back to
+  // the requests list deterministically rather than trusting router.back().
+  const returnToRequests = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/payments/requests');
+  }, [router]);
   const { activeStore } = useActiveStore();
 
   const [title, setTitle] = useState('');
@@ -223,7 +230,7 @@ export default function CreatePaymentRequestScreen() {
 
       <View style={styles.headerRow}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={returnToRequests}
           style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
           accessibilityRole="button"
           accessibilityLabel="Go back"

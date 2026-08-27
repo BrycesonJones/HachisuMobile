@@ -48,6 +48,14 @@ export default function PaymentRequestDetailScreen() {
   const paymentRequestId =
     typeof params.paymentRequestId === 'string' ? params.paymentRequestId : '';
 
+  // Deep links, restarts, and cold starts land here with no back history — fall
+  // back to the requests list deterministically rather than trusting
+  // router.back() (same pattern as activity-details).
+  const returnToRequests = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/payments/requests');
+  }, [router]);
+
   const [request, setRequest] = useState<HachisuPaymentRequest | null>(() =>
     merchantStoreId && paymentRequestId
       ? (getCachedPaymentRequest(merchantStoreId, paymentRequestId) ?? null)
@@ -132,7 +140,7 @@ export default function PaymentRequestDetailScreen() {
 
       <View style={styles.headerRow}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={returnToRequests}
           style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
           accessibilityRole="button"
           accessibilityLabel="Go back"
