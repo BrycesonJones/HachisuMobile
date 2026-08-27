@@ -1,5 +1,4 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AccountProfileHub } from '@/components/account/account-profile-hub';
@@ -10,19 +9,8 @@ interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({ onSearchPress }: DashboardHeaderProps) {
-  const router = useRouter();
-
   return (
     <View style={styles.container}>
-      <Pressable
-        onPress={() => router.push('/account/dashboard-settings')}
-        style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
-        accessibilityRole="button"
-        accessibilityLabel="Open settings"
-        hitSlop={6}>
-        <MaterialIcons name="settings" size={24} color={DASHBOARD_COLORS.primaryText} />
-      </Pressable>
-
       <View style={styles.rightGroup}>
         <Pressable
           onPress={onSearchPress}
@@ -42,7 +30,7 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 12,

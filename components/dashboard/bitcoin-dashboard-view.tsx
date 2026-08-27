@@ -1,6 +1,4 @@
 import { useFocusEffect } from '@react-navigation/native';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useRouter } from 'expo-router';
 import { useCallback, useRef } from 'react';
 import {
   ActivityIndicator,
@@ -22,7 +20,6 @@ import { useStoreBalance, type BalanceViewState } from '@/hooks/use-store-balanc
 import { formatBtcSymbol, formatFiat } from '@/lib/btcpay/balance-format';
 
 export function BitcoinDashboardView() {
-  const router = useRouter();
   const { activeStore } = useActiveStore();
   const { state, refreshing, refetch } = useStoreBalance(activeStore);
 
@@ -42,19 +39,6 @@ export function BitcoinDashboardView() {
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <Pressable
-          onPress={() => router.push('/account/dashboard-settings')}
-          style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Open settings"
-          hitSlop={6}>
-          <MaterialIcons
-            name="settings"
-            size={24}
-            color={DASHBOARD_COLORS.primaryText}
-          />
-        </Pressable>
-
         <AccountProfileHub />
       </View>
 
@@ -172,16 +156,10 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 12,
-  },
-  iconButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   pressed: {
     opacity: 0.6,
