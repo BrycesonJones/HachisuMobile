@@ -256,6 +256,23 @@ export interface ActivityDetail {
 // Reporting CSV export
 // ---------------------------------------------------------------------------
 
+/** Non-sensitive failure codes from the export endpoint. */
+export type StoreReportExportErrorCode =
+  | 'INVALID_REQUEST'
+  | 'SERVER_MISCONFIGURED'
+  | 'REPORT_TOO_LARGE'
+  | 'BTCPAY_UNAVAILABLE';
+
+/**
+ * A BTCPay-equivalent reporting CSV derived from authoritative Greenfield
+ * invoice/payment data — NOT the canonical file BTCPay itself generates. See
+ * supabase/functions/_shared/report-rows.ts for which columns are copied
+ * verbatim and which are reconstructed.
+ *
+ * There is deliberately no `truncated` flag: the export is complete for the
+ * requested range or it fails with a code. A partial accounting file is never
+ * returned.
+ */
 export interface StoreReportExportResponse {
   ok: boolean;
   merchantStoreId?: string;
@@ -265,8 +282,9 @@ export interface StoreReportExportResponse {
   csv?: string;
   rowCount?: number;
   invoiceCount?: number;
-  range?: { startDate: string; endDate: string };
-  /** True when the export hit its server-side invoice bound. */
-  truncated?: boolean;
+  /** `startDate` is null when the export covered all available history. */
+  range?: { startDate: string | null; endDate: string };
+  /** Present only on failures. */
+  code?: StoreReportExportErrorCode;
   error?: string;
 }

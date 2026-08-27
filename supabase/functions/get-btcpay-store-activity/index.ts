@@ -34,6 +34,7 @@ import {
   type BtcpayConfig,
 } from '../_shared/btcpay-client.ts';
 import { resolveOwnedStore } from '../_shared/store-auth.ts';
+import { decodeCursor, encodeCursor } from '../_shared/pagination.ts';
 import { toActivityEvents, type StoreActivityEvent } from '../_shared/report-rows.ts';
 
 const DEFAULT_LIMIT = 25;
@@ -152,33 +153,6 @@ Deno.serve(async (req) => {
 // ---------------------------------------------------------------------------
 // Request-payload utilities
 // ---------------------------------------------------------------------------
-
-/** Opaque cursor: base64url of `{ v: 1, skip: number }`. */
-function encodeCursor(skip: number): string {
-  return btoa(JSON.stringify({ v: 1, skip }));
-}
-
-/** Returns the skip for a cursor: 0 for absent, null for malformed/foreign. */
-function decodeCursor(cursor: unknown): number | null {
-  if (cursor == null || cursor === '') return 0;
-  if (typeof cursor !== 'string' || cursor.length > 200) return null;
-  try {
-    const parsed = JSON.parse(atob(cursor));
-    if (
-      parsed &&
-      parsed.v === 1 &&
-      typeof parsed.skip === 'number' &&
-      Number.isInteger(parsed.skip) &&
-      parsed.skip >= 0 &&
-      parsed.skip <= 1_000_000
-    ) {
-      return parsed.skip;
-    }
-  } catch {
-    // fall through
-  }
-  return null;
-}
 
 function clampInt(value: unknown, fallback: number, min: number, max: number): number {
   const n =

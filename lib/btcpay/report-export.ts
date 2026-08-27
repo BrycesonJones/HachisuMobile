@@ -4,7 +4,10 @@ import * as Sharing from 'expo-sharing';
 import { isDevAuthActive } from '@/lib/auth/dev-session';
 import { readFunctionError } from '@/lib/btcpay/function-error';
 import { supabase } from '@/lib/supabase';
-import type { StoreReportExportResponse } from '@/types/activity';
+import type {
+  StoreReportExportErrorCode,
+  StoreReportExportResponse,
+} from '@/types/activity';
 
 /** Subdirectory of the cache dir the export file is written to. */
 const EXPORT_DIR = 'reports';
@@ -15,27 +18,31 @@ export interface ExportedReport {
   filename: string;
   rowCount: number;
   invoiceCount: number;
-  range: { startDate: string; endDate: string };
-  /** True when the server capped the export; the caller must surface this. */
-  truncated: boolean;
+  /** `startDate` is null when the export covered all available history. */
+  range: { startDate: string | null; endDate: string };
 }
 
 export interface ExportStoreReportOptions {
+  /** ISO start bound. Omit to export all available history. */
   startDate?: string;
+  /** ISO end bound. Omit to end at the moment the request is served. */
   endDate?: string;
 }
 
+type ReportExportErrorCode =
+  | StoreReportExportErrorCode
+  | 'UNAVAILABLE_IN_DEV'
+  | 'REQUEST_FAILED'
+  | 'INVALID_RESPONSE'
+  | 'FILE_WRITE_FAILED'
+  | 'SHARING_UNAVAILABLE'
+  | 'SHARE_FAILED';
+
 /** A classified export failure, so the UI can say what actually went wrong. */
 export class ReportExportError extends Error {
-  readonly code:
-    | 'UNAVAILABLE_IN_DEV'
-    | 'REQUEST_FAILED'
-    | 'INVALID_RESPONSE'
-    | 'FILE_WRITE_FAILED'
-    | 'SHARING_UNAVAILABLE'
-    | 'SHARE_FAILED';
+  readonly code: ReportExportErrorCode;
 
-  constructor(code: ReportExportError['code'], message: string, options?: ErrorOptions) {
+  constructor(code: ReportExportErrorCode, message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'ReportExportError';
     this.code = code;
@@ -43,13 +50,19 @@ export class ReportExportError extends Error {
 }
 
 /**
- * Exports the active store's authoritative BTCPay-backed reporting CSV and hands
- * it to the device's native share/save sheet.
+ * Exports the active store's BTCPay-equivalent reporting CSV and hands it to the
+ * device's native share/save sheet.
+ *
+ * The output is derived from authoritative Greenfield invoice/payment data; it is
+ * not the canonical file BTCPay itself generates (BTCPay exposes no API for that
+ * — see supabase/functions/_shared/report-rows.ts).
+ *
+ * Completeness: the server returns a CSV covering the WHOLE requested range or
+ * fails outright. There is no partial-export path, so a file that reaches this
+ * function is always complete for its range.
  *
  * The BTCPay Greenfield credential stays server-side: the Edge Function resolves
- * the caller's owned store, builds the report from BTCPay's own invoice/payment
- * data, and returns only CSV text. Nothing about BTCPay reaches this module
- * except that text and a server-authored filename.
+ * the caller's owned store and returns only CSV text.
  */
 export async function exportStoreReport(
   merchantStoreId: string,
@@ -75,14 +88,15 @@ export async function exportStoreReport(
   );
 
   if (error) {
+    const parsed = await readExportError(error);
     throw new ReportExportError(
-      'REQUEST_FAILED',
-      (await readFunctionError(error)) ?? error.message,
+      parsed.code ?? 'REQUEST_FAILED',
+      parsed.message ?? error.message,
     );
   }
   if (!data?.ok) {
     throw new ReportExportError(
-      'REQUEST_FAILED',
+      data?.code ?? 'REQUEST_FAILED',
       data?.error ?? 'Could not build the report.',
     );
   }
@@ -135,7 +149,28 @@ export async function exportStoreReport(
     filename,
     rowCount: data.rowCount ?? 0,
     invoiceCount: data.invoiceCount ?? 0,
-    range: data.range ?? { startDate: '', endDate: '' },
-    truncated: data.truncated === true,
+    range: data.range ?? { startDate: null, endDate: '' },
   };
+}
+
+/** Reads `{ code, error }` from a non-2xx functions.invoke response body. */
+async function readExportError(
+  error: unknown,
+): Promise<{ code?: StoreReportExportErrorCode; message?: string }> {
+  const context = (error as { context?: unknown })?.context;
+  if (context && typeof (context as Response).json === 'function') {
+    try {
+      const body = await (context as Response).json();
+      return {
+        code:
+          typeof body?.code === 'string'
+            ? (body.code as StoreReportExportErrorCode)
+            : undefined,
+        message: typeof body?.error === 'string' ? body.error : undefined,
+      };
+    } catch {
+      // Body was not JSON — fall back to the generic message.
+    }
+  }
+  return { message: await readFunctionError(error) };
 }
