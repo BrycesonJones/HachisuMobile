@@ -2047,6 +2047,16 @@ export interface BtcpayInvoicePaymentMethod {
   [key: string]: unknown;
 }
 
+/**
+ * Query parameters for `GET /api/v1/stores/{storeId}/invoices`.
+ *
+ * VERSION-ANCHORED: this is the complete parameter list the CURRENT production
+ * server (BTCPay Server 2.4.3) accepts, read from its own OpenAPI document.
+ * Notably there is NO `includeArchived` parameter, which is why the mobile
+ * Invoices filter offers no "include archived" option — the capability does not
+ * exist to expose. Re-read the deployed OpenAPI document before adding a
+ * parameter here rather than assuming a newer BTCPay's surface.
+ */
 export interface ListInvoicesParams {
   /** Unix seconds. */
   startDate?: number;
@@ -2059,8 +2069,14 @@ export interface ListInvoicesParams {
   /** BTCPay full-text search (invoice id, order id, item description, buyer
    * email, destination address). Server-side; never fabricated client-side. */
   textSearch?: string;
-  /** When true, each invoice embeds its payment methods + payments, removing
-   * the need for per-invoice enrichment calls (verified on BTCPay 2.4.3). */
+  /** When true, each invoice embeds its payment methods + payments (including
+   * each payment's id/value/fee/status/receivedDate/destination and the method's
+   * rate), removing the need for per-invoice enrichment calls.
+   *
+   * VERSION-ANCHORED: verified against BTCPay Server 2.4.3. The Activity feed,
+   * the Invoices list and the CSV export all depend on this being populated —
+   * if a future upgrade stops embedding payments, those surfaces would silently
+   * report zero payments, so re-verify this on any BTCPay upgrade. */
   includePaymentMethods?: boolean;
 }
 

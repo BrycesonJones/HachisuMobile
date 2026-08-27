@@ -2,34 +2,92 @@
 //
 // This is the single source of truth for two surfaces that must reconcile:
 //   - the mobile Activity feed (get-btcpay-store-activity): one event per payment
-//   - the CSV export (export-btcpay-store-report): BTCPay's "Invoices" report rows
+//   - the CSV export (export-btcpay-store-report): the report rows
 //
-// BTCPay Server 2.4.3 exposes NO Greenfield reporting/export endpoint — the
-// upstream GreenfieldReportsController is marked [NonAction] ("Disabling this
-// endpoint as we still need to figure out the request/response model"), and the
-// web Reporting page builds its CSV in the browser from a cookie-authenticated
-// internal API. The columns and row-emission rules below therefore replicate the
-// v2.4.3 InvoicesReportProvider (BTCPayServer/Services/Reporting/
-// InvoicesReportProvider.cs) from Greenfield invoice + payment-method data
-// (GET /invoices?includePaymentMethods=true), which carries every input the
-// provider reads (payment id/receivedDate/value/fee/destination, method rate/
-// currency/paymentMethodId, invoice status/additionalStatus/metadata).
+// WHAT THIS PRODUCES — read this before describing the export anywhere.
 //
-// Faithfulness notes (verified against the v2.4.3 source):
-//   - One row per payment; an invoice with no payments still emits one row
-//     UNLESS its state is exactly (New, none) or (Expired, none).
-//   - Invoice-level fields (currency/due/price/statuses/comment) are only
-//     populated on an invoice's FIRST row ("we don't want to duplicate").
+// The output is a BTCPay-EQUIVALENT report derived from authoritative Greenfield
+// invoice/payment data. It is NOT the canonical CSV that BTCPay itself generates,
+// and it must never be described as "the exact BTCPay CSV", "identical to
+// BTCPay's export", or "the canonical BTCPay export". Most columns are verbatim
+// BTCPay values; two are RECONSTRUCTED because Greenfield does not expose the
+// Reporting model's equivalent property (see the DERIVED table below).
+//
+// VERSION ANCHOR. Everything below was verified against BTCPay Server 2.4.3, the
+// current production server for this project. Earlier Hachisu work referenced
+// 2.3.9; that is historical and no longer describes the deployed API surface. On
+// any BTCPay upgrade, re-verify the three version-sensitive facts this module
+// depends on: (1) no Greenfield reports endpoint, (2) `includePaymentMethods`
+// embeds payments in the invoice list, (3) the InvoicesReportProvider column set
+// and row rules replicated below.
+//
+// Why derive at all (current production server: BTCPay Server 2.4.3):
+//   - There is NO Greenfield reporting/export endpoint to proxy. `POST
+//     /api/v1/stores/{storeId}/reports` returns 404 on this deployment, and
+//     upstream that controller action is marked [NonAction] ("Disabling this
+//     endpoint as we still need to figure out the request/response model").
+//   - BTCPay's web Reporting page is cookie/anti-forgery authenticated and builds
+//     its CSV in the browser, so it cannot be fetched with a Greenfield API key.
+// The columns and row rules below therefore replicate the v2.4.3
+// InvoicesReportProvider (BTCPayServer/Services/Reporting/InvoicesReportProvider.cs)
+// from `GET /invoices?includePaymentMethods=true`, which carries every input that
+// provider reads (payment id/receivedDate/value/fee/destination, method
+// rate/currency/paymentMethodId, invoice status/additionalStatus/metadata).
+//
+// COLUMN PROVENANCE
+//
+// DIRECT — copied verbatim from the Greenfield payload, no arithmetic:
+//   InvoiceCreatedDate     invoice.createdTime (unix seconds -> ISO 8601 UTC)
+//   InvoiceId              invoice.id
+//   InvoiceCurrency        invoice.currency
+//   InvoicePrice           invoice.amount
+//   InvoiceStatus          invoice.status
+//   InvoiceExceptionStatus invoice.additionalStatus ("None" normalized to "")
+//   InvoiceComment         invoice.metadata.comment
+//   PaymentReceivedDate    payment.receivedDate (unix seconds -> ISO 8601 UTC)
+//   PaymentId              payment.id
+//   PaymentRate            paymentMethod.rate
+//   PaymentAddress         payment.destination
+//   PaymentMethodId        paymentMethod.paymentMethodId
+//   PaymentCurrency        paymentMethod.currency (falls back to cryptoCode)
+//   PaymentAmount          payment.value
+//   PaymentMethodFee       payment.fee
+//   <metadata columns>     invoice.metadata, flattened (see below)
+//
+// DERIVED — reconstructed here; Greenfield exposes no equivalent property:
+//   InvoiceFullStatus      = `${status} (${exception})` when an exception status
+//                            is present, else `${status}`. Mirrors
+//                            InvoiceState.ToString(). String composition only.
+//   InvoiceDue             = InvoicePrice - invoice.paidAmount, computed as exact
+//                            decimal strings (BigInt, scale = max of operands).
+//                            BTCPay's own column is InvoiceEntity.NetDue, which
+//                            Greenfield does not return. Overpayment therefore
+//                            yields a NEGATIVE due (not clamped to zero) and a
+//                            partial payment yields the outstanding remainder.
+//                            When paidAmount is absent the full price is used.
+//   PaymentInvoiceAmount   = PaymentAmount x PaymentRate, rounded HALF-EVEN
+//                            (banker's, .NET's default midpoint mode) to the
+//                            invoice currency's divisibility — 2 for most fiat,
+//                            0 for JPY/KRW/VND/SATS, 3 for BHD/IQD/JOD/KWD/OMR/TND,
+//                            8 for BTC. BTCPay computes this from
+//                            payment.InvoicePaidAmount.Gross, which Greenfield
+//                            does not return. When the payment method carries NO
+//                            rate the cell is EMPTY — a fiat value is never
+//                            invented from a missing rate.
+//
+// ROW RULES (verified against the v2.4.3 provider source):
+//   - One row per payment. A single invoice with three payments is three rows,
+//     never collapsed or deduplicated.
+//   - An invoice with NO payments still emits one row UNLESS its state is exactly
+//     (New, none) or (Expired, none) — those are excluded entirely, which is why
+//     a store of expired unpaid invoices reports zero rows.
+//   - Invoice-level fields (currency/due/price/statuses/comment) are populated
+//     only on an invoice's FIRST row ("we don't want to duplicate the data on all
+//     payments"); later rows leave them empty.
 //   - Metadata columns: leaf-name flattening with posData.tax, itemDesc and
 //     top-level receiptData skipped; posData.cart items become
-//     `${itemId}-${field}` (id/image/title/inventory dropped, price formatted
-//     to the invoice currency). First value wins on duplicate column names.
-//   - InvoiceFullStatus is `Status (ExceptionStatus)` when an exception status
-//     is present, else just the status — matching InvoiceState.ToString().
-//   - Known reconstruction differences (documented, not hidden): InvoiceDue is
-//     derived as amount - paidAmount (Greenfield does not expose NetDue), and
-//     PaymentInvoiceAmount is value x rate rounded half-even to the invoice
-//     currency's divisibility (mirroring the provider's computation).
+//     `${itemId}-${field}` (id/image/title/inventory dropped, price formatted to
+//     the invoice currency). First value wins on duplicate column names.
 
 import {
   deriveSourceFeature,
@@ -57,7 +115,8 @@ import type {
 } from './btcpay-client.ts';
 
 // ---------------------------------------------------------------------------
-// Report columns (exact v2.4.3 InvoicesReportProvider order and names)
+// Report columns — the v2.4.3 InvoicesReportProvider order and names.
+// See the COLUMN PROVENANCE table above for which are direct vs derived.
 // ---------------------------------------------------------------------------
 
 export const REPORT_BASE_COLUMNS = [
@@ -285,7 +344,7 @@ export function toActivityEvents(
 }
 
 // ---------------------------------------------------------------------------
-// Report rows (CSV export; full InvoicesReportProvider semantics)
+// Report rows (CSV export; BTCPay-equivalent InvoicesReportProvider semantics)
 // ---------------------------------------------------------------------------
 
 /**
@@ -303,6 +362,11 @@ export function buildReportRows(invoice: BtcpayInvoice): ReportRow[] {
   const currency = typeof invoice.currency === 'string' ? invoice.currency : '';
   const price = strOrNull(invoice.amount) ?? '0';
   const paidAmount = strOrNull(invoice.paidAmount);
+  // DERIVED. BTCPay's column is InvoiceEntity.NetDue, which Greenfield does not
+  // expose, so it is reconstructed as price - paidAmount using exact decimal
+  // strings. Deliberately NOT clamped at zero: an overpaid invoice reports a
+  // negative due, which is the accounting-meaningful value. A missing paidAmount
+  // means nothing is known to have been received, so the full price is due.
   const due =
     paidAmount != null ? subtractDecimalStrings(price, paidAmount) : price;
   const comment = strOrNull(
@@ -340,6 +404,10 @@ export function buildReportRows(invoice: BtcpayInvoice): ReportRow[] {
   return payments.map(({ method, payment }, index) => {
     const rate = strOrNull(method.rate);
     const value = strOrNull(payment.value) ?? '0';
+    // DERIVED. BTCPay computes this from payment.InvoicePaidAmount.Gross, which
+    // Greenfield does not expose, so it is reconstructed as value x rate rounded
+    // half-even to the invoice currency's divisibility. With no rate the cell
+    // stays EMPTY — a fiat figure is never invented from a missing rate.
     const invoiceAmount =
       rate != null
         ? multiplyDecimalStrings(value, rate, currencyDivisibility(currency))
