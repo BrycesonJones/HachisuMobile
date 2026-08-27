@@ -243,6 +243,42 @@ export interface UpdatePosAppInput {
   template?: string;
 }
 
+/** The fields of Greenfield's PointOfSaleAppData that Hachisu reads. */
+export interface BtcpayPosAppDetails {
+  id: string;
+  storeId?: string;
+  archived?: boolean;
+  defaultView?: string;
+  title?: string;
+  currency?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Fetches a single POS app (Greenfield: GET /api/v1/apps/pos/{appId}). SURFACES
+ * failures so callers can distinguish states: BtcpayApiError(404) when the app
+ * no longer exists, BtcpayTimeoutError on timeout, BtcpayApiError(status) for
+ * other non-2xx, and BtcpayApiError(200) on an unexpected payload.
+ */
+export async function getPosApp(
+  config: BtcpayConfig,
+  btcpayAppId: string,
+  opts: BtcpayGetOptions = {},
+): Promise<BtcpayPosAppDetails> {
+  const { status, ok, parsed } = await btcpayGet(
+    config,
+    `/api/v1/apps/pos/${encodeURIComponent(btcpayAppId)}`,
+    opts,
+  );
+  if (ok) {
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as BtcpayPosAppDetails;
+    }
+    throw new BtcpayApiError('BTCPay returned an unexpected POS app payload.', status, parsed);
+  }
+  throw new BtcpayApiError(`BTCPay POS app fetch failed (HTTP ${status}).`, status, parsed);
+}
+
 /**
  * Updates a Point of Sale app (Greenfield: PUT /api/v1/apps/pos/{appId}). Only
  * the provided fields are sent. Throws BtcpayApiError on a non-2xx response.
