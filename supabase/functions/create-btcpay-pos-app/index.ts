@@ -6,8 +6,10 @@
 // BTCPay directly — the Greenfield key lives only in this function's env.
 //
 // Minimal create (mirrors BTCPay): only an App Name is required. The customer-
-// facing title, POS style, currency and description default sensibly and are
-// edited afterwards on the Update POS page.
+// facing title, currency and description default sensibly and are edited
+// afterwards on the Update POS page. Every Hachisu product POS uses BTCPay's
+// Cart view — a one-item purchase is simply a one-item cart — so no view
+// choice is exposed to (or accepted from) the client.
 //
 // Required secrets: BTCPAY_SERVER_URL, BTCPAY_GREENFIELD_API_KEY.
 // Platform-provided: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
@@ -20,16 +22,12 @@ import {
   BtcpayConfigError,
   createPosApp,
   getBtcpayConfig,
-  type PosDefaultView,
 } from '../_shared/btcpay-client.ts';
 
 const MAX_NAME_LENGTH = 50;
 
-// Mobile POS styles -> BTCPay defaultView. MVP exposes only the first two.
-const POS_STYLE_TO_VIEW: Record<string, PosDefaultView> = {
-  'product-list': 'Static',
-  'product-list-cart': 'Cart',
-};
+// The only product POS style Hachisu creates: BTCPay's Cart view.
+const POS_STYLE = 'product-list-cart';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -63,7 +61,7 @@ Deno.serve(async (req) => {
   }
 
   // 2. Parse + validate the request body.
-  let body: { merchantStoreId?: unknown; appName?: unknown; posStyle?: unknown };
+  let body: { merchantStoreId?: unknown; appName?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -86,12 +84,6 @@ Deno.serve(async (req) => {
       400,
     );
   }
-
-  const posStyle =
-    typeof body.posStyle === 'string' && body.posStyle in POS_STYLE_TO_VIEW
-      ? body.posStyle
-      : 'product-list';
-  const defaultView = POS_STYLE_TO_VIEW[posStyle];
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
@@ -138,7 +130,7 @@ Deno.serve(async (req) => {
       appName,
       title: appName,
       currency,
-      defaultView,
+      defaultView: 'Cart',
     });
   } catch (err) {
     const isApiError = err instanceof BtcpayApiError;
@@ -161,7 +153,7 @@ Deno.serve(async (req) => {
       btcpay_app_id: app.id,
       app_name: appName,
       display_title: appName,
-      pos_style: posStyle,
+      pos_style: POS_STYLE,
       currency,
       description: null,
       status: 'active',
