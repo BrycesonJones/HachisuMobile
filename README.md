@@ -25,6 +25,14 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
+## Testing against production
+
+This project talks to a live BTCPay Server and a live Supabase project — there is
+no staging copy. Before writing or running tests, read
+[docs/TESTING_POLICY.md](docs/TESTING_POLICY.md). The short version: never mutate
+production infrastructure (extensions, schema, RLS, temporary deployed functions)
+to make a test possible.
+
 ## Get a fresh project
 
 When you're ready, run:
