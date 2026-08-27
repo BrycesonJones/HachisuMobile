@@ -8,7 +8,7 @@ import {
 } from '@/lib/btcpay/dev-pos-apps';
 import { supabase } from '@/lib/supabase';
 import type { PosProduct } from '@/components/payments/pos/products/product-types';
-import type { PosApp } from '@/types/pos-app';
+import type { PosApp, PosMode } from '@/types/pos-app';
 
 export interface CreatePosAppInput {
   merchantStoreId: string;
@@ -124,7 +124,7 @@ export async function createPosApp(input: CreatePosAppInput): Promise<CreatePosA
       btcpay_app_id: `dev-pos-app-${seq}`,
       app_name: appName,
       display_title: appName,
-      pos_style: 'product-list',
+      pos_style: 'product-list-cart',
       currency: 'USD',
       description: null,
       status: 'active',
@@ -153,9 +153,11 @@ export async function createPosApp(input: CreatePosAppInput): Promise<CreatePosA
   return { posApp: data.posApp, error: null };
 }
 
+// Only the Hachisu-level mode is sent; the Edge Function maps it to BTCPay
+// (products -> Cart, quick-charge -> Light) and rejects anything else.
 export interface UpdatePosAppInput {
   displayTitle: string;
-  posStyle: string;
+  posMode: PosMode;
   currency: string;
   description: string | null;
   products: PosProduct[];
@@ -173,7 +175,7 @@ export async function updatePosApp(
   if (isDevAuthActive()) {
     const updated = updateDevPosApp(id, {
       display_title: updates.displayTitle,
-      pos_style: updates.posStyle,
+      pos_style: updates.posMode === 'quick-charge' ? 'quick-charge' : 'product-list-cart',
       currency: updates.currency,
       description: updates.description,
       products: updates.products as unknown as PosApp['products'],
@@ -188,7 +190,7 @@ export async function updatePosApp(
       body: {
         posAppId: id,
         displayTitle: updates.displayTitle,
-        posStyle: updates.posStyle,
+        posMode: updates.posMode,
         currency: updates.currency,
         description: updates.description,
         products: updates.products,
@@ -200,6 +202,51 @@ export async function updatePosApp(
   if (data?.error) return { error: data.error };
   if (!data?.posApp) return { error: 'POS app was not returned by the server.' };
   return { posApp: data.posApp, error: null };
+}
+
+export type UpdatePosModeResult =
+  | { ok: true; posMode: PosMode }
+  | { ok: false; error: string };
+
+/**
+ * Auto-saves ONLY the POS mode via the update-btcpay-pos-mode Edge Function.
+ * The server rebuilds the full BTCPay payload from the last-saved row, so this
+ * can never commit the editor's other unsaved local edits. Setting a mode is
+ * idempotent (the server no-ops when it is already saved), so a transient
+ * fetch failure is retried once.
+ */
+export async function updatePosMode(input: {
+  merchantStoreId: string;
+  posAppId: string;
+  posMode: PosMode;
+}): Promise<UpdatePosModeResult> {
+  if (isDevAuthActive()) {
+    const updated = updateDevPosApp(input.posAppId, {
+      pos_style: input.posMode === 'quick-charge' ? 'quick-charge' : 'product-list-cart',
+    });
+    return updated
+      ? { ok: true, posMode: input.posMode }
+      : { ok: false, error: 'POS app not found.' };
+  }
+
+  const { data, error } = await invokeIdempotent<{
+    ok?: boolean;
+    posMode?: string;
+    error?: string;
+  }>('update-btcpay-pos-mode', {
+    method: 'POST',
+    body: {
+      merchantStoreId: input.merchantStoreId,
+      posAppId: input.posAppId,
+      posMode: input.posMode,
+    },
+  });
+
+  if (error) return { ok: false, error: await describeInvokeError(error) };
+  if (!data?.ok) {
+    return { ok: false, error: data?.error ?? 'Unable to change POS mode. Try again.' };
+  }
+  return { ok: true, posMode: input.posMode };
 }
 
 /**

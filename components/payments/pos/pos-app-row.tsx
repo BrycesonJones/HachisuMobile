@@ -1,7 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { posStyleLabel, type PosApp } from '@/types/pos-app';
+import { posModeFromStyle, posModeLabel, type PosApp } from '@/types/pos-app';
 import { COLORS } from '@/constants/colors';
 import { HachisuColors } from '@/constants/hachisu-colors';
 
@@ -30,7 +30,7 @@ export function PosAppRow({ app, onPress }: PosAppRowProps) {
           {title}
         </Text>
         <Text style={styles.meta} numberOfLines={1}>
-          {posStyleLabel(app.pos_style)} · {app.currency}
+          {posModeLabel(posModeFromStyle(app.pos_style))} · {app.currency}
         </Text>
         {hasDescription ? (
           <Text style={styles.description} numberOfLines={1}>

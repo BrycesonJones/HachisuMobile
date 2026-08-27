@@ -1,10 +1,11 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -21,20 +22,37 @@ import { PrimaryButton } from '@/components/auth/primary-button';
 import { DeleteAppModal } from '@/components/payments/pos/delete-app-modal';
 import { InvoiceFormField } from '@/components/payments/invoices/create/invoice-form-field';
 import { PosDescriptionField } from '@/components/payments/pos/pos-description-field';
-import {
-  PosStyleSelector,
-  type PosStyle,
-} from '@/components/payments/pos/pos-style-selector';
+import { PosModeSelector } from '@/components/payments/pos/pos-mode-selector';
 import { ProductForm } from '@/components/payments/pos/products/product-form';
 import { ProductRow } from '@/components/payments/pos/products/product-row';
-import type { PosProduct } from '@/components/payments/pos/products/product-types';
+import {
+  normalizePosProducts,
+  type PosProduct,
+} from '@/components/payments/pos/products/product-types';
+import { PosQrModal } from '@/components/payments/pos/pos-qr-modal';
 import { COLORS } from '@/constants/colors';
 import { useActiveStore } from '@/contexts/active-store-context';
-import { deletePosApp, fetchPosApp, updatePosApp } from '@/lib/btcpay/pos-apps';
-import type { PosApp } from '@/types/pos-app';
+import { isShareableCheckoutUrl } from '@/lib/btcpay/checkout-url';
+import {
+  deletePosApp,
+  fetchPosApp,
+  updatePosApp,
+  updatePosMode,
+} from '@/lib/btcpay/pos-apps';
+import { resolvePosRuntime, type PosRuntime } from '@/lib/btcpay/pos-runtime';
+import { posModeFromStyle, type PosApp, type PosMode } from '@/types/pos-app';
 
-function toPosStyle(value: string): PosStyle {
-  return value === 'product-list-cart' ? 'product-list-cart' : 'product-list';
+/** One comparable value for everything the Save button persists — used to
+ * disable the live-runtime actions while the editor holds unsaved changes.
+ * The POS mode is deliberately NOT part of this: mode changes auto-save
+ * through their own path the moment a card is tapped. */
+function formSnapshot(
+  displayTitle: string,
+  currency: string,
+  description: string,
+  products: PosProduct[],
+): string {
+  return JSON.stringify([displayTitle, currency, description, products]);
 }
 
 export default function UpdatePosScreen() {
@@ -46,13 +64,26 @@ export default function UpdatePosScreen() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Editable config.
+  // Editable config. The merchant chooses a Hachisu-level mode only; the server
+  // maps it to BTCPay (products -> Cart, quick-charge -> Light) and never
+  // accepts a raw BTCPay view from the client.
+  //
+  // posMode is what the UI shows (optimistic); savedMode is what the backend
+  // has confirmed. Tapping a card auto-saves immediately — it does not wait
+  // for Save Point of Sale — and a failed auto-save reverts posMode to
+  // savedMode so the UI never shows a mode BTCPay does not have.
   const [displayTitle, setDisplayTitle] = useState('');
-  const [posStyle, setPosStyle] = useState<PosStyle>('product-list');
+  const [posMode, setPosMode] = useState<PosMode>('products');
+  const [savedMode, setSavedMode] = useState<PosMode>('products');
+  const [modeSaving, setModeSaving] = useState(false);
+  const [modeSaved, setModeSaved] = useState(false);
+  const [modeError, setModeError] = useState<string | null>(null);
+  const modeSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [currency, setCurrency] = useState('USD');
   const [description, setDescription] = useState('');
 
-  // Products — local menu (persistence is out of scope for now).
+  // Products — this app's menu, loaded from merchant_pos_apps.products and
+  // saved (with the rest of the config) via update-btcpay-pos-app.
   const [products, setProducts] = useState<PosProduct[]>([]);
   const [editorVisible, setEditorVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -66,6 +97,21 @@ export default function UpdatePosScreen() {
   const [deleteVisible, setDeleteVisible] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Live-runtime actions (Open POS / Show POS QR). The URL is resolved by the
+  // backend per tap; nothing here constructs or caches a BTCPay origin.
+  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
+  const [resolving, setResolving] = useState<'open' | 'qr' | null>(null);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [qrRuntime, setQrRuntime] = useState<PosRuntime | null>(null);
+  const [qrVisible, setQrVisible] = useState(false);
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      aliveRef.current = false;
+      if (modeSavedTimer.current) clearTimeout(modeSavedTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,14 +130,21 @@ export default function UpdatePosScreen() {
           setLoadError('This POS app is no longer available.');
         } else {
           setApp(result);
+          const loadedMode = posModeFromStyle(result.pos_style);
+          const loadedProducts = normalizePosProducts(result.products);
           setDisplayTitle(result.display_title);
-          setPosStyle(toPosStyle(result.pos_style));
+          setPosMode(loadedMode);
+          setSavedMode(loadedMode);
           setCurrency(result.currency);
           setDescription(result.description ?? '');
-          setProducts(
-            Array.isArray(result.products)
-              ? (result.products as unknown as PosProduct[])
-              : [],
+          setProducts(loadedProducts);
+          setSavedSnapshot(
+            formSnapshot(
+              result.display_title,
+              result.currency,
+              result.description ?? '',
+              loadedProducts,
+            ),
           );
         }
       } catch (e) {
@@ -108,7 +161,105 @@ export default function UpdatePosScreen() {
     };
   }, [posAppId]);
 
-  const canSave = displayTitle.trim().length > 0 && currency.length > 0 && !saving;
+  const canSave =
+    displayTitle.trim().length > 0 && currency.length > 0 && !saving && !modeSaving;
+
+  // Open POS / Show POS QR act on the last SAVED configuration, so they are
+  // disabled while the editor holds unsaved changes — never a silent mismatch
+  // between what the merchant sees here and what BTCPay renders. A mode change
+  // is NOT part of this: it auto-saves the moment a card is tapped, so once
+  // that save completes the actions are usable again.
+  const isDirty =
+    savedSnapshot !== null &&
+    formSnapshot(displayTitle, currency, description, products) !== savedSnapshot;
+  const runtimeDisabled = !app || isDirty || saving || modeSaving || resolving !== null;
+
+  /**
+   * Auto-saves the POS mode the moment a card is tapped: optimistic selection,
+   * one request per tap (cards disable while saving, so switches can never
+   * overlap), and revert-on-failure so the UI never shows a mode BTCPay does
+   * not have. The server rebuilds the BTCPay payload from the LAST-SAVED row,
+   * so unrelated unsaved edits in this form are never committed by this path.
+   */
+  async function handleModeChange(next: PosMode) {
+    if (!app || modeSaving || saving) return;
+    if (next === posMode) return;
+    const previousSaved = savedMode;
+    if (modeSavedTimer.current) clearTimeout(modeSavedTimer.current);
+    setPosMode(next); // Optimistic — the card selects instantly.
+    setModeSaving(true);
+    setModeSaved(false);
+    setModeError(null);
+    try {
+      const result = await updatePosMode({
+        merchantStoreId: app.merchant_store_id,
+        posAppId: app.id,
+        posMode: next,
+      });
+      if (!aliveRef.current) return;
+      if (result.ok) {
+        setSavedMode(next);
+        setModeSaved(true);
+        modeSavedTimer.current = setTimeout(() => {
+          if (aliveRef.current) setModeSaved(false);
+        }, 2500);
+      } else {
+        setPosMode(previousSaved);
+        setModeError(result.error || 'Unable to change POS mode. Try again.');
+      }
+    } catch {
+      if (aliveRef.current) {
+        setPosMode(previousSaved);
+        setModeError('Unable to change POS mode. Try again.');
+      }
+    } finally {
+      if (aliveRef.current) setModeSaving(false);
+    }
+  }
+
+  /**
+   * Resolves the authoritative runtime URL server-side, then opens it or shows
+   * its QR. Responses are discarded if the screen unmounted or the response is
+   * not for THIS store+app; the URL is shape-checked again before the OS ever
+   * sees it (the resolver already origin-checked it against the BTCPay server).
+   */
+  async function handleRuntimeAction(action: 'open' | 'qr') {
+    if (!app || resolving) return;
+    const requestedAppId = app.id;
+    const requestedStoreId = app.merchant_store_id;
+    setResolving(action);
+    setRuntimeError(null);
+    try {
+      const result = await resolvePosRuntime({
+        merchantStoreId: requestedStoreId,
+        posAppId: requestedAppId,
+      });
+      if (!aliveRef.current) return;
+      if (!result.ok) {
+        setRuntimeError(result.message);
+        return;
+      }
+      const { runtime } = result;
+      if (
+        runtime.posAppId !== requestedAppId ||
+        runtime.merchantStoreId !== requestedStoreId ||
+        !isShareableCheckoutUrl(runtime.runtimeUrl)
+      ) {
+        setRuntimeError('Unable to open this point of sale. Try again.');
+        return;
+      }
+      if (action === 'open') {
+        await Linking.openURL(runtime.runtimeUrl);
+      } else {
+        setQrRuntime(runtime);
+        setQrVisible(true);
+      }
+    } catch {
+      if (aliveRef.current) setRuntimeError('Unable to open this point of sale. Try again.');
+    } finally {
+      if (aliveRef.current) setResolving(null);
+    }
+  }
 
   async function handleSave() {
     if (!app || !canSave) return;
@@ -116,7 +267,7 @@ export default function UpdatePosScreen() {
     setSaveError(null);
     const { error } = await updatePosApp(app.id, {
       displayTitle: displayTitle.trim(),
-      posStyle,
+      posMode,
       currency,
       description: description.trim() ? description.trim() : null,
       products,
@@ -175,7 +326,7 @@ export default function UpdatePosScreen() {
   function confirmDeleteProduct(product: PosProduct) {
     Alert.alert(
       'Delete product?',
-      'This product will be removed from the local POS product list.',
+      'This product will be removed from the menu when you save.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -245,50 +396,126 @@ export default function UpdatePosScreen() {
 
             <View style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>
-                POS Style <Text style={styles.required}>*</Text>
+                POS Mode <Text style={styles.required}>*</Text>
               </Text>
-              <PosStyleSelector value={posStyle} onChange={setPosStyle} />
-              <Text style={styles.helperText}>
-                Keypad and print display options will be added later.
-              </Text>
+              <PosModeSelector
+                value={posMode}
+                onChange={handleModeChange}
+                disabled={modeSaving || saving}
+              />
+              {modeSaving ? (
+                <Text style={styles.helperText}>Saving…</Text>
+              ) : modeSaved ? (
+                <Text style={styles.helperText}>Saved</Text>
+              ) : null}
+              {modeError ? <Text style={styles.errorText}>{modeError}</Text> : null}
             </View>
 
             <View style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>
-                Currency <Text style={styles.required}>*</Text>
+                Pricing Currency <Text style={styles.required}>*</Text>
               </Text>
-              <CurrencySelect value={currency} onChange={setCurrency} />
+              <CurrencySelect
+                value={currency}
+                onChange={setCurrency}
+                label="Pricing currency"
+              />
+              <Text style={styles.helperText}>
+                Set prices in this currency. Customers still pay in Bitcoin.
+              </Text>
             </View>
 
             <PosDescriptionField value={description} onChangeText={setDescription} />
 
-            {/* Products — this POS app's menu */}
-            <Text style={styles.sectionLabel}>PRODUCTS</Text>
-            {products.length === 0 ? (
-              <Text style={styles.helperText}>
-                No products yet. Add items customers can pay for in this menu.
-              </Text>
+            {posMode === 'products' ? (
+              <>
+                {/* Products — this POS app's menu */}
+                <Text style={styles.sectionLabel}>PRODUCTS</Text>
+                {products.length === 0 ? (
+                  <Text style={styles.helperText}>
+                    No products yet. Add items customers can pay for in this menu.
+                  </Text>
+                ) : (
+                  <View style={styles.productList}>
+                    {products.map((product) => (
+                      <ProductRow
+                        key={product.productId}
+                        product={product}
+                        onPress={() => openEditProduct(product)}
+                        onDelete={() => confirmDeleteProduct(product)}
+                      />
+                    ))}
+                  </View>
+                )}
+
+                <Pressable
+                  onPress={openAddProduct}
+                  style={({ pressed }) => [styles.addProduct, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add product">
+                  <MaterialIcons name="add" size={20} color={COLORS.primaryText} />
+                  <Text style={styles.addProductLabel}>Add Product</Text>
+                </Pressable>
+              </>
             ) : (
-              <View style={styles.productList}>
-                {products.map((product) => (
-                  <ProductRow
-                    key={product.productId}
-                    product={product}
-                    onPress={() => openEditProduct(product)}
-                    onDelete={() => confirmDeleteProduct(product)}
-                  />
-                ))}
-              </View>
+              <>
+                {/* Quick Charge — products are hidden, NOT deleted: the catalog
+                    stays in form state and is saved with the app, so switching
+                    back to Products & Cart restores it untouched. BTCPay owns
+                    the keypad runtime; Phase 4's Open POS / QR will resolve it. */}
+                <Text style={styles.sectionLabel}>QUICK CHARGE</Text>
+                <Text style={styles.helperText}>
+                  Quick Charge uses a keypad for entering custom payment amounts.
+                  Open POS launches the keypad.
+                </Text>
+              </>
             )}
 
-            <Pressable
-              onPress={openAddProduct}
-              style={({ pressed }) => [styles.addProduct, pressed && styles.pressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Add product">
-              <MaterialIcons name="add" size={20} color={COLORS.primaryText} />
-              <Text style={styles.addProductLabel}>Add Product</Text>
-            </Pressable>
+            {/* Live runtime — one authoritative BTCPay URL for both modes. */}
+            <View style={styles.runtimeActions}>
+              <Pressable
+                onPress={() => handleRuntimeAction('open')}
+                disabled={runtimeDisabled}
+                style={({ pressed }) => [
+                  styles.runtimeButton,
+                  runtimeDisabled && styles.runtimeButtonDisabled,
+                  pressed && !runtimeDisabled && styles.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Open POS"
+                accessibilityState={{ disabled: runtimeDisabled }}>
+                {resolving === 'open' ? (
+                  <ActivityIndicator size="small" color={COLORS.primaryText} />
+                ) : (
+                  <MaterialIcons name="open-in-new" size={20} color={COLORS.primaryText} />
+                )}
+                <Text style={styles.runtimeLabel}>Open POS</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => handleRuntimeAction('qr')}
+                disabled={runtimeDisabled}
+                style={({ pressed }) => [
+                  styles.runtimeButton,
+                  runtimeDisabled && styles.runtimeButtonDisabled,
+                  pressed && !runtimeDisabled && styles.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Show POS QR"
+                accessibilityState={{ disabled: runtimeDisabled }}>
+                {resolving === 'qr' ? (
+                  <ActivityIndicator size="small" color={COLORS.primaryText} />
+                ) : (
+                  <MaterialIcons name="qr-code-2" size={20} color={COLORS.primaryText} />
+                )}
+                <Text style={styles.runtimeLabel}>Show POS QR</Text>
+              </Pressable>
+              {isDirty ? (
+                <Text style={styles.helperText}>
+                  Save your changes to open this point of sale.
+                </Text>
+              ) : null}
+              {runtimeError ? <Text style={styles.errorText}>{runtimeError}</Text> : null}
+            </View>
 
             {saveError ? <Text style={styles.errorText}>{saveError}</Text> : null}
 
@@ -337,6 +564,18 @@ export default function UpdatePosScreen() {
           />
         </SafeAreaProvider>
       </Modal>
+
+      <PosQrModal
+        visible={qrVisible}
+        runtimeUrl={qrRuntime?.runtimeUrl ?? null}
+        mode={qrRuntime?.mode ?? posMode}
+        onOpen={() => {
+          if (qrRuntime && isShareableCheckoutUrl(qrRuntime.runtimeUrl)) {
+            Linking.openURL(qrRuntime.runtimeUrl);
+          }
+        }}
+        onClose={() => setQrVisible(false)}
+      />
 
       <DeleteAppModal
         visible={deleteVisible}
@@ -461,6 +700,29 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.cardAlt,
   },
   addProductLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.primaryText,
+  },
+  runtimeActions: {
+    marginTop: 28,
+    gap: 12,
+  },
+  runtimeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 52,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: COLORS.cardBorder,
+    backgroundColor: COLORS.cardAlt,
+  },
+  runtimeButtonDisabled: {
+    opacity: 0.4,
+  },
+  runtimeLabel: {
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.primaryText,
