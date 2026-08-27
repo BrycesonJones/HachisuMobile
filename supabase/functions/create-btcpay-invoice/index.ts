@@ -51,6 +51,21 @@ import {
   type InvoiceInputError,
 } from '../_shared/invoice-input.ts';
 
+/**
+ * Service-role client factory.
+ *
+ * Helper signatures must be typed from an ACTUAL construction: a bare
+ * `ReturnType<typeof createClient>` resolves supabase-js's DEFAULT generics
+ * (whose schema is `never`), not the ones inferred at the call site, so every
+ * `.from(...)` inside such a helper collapses to `never` and fails type-check.
+ * Naming the construction keeps the inferred type and changes no behavior.
+ */
+function createAdminClient(url: string, serviceRoleKey: string) {
+  return createClient(url, serviceRoleKey, { auth: { persistSession: false } });
+}
+
+type AdminClient = ReturnType<typeof createAdminClient>;
+
 /** Rails the merchant can choose in the app. Mirrors TransactionCurrencySelection. */
 type RequestedRail = 'onchain' | 'lightning';
 
@@ -172,9 +187,7 @@ Deno.serve(async (req) => {
   if (!amount.ok) return inputError(amount);
 
   // --- 3. Resolve the store + verify ownership ----------------------------
-  const admin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false },
-  });
+  const admin = createAdminClient(supabaseUrl, serviceRoleKey);
 
   const { data: store, error: storeError } = await admin
     .from('merchant_stores')
@@ -502,7 +515,7 @@ const CLAIM_COLUMNS =
   'checkout_link, created_at, expires_at, requested_payment_rails';
 
 async function readClaim(
-  admin: ReturnType<typeof createClient>,
+  admin: AdminClient,
   merchantStoreId: string,
   idempotencyKey: string,
 ): Promise<ClaimRow | null | 'error'> {
@@ -520,7 +533,7 @@ async function readClaim(
 }
 
 async function insertClaim(
-  admin: ReturnType<typeof createClient>,
+  admin: AdminClient,
   row: Record<string, unknown>,
 ): Promise<'ok' | 'duplicate' | 'error'> {
   const { error } = await admin
@@ -536,7 +549,7 @@ async function insertClaim(
 /** Removes an unfulfilled claim so the SAME attempt can be retried after a
  * BTCPay failure. Only ever deletes a row that has no BTCPay invoice attached. */
 async function releaseClaim(
-  admin: ReturnType<typeof createClient>,
+  admin: AdminClient,
   merchantStoreId: string,
   idempotencyKey: string,
 ): Promise<void> {
