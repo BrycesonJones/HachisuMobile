@@ -2566,3 +2566,159 @@ export function sanitizeCheckoutLink(
   if (candidate.username || candidate.password) return null;
   return candidate.toString();
 }
+
+// ---------------------------------------------------------------------------
+// On-chain wallet SEND (fee rate / PSBT creation / broadcast)
+// ---------------------------------------------------------------------------
+//
+// Endpoints + schemas verified against btcpayserver v2.3.9 swagger
+// (swagger.template.stores-wallet.on-chain.json) and the v2.3.9
+// GreenfieldStoreOnChainWalletsController source:
+//
+//   GET  .../wallet/feerate?blockTarget=N      -> { feeRate }   (sat/vB)
+//   POST .../wallet/transactions               -> { psbt } when
+//        signWithSeed=false + proceedWithBroadcast=false (works for
+//        watch-only xpub/descriptor wallets; the hot-wallet policy is only
+//        enforced when server-side signing is requested)
+//   POST .../wallet/transactions/broadcast     -> OnChainWalletTransactionData
+//        (accepts a signed PSBT base64 — BTCPay finalizes it — or raw tx hex)
+//
+// There is NO Greenfield signing endpoint: signing happens exclusively in the
+// merchant's own wallet. This module never sees or wants key material.
+
+/**
+ * Reads the recommended fee rate (sat/vB) for confirming within `blockTarget`
+ * blocks, using BTCPay's own fee source. Throws BtcpayApiError.
+ */
+export async function getOnChainFeeRate(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  blockTarget: number,
+): Promise<number> {
+  const parsed = await callOnChain(
+    config,
+    btcpayStoreId,
+    'GET',
+    '/wallet/feerate',
+    null,
+    `?blockTarget=${Math.max(1, Math.trunc(blockTarget))}`,
+  );
+  const feeRate = (parsed as { feeRate?: unknown })?.feeRate;
+  if (typeof feeRate !== 'number' || !Number.isFinite(feeRate) || feeRate <= 0) {
+    throw new BtcpayApiError(
+      'BTCPay returned an unexpected fee-rate payload.',
+      200,
+      parsed,
+    );
+  }
+  return feeRate;
+}
+
+export interface CreatePsbtRequest {
+  /** Validated on-chain address (never a BIP21 link — keeps payjoin out). */
+  destination: string;
+  /** Amount as a canonical BTC decimal string, e.g. "0.00010000". */
+  amountBtc: string;
+  /** True for a MAX send: BTCPay deducts the network fee from the amount. */
+  subtractFromAmount: boolean;
+  /** Fee rate in sat/vB from getOnChainFeeRate. */
+  feeRateSatPerVb: number;
+}
+
+/**
+ * Asks BTCPay to construct an UNSIGNED PSBT for the store wallet. Nothing is
+ * signed and nothing is broadcast — the returned base64 PSBT is inert until the
+ * merchant signs it in their own wallet. Throws BtcpayApiError (a 400 typically
+ * means the destination or amount was rejected, e.g. insufficient funds).
+ */
+export async function createOnChainTransactionPsbt(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  request: CreatePsbtRequest,
+): Promise<string> {
+  const parsed = await callOnChain(config, btcpayStoreId, 'POST', '/wallet/transactions', {
+    destinations: [
+      {
+        destination: request.destination,
+        amount: request.amountBtc,
+        subtractFromAmount: request.subtractFromAmount,
+      },
+    ],
+    feerate: request.feeRateSatPerVb,
+    // The load-bearing pair: build only, never sign server-side. v2.3.9 rejects
+    // proceedWithBroadcast=true when signWithSeed=false, and rejects
+    // signWithSeed=true for cold wallets ("You cannot send from a cold wallet").
+    signWithSeed: false,
+    proceedWithBroadcast: false,
+    proceedWithPayjoin: false,
+    // Deterministic RBF so the merchant's wallet can fee-bump a stuck send.
+    rbf: true,
+    excludeUnconfirmed: false,
+    noChange: false,
+  });
+  const psbt = (parsed as { psbt?: unknown })?.psbt;
+  if (typeof psbt !== 'string' || !psbt.trim()) {
+    throw new BtcpayApiError(
+      'BTCPay returned an unexpected transaction payload (no PSBT).',
+      200,
+      null, // Don't retain the body — a hex/tx variant could be large.
+    );
+  }
+  return psbt.trim();
+}
+
+export interface BroadcastResult {
+  /** The broadcast transaction id, when BTCPay reported one. */
+  transactionHash: string | null;
+}
+
+/**
+ * Broadcasts a merchant-signed PSBT (base64; BTCPay finalizes it) or a raw
+ * signed transaction hex through the store's node. Throws BtcpayApiError —
+ * a 422 means the payload wasn't a broadcastable transaction (e.g. not fully
+ * signed), and is safe to surface as "not signed yet".
+ */
+export async function broadcastOnChainTransaction(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  transaction: string,
+): Promise<BroadcastResult> {
+  const parsed = await callOnChain(
+    config,
+    btcpayStoreId,
+    'POST',
+    '/wallet/transactions/broadcast',
+    { transaction },
+  );
+  const hash = (parsed as { transactionHash?: unknown })?.transactionHash;
+  return {
+    transactionHash:
+      typeof hash === 'string' && hash.trim() ? hash.trim() : null,
+  };
+}
+
+/**
+ * Looks up one wallet transaction by txid. Returns true when the wallet knows
+ * the transaction (i.e. it was broadcast/seen), false on 404, and throws
+ * BtcpayApiError for anything else — used by broadcast reconciliation to
+ * resolve an uncertain outcome deterministically.
+ */
+export async function onChainWalletTransactionExists(
+  config: BtcpayConfig,
+  btcpayStoreId: string,
+  txid: string,
+): Promise<boolean> {
+  try {
+    await callOnChain(
+      config,
+      btcpayStoreId,
+      'GET',
+      `/wallet/transactions/${encodeURIComponent(txid)}`,
+      null,
+    );
+    return true;
+  } catch (err) {
+    if (err instanceof BtcpayApiError && err.status === 404) return false;
+    throw err;
+  }
+}

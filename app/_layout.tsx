@@ -63,6 +63,16 @@ export default function RootLayout() {
                 animation: 'slide_from_right',
               }}
             />
+            <Stack.Screen
+              name="wallet"
+              options={{
+                // Match the account/payments stacks: a standard slide-from-right
+                // push so the send screens get correct top safe-area insets and
+                // the native swipe-back gesture.
+                headerShown: false,
+                animation: 'slide_from_right',
+              }}
+            />
             <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
           </Stack>
           <StatusBar style="light" />

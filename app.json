@@ -39,7 +39,13 @@
           }
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Hachisu uses the camera to scan Bitcoin QR codes when you send bitcoin."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
