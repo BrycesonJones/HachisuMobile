@@ -16,56 +16,32 @@ import {
   BtcpayConfigError,
   getBtcpayConfig,
   updatePosApp,
-  type PosDefaultView,
 } from '../_shared/btcpay-client.ts';
+import { buildTemplate, PosProductError } from '../_shared/pos-template.ts';
 
 const MAX_TITLE_LENGTH = 100;
-const MAX_PRODUCTS = 250;
 
-const POS_STYLE_TO_VIEW: Record<string, PosDefaultView> = {
-  'product-list': 'Static',
-  'product-list-cart': 'Cart',
-};
+// Hachisu POS modes -> BTCPay defaultView + persisted pos_style. The client
+// submits only a Hachisu-level mode ('products' | 'quick-charge'); raw BTCPay
+// views (Static/Cart/Light/Print) are NEVER accepted from the client. 'products'
+// is Cart (a one-item purchase is a one-item cart — Phase 1); 'quick-charge' is
+// Light (the keypad). Saving a legacy 'product-list' (Static) products app still
+// normalizes it to Cart here.
+const MODE_CONFIG = {
+  products: { defaultView: 'Cart', posStyle: 'product-list-cart' },
+  'quick-charge': { defaultView: 'Light', posStyle: 'quick-charge' },
+} as const;
+type PosMode = keyof typeof MODE_CONFIG;
 
-// Mobile price types -> BTCPay item priceType. 'free' is a Fixed price of 0;
-// 'any' maps to BTCPay's Topup (customer-entered amount).
-const PRICE_TYPE_TO_BTCPAY: Record<string, string> = {
-  fixed: 'Fixed',
-  minimum: 'Minimum',
-  any: 'Topup',
-  free: 'Fixed',
-};
-
-/** Serialize the product menu into BTCPay's POS app template (JSON string). */
-function buildTemplate(products: unknown[]): string {
-  const items = products
-    .slice(0, MAX_PRODUCTS)
-    .map((p) => {
-      const prod = (p ?? {}) as Record<string, unknown>;
-      const priceType = typeof prod.priceType === 'string' ? prod.priceType : 'fixed';
-      const needsPrice = priceType === 'fixed' || priceType === 'minimum';
-      const priceNum = needsPrice ? Number(prod.price) : 0;
-      const item: Record<string, unknown> = {
-        id: String(prod.productId ?? ''),
-        title: String(prod.name ?? ''),
-        price: Number.isFinite(priceNum) ? priceNum : 0,
-        priceType: PRICE_TYPE_TO_BTCPAY[priceType] ?? 'Fixed',
-        disabled: prod.enabled === false,
-      };
-      if (typeof prod.description === 'string' && prod.description.trim()) {
-        item.description = prod.description.trim();
-      }
-      if (typeof prod.category === 'string' && prod.category.trim()) {
-        item.categories = [prod.category.trim()];
-      }
-      const inv = typeof prod.inventory === 'string' ? prod.inventory.trim() : '';
-      if (inv && /^\d+$/.test(inv)) item.inventory = Number(inv);
-      return item;
-    })
-    .filter((it) => it.id && it.title);
-
-  return JSON.stringify(items);
+/** The app's current mode as stored. Unknown/legacy values read as 'products' —
+ * never as quick-charge, which would silently change how the POS charges. */
+function modeFromStyle(style: string): PosMode {
+  return style === 'quick-charge' ? 'quick-charge' : 'products';
 }
+
+// The template serializer lives in ../_shared/pos-template.ts — it is shared
+// with update-btcpay-pos-mode, which must resend the full template on a
+// mode-only change because Greenfield's PUT is a full replace.
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -100,7 +76,7 @@ Deno.serve(async (req) => {
   let body: {
     posAppId?: unknown;
     displayTitle?: unknown;
-    posStyle?: unknown;
+    posMode?: unknown;
     currency?: unknown;
     description?: unknown;
     products?: unknown;
@@ -128,10 +104,6 @@ Deno.serve(async (req) => {
     );
   }
 
-  const posStyle =
-    typeof body.posStyle === 'string' && body.posStyle in POS_STYLE_TO_VIEW
-      ? body.posStyle
-      : 'product-list';
   const currency =
     typeof body.currency === 'string' && body.currency.trim()
       ? body.currency.trim().toUpperCase()
@@ -149,9 +121,9 @@ Deno.serve(async (req) => {
   // Verify ownership.
   const { data: app, error: appError } = await admin
     .from('merchant_pos_apps')
-    .select('id, user_id, btcpay_app_id')
+    .select('id, user_id, btcpay_app_id, pos_style')
     .eq('id', posAppId)
-    .maybeSingle<{ id: string; user_id: string; btcpay_app_id: string }>();
+    .maybeSingle<{ id: string; user_id: string; btcpay_app_id: string; pos_style: string }>();
   if (appError) {
     return jsonResponse({ error: 'Could not load the POS app.' }, 500);
   }
@@ -159,16 +131,39 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'POS app not found.' }, 404);
   }
 
+  // Only the two Hachisu modes are accepted. An absent/unrecognized posMode
+  // (e.g. an older client build) PRESERVES the app's current mode rather than
+  // silently flipping a Quick Charge app back to Cart.
+  const posMode: PosMode =
+    body.posMode === 'products' || body.posMode === 'quick-charge'
+      ? body.posMode
+      : modeFromStyle(app.pos_style);
+  const { defaultView, posStyle } = MODE_CONFIG[posMode];
+
+  // Serialize the menu first: an invalid product rejects the whole save (400)
+  // before anything is written to BTCPay or Supabase.
+  let template: string;
+  try {
+    template = buildTemplate(products);
+  } catch (err) {
+    if (err instanceof PosProductError) {
+      return jsonResponse({ error: err.message }, 400);
+    }
+    throw err;
+  }
+
   // Push to BTCPay (best-effort — products still persist to Supabase on failure).
   let btcpayWarning: string | null = null;
   try {
     const config = getBtcpayConfig();
+    // The template is pushed in BOTH modes so switching to Quick Charge never
+    // discards the product catalog — BTCPay keeps items independent of the view.
     await updatePosApp(config, app.btcpay_app_id, {
       title: displayTitle,
       currency,
-      defaultView: POS_STYLE_TO_VIEW[posStyle],
+      defaultView,
       description: description ?? '',
-      template: buildTemplate(products),
+      template,
     });
   } catch (err) {
     if (err instanceof BtcpayApiError) {
