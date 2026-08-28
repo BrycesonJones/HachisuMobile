@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { DASHBOARD_COLORS } from '@/constants/dashboard-colors';
+import { LIGHTNING_BETA_LABEL, LIGHTNING_ENABLED } from '@/constants/feature-flags';
 import { HachisuColors } from '@/constants/hachisu-colors';
 import { useActiveStore } from '@/contexts/active-store-context';
 import type { MerchantStore } from '@/types/merchant-store';
@@ -126,16 +127,33 @@ export function WalletIndicator() {
           <Text style={styles.subRowLabel}>Settings</Text>
         </Pressable>
       ) : null}
-      <WalletRow name="Lightning" state={lightningState} onPress={onLightningPress} />
-      {lightningConfigured && expanded === 'lightning' ? (
-        <Pressable
-          onPress={openLightningSettings}
-          style={({ pressed }) => [styles.subRow, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Lightning settings">
-          <Text style={styles.subRowLabel}>Settings</Text>
-        </Pressable>
-      ) : null}
+      {LIGHTNING_ENABLED ? (
+        <>
+          <WalletRow name="Lightning" state={lightningState} onPress={onLightningPress} />
+          {lightningConfigured && expanded === 'lightning' ? (
+            <Pressable
+              onPress={openLightningSettings}
+              style={({ pressed }) => [styles.subRow, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Lightning settings">
+              <Text style={styles.subRowLabel}>Settings</Text>
+            </Pressable>
+          ) : null}
+        </>
+      ) : (
+        // Gated: Lightning stays visible so merchants know it's planned, but the
+        // row is inert — muted, not tappable, and it never opens setup/settings
+        // regardless of the store's underlying lightning_status.
+        <View
+          style={styles.row}
+          accessible
+          accessibilityLabel={`${LIGHTNING_BETA_LABEL}. Coming soon.`}
+          accessibilityState={{ disabled: true }}>
+          <View style={[styles.dot, { backgroundColor: STATE_COLOR.inactive }]} />
+          <Text style={[styles.rowLabel, styles.rowLabelMuted]}>{LIGHTNING_BETA_LABEL}</Text>
+          <Text style={styles.comingSoon}>Coming soon</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -192,6 +210,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     color: DASHBOARD_COLORS.primaryText,
+  },
+  rowLabelMuted: {
+    color: DASHBOARD_COLORS.secondaryText,
+  },
+  comingSoon: {
+    fontSize: 12,
+    color: DASHBOARD_COLORS.secondaryText,
   },
   // Indented dropdown action under the connected Bitcoin row.
   subRow: {

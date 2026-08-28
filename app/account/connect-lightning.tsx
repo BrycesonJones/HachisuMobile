@@ -12,7 +12,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { LightningComingSoonScreen } from '@/components/lightning/lightning-coming-soon';
 import { COLORS } from '@/constants/colors';
+import { LIGHTNING_ENABLED } from '@/constants/feature-flags';
 import { useActiveStore } from '@/contexts/active-store-context';
 import { prepareBoltzLightning } from '@/lib/btcpay/lightning';
 
@@ -29,7 +31,15 @@ type Phase =
   | { kind: 'blocked' } // Server-side Boltz/Lightning setup not finished yet.
   | { kind: 'error'; message: string };
 
-export default function ConnectLightningScreen() {
+// Route wrapper: while the Lightning product gate is off, this screen (and the
+// Boltz prepare call it fires on mount) is unreachable — a placeholder renders
+// instead. The real screen below is untouched for when the gate flips back on.
+export default function ConnectLightningRoute() {
+  if (!LIGHTNING_ENABLED) return <LightningComingSoonScreen />;
+  return <ConnectLightningScreen />;
+}
+
+function ConnectLightningScreen() {
   const router = useRouter();
   const { activeMerchantStoreId, refetch } = useActiveStore();
   const params = useLocalSearchParams<{ storeId?: string; storeName?: string; mode?: string }>();

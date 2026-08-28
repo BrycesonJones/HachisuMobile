@@ -4,9 +4,18 @@ import { Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/auth/back-button';
+import { LightningComingSoonScreen } from '@/components/lightning/lightning-coming-soon';
 import { COLORS } from '@/constants/colors';
+import { LIGHTNING_ENABLED } from '@/constants/feature-flags';
 
-export default function ImportLbtcWalletScreen() {
+// Route wrapper: while the Lightning product gate is off, the L-BTC wallet
+// import flow is unreachable — a placeholder renders instead.
+export default function ImportLbtcWalletRoute() {
+  if (!LIGHTNING_ENABLED) return <LightningComingSoonScreen />;
+  return <ImportLbtcWalletScreen />;
+}
+
+function ImportLbtcWalletScreen() {
   const router = useRouter();
   const { storeId, storeName, mode } = useLocalSearchParams<{
     storeId?: string;

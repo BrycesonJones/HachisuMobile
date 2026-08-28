@@ -30,6 +30,10 @@ import {
 import { generatePayButtonOrderId } from '@/components/payments/pay-button/order-id';
 import { PayButtonPreview } from '@/components/payments/pay-button/pay-button-preview';
 import { COLORS } from '@/constants/colors';
+import {
+  LIGHTNING_BETA_COMING_SOON_LABEL,
+  LIGHTNING_ENABLED,
+} from '@/constants/feature-flags';
 import { HachisuColors } from '@/constants/hachisu-colors';
 import { DEFAULT_CURRENCY } from '@/constants/currencies';
 import { useActiveStore } from '@/contexts/active-store-context';
@@ -124,7 +128,10 @@ export default function PayButtonScreen() {
     buttonType === 'fixed' ? !priceError : !minError && !maxError && !stepError;
   const canGenerate = enabled && !generating && currency.length > 0 && amountValid;
 
-  const lnurlAvailable = !!output?.lightningAvailable && !!output?.lnurl;
+  // While the Lightning product gate is off, LNURL is never offered — even for a
+  // store whose backend already has Lightning connected. The tab stays visible
+  // but muted and inert.
+  const lnurlAvailable = LIGHTNING_ENABLED && !!output?.lightningAvailable && !!output?.lnurl;
 
   // Fetch the authoritative Pay Button status from the backend. `showLoading`
   // toggles the big status spinner (used on first load / store switch); after an
@@ -619,14 +626,18 @@ export default function PayButtonScreen() {
                       accessibilityRole="tab"
                       accessibilityState={{ selected: altTab === 'lnurl', disabled: !lnurlAvailable }}>
                       <Text style={[styles.tabText, altTab === 'lnurl' && styles.tabTextActive]}>
-                        LNURL
+                        {LIGHTNING_ENABLED ? 'LNURL' : 'LNURL · Beta'}
                       </Text>
                     </Pressable>
                   </View>
 
                   {altTab === 'lnurl' && !lnurlAvailable ? (
                     <View style={styles.altCard}>
-                      <Text style={styles.codeText}>Connect Lightning to use LNURL.</Text>
+                      <Text style={styles.codeText}>
+                        {LIGHTNING_ENABLED
+                          ? 'Connect Lightning to use LNURL.'
+                          : LIGHTNING_BETA_COMING_SOON_LABEL}
+                      </Text>
                     </View>
                   ) : (
                     (() => {

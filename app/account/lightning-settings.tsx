@@ -18,7 +18,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/auth/back-button';
+import { LightningComingSoonScreen } from '@/components/lightning/lightning-coming-soon';
 import { COLORS } from '@/constants/colors';
+import { LIGHTNING_ENABLED } from '@/constants/feature-flags';
 import { useActiveStore } from '@/contexts/active-store-context';
 import {
   getLightningSettings,
@@ -33,7 +35,15 @@ const ERROR_COLOR = '#F87171';
 // Intentionally NOT a BTCPay admin clone: only Enabled, Description template,
 // Save, Change connection, Remove connection — no LNURL, hop hints, sats display,
 // unified QR, public node info, or node internals.
-export default function LightningSettingsScreen() {
+// Route wrapper: while the Lightning product gate is off, this screen (and the
+// get-lightning-settings call it fires on mount) is unreachable — a placeholder
+// renders instead. The real screen below is untouched for re-enablement.
+export default function LightningSettingsRoute() {
+  if (!LIGHTNING_ENABLED) return <LightningComingSoonScreen />;
+  return <LightningSettingsScreen />;
+}
+
+function LightningSettingsScreen() {
   const router = useRouter();
   const { refetch: refetchStores } = useActiveStore();
   const { storeId, storeName } = useLocalSearchParams<{

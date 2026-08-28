@@ -29,6 +29,7 @@ import {
 import { generatePaymentRequestReferenceId } from '@/components/payments/requests/reference-id';
 import { ToggleRow } from '@/components/payments/requests/toggle-row';
 import { COLORS } from '@/constants/colors';
+import { LIGHTNING_ENABLED } from '@/constants/feature-flags';
 import { HachisuColors } from '@/constants/hachisu-colors';
 import { DEFAULT_CURRENCY } from '@/constants/currencies';
 import { useActiveStore } from '@/contexts/active-store-context';
@@ -361,7 +362,8 @@ export default function CreatePaymentRequestScreen() {
                 {submitErrorCode === 'NO_PAYMENT_METHOD_AVAILABLE' ? (
                   <Text style={styles.errorHint}>
                     BTCPay decides which payment methods a store can offer.
-                    Connect a Bitcoin wallet (or set up Lightning) in Account
+                    Connect a Bitcoin wallet
+                    {LIGHTNING_ENABLED ? ' (or set up Lightning)' : ''} in Account
                     settings, then try again.
                   </Text>
                 ) : null}

@@ -2,6 +2,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { COLORS } from '@/constants/colors';
+import { LIGHTNING_ENABLED } from '@/constants/feature-flags';
 import { HachisuColors } from '@/constants/hachisu-colors';
 
 export type TransactionCurrencyKey = 'lightning' | 'onchain';
@@ -16,9 +17,22 @@ interface SupportedPaymentMethodsProps {
   onToggle: (key: TransactionCurrencyKey) => void;
 }
 
-const METHODS: readonly { key: TransactionCurrencyKey; label: string }[] = [
-  { key: 'onchain', label: 'Bitcoin On-chain' },
-  { key: 'lightning', label: 'Bitcoin Lightning' },
+// While the Lightning product gate is off, the Lightning row stays visible but
+// is muted and inert — it can't be checked, so Lightning can't be requested as
+// an invoice payment method.
+const METHODS: readonly {
+  key: TransactionCurrencyKey;
+  label: string;
+  gated: boolean;
+  gatedSublabel?: string;
+}[] = [
+  { key: 'onchain', label: 'Bitcoin On-chain', gated: false },
+  {
+    key: 'lightning',
+    label: LIGHTNING_ENABLED ? 'Bitcoin Lightning' : 'Bitcoin Lightning · Beta',
+    gated: !LIGHTNING_ENABLED,
+    gatedSublabel: 'Coming soon',
+  },
 ];
 
 /**
@@ -39,7 +53,9 @@ export function SupportedPaymentMethods({
             {index > 0 ? <View style={styles.divider} /> : null}
             <CheckboxRow
               label={method.label}
-              checked={selection[method.key]}
+              sublabel={method.gated ? method.gatedSublabel : undefined}
+              checked={!method.gated && selection[method.key]}
+              disabled={method.gated}
               onToggle={() => onToggle(method.key)}
             />
           </View>
@@ -56,24 +72,35 @@ export function SupportedPaymentMethods({
 
 interface CheckboxRowProps {
   label: string;
+  sublabel?: string;
   checked: boolean;
+  disabled?: boolean;
   onToggle: () => void;
 }
 
-function CheckboxRow({ label, checked, onToggle }: CheckboxRowProps) {
+function CheckboxRow({ label, sublabel, checked, disabled, onToggle }: CheckboxRowProps) {
   return (
     <Pressable
-      onPress={onToggle}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+      onPress={disabled ? undefined : onToggle}
+      disabled={disabled}
+      style={({ pressed }) => [styles.row, pressed && !disabled && styles.pressed]}
       accessibilityRole="checkbox"
-      accessibilityState={{ checked }}
-      accessibilityLabel={label}>
-      <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+      accessibilityState={{ checked, disabled: !!disabled }}
+      accessibilityLabel={sublabel ? `${label}. ${sublabel}.` : label}>
+      <View
+        style={[
+          styles.checkbox,
+          checked && styles.checkboxChecked,
+          disabled && styles.checkboxDisabled,
+        ]}>
         {checked ? (
           <MaterialIcons name="check" size={16} color={HachisuColors.black} />
         ) : null}
       </View>
-      <Text style={styles.rowLabel}>{label}</Text>
+      <View style={styles.rowText}>
+        <Text style={[styles.rowLabel, disabled && styles.rowLabelDisabled]}>{label}</Text>
+        {sublabel ? <Text style={styles.rowSublabel}>{sublabel}</Text> : null}
+      </View>
     </Pressable>
   );
 }
@@ -108,10 +135,23 @@ const styles = StyleSheet.create({
     backgroundColor: HachisuColors.cream,
     borderColor: HachisuColors.cream,
   },
-  rowLabel: {
+  checkboxDisabled: {
+    opacity: 0.4,
+  },
+  rowText: {
     flex: 1,
+  },
+  rowLabel: {
     fontSize: 16,
     color: COLORS.primaryText,
+  },
+  rowLabelDisabled: {
+    color: COLORS.mutedText,
+  },
+  rowSublabel: {
+    marginTop: 2,
+    fontSize: 12,
+    color: COLORS.mutedText,
   },
   divider: {
     height: StyleSheet.hairlineWidth,

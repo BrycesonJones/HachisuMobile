@@ -28,6 +28,7 @@ import {
   isValidEmail,
 } from '@/components/payments/invoices/create/validation';
 import { COLORS } from '@/constants/colors';
+import { LIGHTNING_ENABLED } from '@/constants/feature-flags';
 import { HachisuColors } from '@/constants/hachisu-colors';
 import { DEFAULT_CURRENCY } from '@/constants/currencies';
 import { useActiveStore } from '@/contexts/active-store-context';
@@ -53,8 +54,10 @@ export default function CreateInvoiceScreen() {
   const [orderId, setOrderId] = useState(generateInvoiceOrderId);
   const [itemDescription, setItemDescription] = useState('');
   const [buyerEmail, setBuyerEmail] = useState('');
+  // Lightning defaults on only when the product gate is open; while gated it can
+  // never be selected (the selector row is inert and the toggle below ignores it).
   const [transactionCurrencies, setTransactionCurrencies] =
-    useState<TransactionCurrencySelection>({ lightning: true, onchain: true });
+    useState<TransactionCurrencySelection>({ lightning: LIGHTNING_ENABLED, onchain: true });
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -68,6 +71,7 @@ export default function CreateInvoiceScreen() {
   const idempotencyKeyRef = useRef<string | null>(null);
 
   function toggleTransactionCurrency(key: TransactionCurrencyKey) {
+    if (key === 'lightning' && !LIGHTNING_ENABLED) return;
     setTransactionCurrencies((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
@@ -118,7 +122,9 @@ export default function CreateInvoiceScreen() {
 
     const rails: InvoicePaymentRail[] = [];
     if (transactionCurrencies.onchain) rails.push('onchain');
-    if (transactionCurrencies.lightning) rails.push('lightning');
+    // Gate check here too: even if state were ever wrong, a gated build must
+    // never request the lightning rail from the backend.
+    if (LIGHTNING_ENABLED && transactionCurrencies.lightning) rails.push('lightning');
 
     setSubmitting(true);
     setSubmitError(null);
@@ -317,8 +323,9 @@ export default function CreateInvoiceScreen() {
                 {submitErrorCode === 'NO_PAYMENT_METHOD_AVAILABLE' ? (
                   <Text style={styles.errorHint}>
                     BTCPay decides which payment methods a store can offer. Connect
-                    a Bitcoin wallet (or set up Lightning) in Account settings,
-                    then try again.
+                    a Bitcoin wallet
+                    {LIGHTNING_ENABLED ? ' (or set up Lightning)' : ''} in Account
+                    settings, then try again.
                   </Text>
                 ) : null}
                 {createdInvoiceId ? (

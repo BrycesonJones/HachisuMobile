@@ -15,11 +15,21 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/auth/back-button';
+import { LightningComingSoonScreen } from '@/components/lightning/lightning-coming-soon';
 import { COLORS } from '@/constants/colors';
+import { LIGHTNING_ENABLED } from '@/constants/feature-flags';
 import { useActiveStore } from '@/contexts/active-store-context';
 import { connectLbtcWallet } from '@/lib/btcpay/lightning';
 
-export default function ImportCoreDescriptorScreen() {
+// Route wrapper: while the Lightning product gate is off, the L-BTC descriptor
+// import (which connects the Lightning wallet) is unreachable — a placeholder
+// renders instead.
+export default function ImportCoreDescriptorRoute() {
+  if (!LIGHTNING_ENABLED) return <LightningComingSoonScreen />;
+  return <ImportCoreDescriptorScreen />;
+}
+
+function ImportCoreDescriptorScreen() {
   const router = useRouter();
   const { activeMerchantStoreId, refetch } = useActiveStore();
   const params = useLocalSearchParams<{ storeId?: string; storeName?: string; mode?: string }>();
