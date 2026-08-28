@@ -9,8 +9,8 @@ import type { AccountType } from '@/types/user-profile';
 
 export type ProfileMenuItemId =
   | 'profile'
-  | 'documents'
-  | 'api-keys';
+  | 'app-notifications'
+  | 'documents';
 
 interface ProfileMenuItem {
   id: ProfileMenuItemId;
@@ -29,8 +29,8 @@ function buildMenuItems(
 
   return [
     profileItem,
+    { id: 'app-notifications', label: 'App Notifications', icon: 'notifications-none' },
     { id: 'documents', label: 'Documents', icon: 'description' },
-    { id: 'api-keys', label: 'API Keys', icon: 'vpn-key' },
   ];
 }
 

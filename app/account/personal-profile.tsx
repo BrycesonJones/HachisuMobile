@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
-import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { COLORS } from '@/constants/colors';
@@ -30,8 +30,9 @@ export default function PersonalProfileScreen() {
     router.push('/account/edit-name-address' as never);
   }
 
+  // UI-only for now: no deletion flow exists yet (matches Business information).
   function handleCloseAccount() {
-    // TODO: wire to real close-account confirmation flow.
+    Alert.alert('Close Account', 'Account closure is not available yet.');
   }
 
   return (
@@ -82,8 +83,8 @@ export default function PersonalProfileScreen() {
             onPress={handleCloseAccount}
             style={({ pressed }) => [styles.closeAccountButton, pressed && styles.pressed]}
             accessibilityRole="button"
-            accessibilityLabel="Close account">
-            <Text style={styles.closeAccountText}>Close account</Text>
+            accessibilityLabel="Close Account">
+            <Text style={styles.closeAccountText}>Close Account</Text>
           </Pressable>
         </View>
       </View>

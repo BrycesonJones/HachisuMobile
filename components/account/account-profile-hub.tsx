@@ -20,10 +20,10 @@ function resolveRoute(id: ProfileMenuItemId, accountType: AccountType | null): s
       return accountType === 'business'
         ? '/account/business-profile'
         : '/account/personal-profile';
+    case 'app-notifications':
+      return '/account/app-notifications';
     case 'documents':
       return '/account/documents';
-    case 'api-keys':
-      return '/account/api-keys';
   }
 }
 
