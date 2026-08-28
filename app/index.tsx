@@ -6,7 +6,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/auth-context';
 import { COLORS } from '@/constants/colors';
 import { HachisuColors } from '@/constants/hachisu-colors';
-import { hasOnboardingDraft } from '@/lib/auth/onboarding-draft';
 import { resolvePostAuthRoute } from '@/lib/auth/onboarding-routing';
 
 export default function LandingScreen() {
@@ -15,12 +14,6 @@ export default function LandingScreen() {
 
   useEffect(() => {
     if (isLoading || !isAuthenticated) return;
-    // Sign-up verifies the email last and then commits the answers it collected
-    // beforehand. The session exists for the whole of that write, so redirecting
-    // here would pull the user off the confirmation screen mid-commit — hiding a
-    // failure and stranding them with the commit still pending. That screen
-    // routes itself once the commit succeeds (and clears the draft).
-    if (hasOnboardingDraft()) return;
     router.replace(resolvePostAuthRoute(profile));
   }, [isAuthenticated, isLoading, profile, router]);
 
