@@ -48,6 +48,12 @@ export function upsertActivityItem(merchantStoreId: string, item: ActivityItem):
   cache.set(keyFor(merchantStoreId, item.btcpayInvoiceId), item);
 }
 
+/** Drops every cached record for every store. Used when the account itself is
+ * deleted, so no invoice can outlive its owner within this app session. */
+export function clearAllActivityCache(): void {
+  cache.clear();
+}
+
 /** Drops every cached record for a store. Used when a store's data is known to
  * have changed, so a stale invoice can never be shown as current. */
 export function clearStoreActivityCache(merchantStoreId: string): void {

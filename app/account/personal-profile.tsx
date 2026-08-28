@@ -1,15 +1,17 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
-import { Alert, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { COLORS } from '@/constants/colors';
 import { useAuth } from '@/contexts/auth-context';
 import { formatPhoneDisplay } from '@/contexts/profile-extras-context';
+import { useCloseAccount } from '@/hooks/use-close-account';
 
 export default function PersonalProfileScreen() {
   const router = useRouter();
   const { profile, user } = useAuth();
+  const { isClosingAccount, confirmCloseAccount } = useCloseAccount();
 
   const email = profile?.email?.trim() || user?.email?.trim() || '';
   const formattedPhone = profile?.phone ? formatPhoneDisplay(profile.phone) : '';
@@ -28,11 +30,6 @@ export default function PersonalProfileScreen() {
 
   function handleEditNameAddress() {
     router.push('/account/edit-name-address' as never);
-  }
-
-  // UI-only for now: no deletion flow exists yet (matches Business information).
-  function handleCloseAccount() {
-    Alert.alert('Close Account', 'Account closure is not available yet.');
   }
 
   return (
@@ -80,11 +77,17 @@ export default function PersonalProfileScreen() {
 
         <View style={styles.closeAccountWrapper}>
           <Pressable
-            onPress={handleCloseAccount}
+            onPress={confirmCloseAccount}
+            disabled={isClosingAccount}
             style={({ pressed }) => [styles.closeAccountButton, pressed && styles.pressed]}
             accessibilityRole="button"
-            accessibilityLabel="Close Account">
-            <Text style={styles.closeAccountText}>Close Account</Text>
+            accessibilityLabel="Close Account"
+            accessibilityState={{ disabled: isClosingAccount, busy: isClosingAccount }}>
+            {isClosingAccount ? (
+              <ActivityIndicator size="small" color={COLORS.primaryText} />
+            ) : (
+              <Text style={styles.closeAccountText}>Close Account</Text>
+            )}
           </Pressable>
         </View>
       </View>

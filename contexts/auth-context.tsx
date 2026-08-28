@@ -1,7 +1,9 @@
 import type { Session, User } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
+import { clearLocalAccountData } from '@/lib/auth/account-cleanup';
 import {
+  deleteAccount as authDeleteAccount,
   fetchUserProfile,
   signOut as authSignOut,
 } from '@/lib/auth/auth-service';
@@ -11,6 +13,7 @@ import {
   clearDevAuth,
   getDevSession,
 } from '@/lib/auth/dev-session';
+import { clearDevStores } from '@/lib/btcpay/dev-stores';
 import { supabase } from '@/lib/supabase';
 import type { AccountType, OnboardingStatus, UserProfile } from '@/types/user-profile';
 
@@ -22,6 +25,13 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isDevSession: boolean;
   signOut: () => Promise<void>;
+  /**
+   * Permanently deletes the account server-side, then clears every piece of
+   * local session/user state. On error the session is left fully intact so the
+   * user can retry; local state is only discarded after the server confirms
+   * the deletion.
+   */
+  closeAccount: () => Promise<{ error: string | null }>;
   devSignIn: (
     email: string,
     accountType: AccountType,
@@ -159,6 +169,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(null);
   }, [isDevSession]);
 
+  const closeAccount = useCallback(async (): Promise<{ error: string | null }> => {
+    if (isDevSession) {
+      // Dev bypass has no real Supabase account: simulate by tearing down the
+      // in-memory dev session, dev stores, and any persisted local data.
+      clearDevAuth();
+      clearDevStores();
+      await clearLocalAccountData();
+      setDevSession(null);
+      setProfile(null);
+      return { error: null };
+    }
+
+    const { error } = await authDeleteAccount();
+    if (error) {
+      // The account was NOT deleted — keep the session and all local state.
+      return { error: error.message };
+    }
+
+    // The server confirmed the account is gone. Drop the (now dead) session
+    // locally; the sign-out endpoint may reject the deleted user's token, which
+    // is fine — the storage purge below removes any session it left behind.
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      // Ignored: cleanup below is the guarantee.
+    }
+    await clearLocalAccountData();
+    setSupabaseSession(null);
+    setProfile(null);
+    return { error: null };
+  }, [isDevSession]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
@@ -168,6 +210,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated,
       isDevSession,
       signOut,
+      closeAccount,
       devSignIn,
       refreshProfile,
     }),
@@ -178,6 +221,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated,
       isDevSession,
       signOut,
+      closeAccount,
       devSignIn,
       refreshProfile,
     ],

@@ -9,6 +9,7 @@ import {
   updateDevProfile,
   type DevProfileUpdates,
 } from '@/lib/auth/dev-session';
+import { readFunctionError } from '@/lib/btcpay/function-error';
 import { createMerchantStore } from '@/lib/btcpay/stores';
 import { supabase } from '@/lib/supabase';
 import type { AccountType, OnboardingStatus, UserProfile } from '@/types/user-profile';
@@ -102,6 +103,32 @@ export async function verifyEmailOtp(
     return { error: toAuthError(error) };
   }
 
+  return { error: null };
+}
+
+/**
+ * Permanently deletes the authenticated user's account via the delete-account
+ * Edge Function. The server derives the target account from the verified JWT;
+ * no user id is (or can be) supplied by the client. On error the account and
+ * the local session are both still intact — the caller must NOT clear state.
+ */
+export async function deleteAccount(): Promise<{ error: AuthError | null }> {
+  const { data, error } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>(
+    'delete-account',
+    { method: 'POST', body: {} },
+  );
+
+  authLog('deleteAccount:result', { ok: !error && data?.ok === true, message: error?.message });
+
+  if (error) {
+    const detail = await readFunctionError(error);
+    return { error: { message: detail ?? 'Could not close your account. Please try again.' } };
+  }
+  if (data?.ok !== true) {
+    return {
+      error: { message: data?.error ?? 'Could not close your account. Please try again.' },
+    };
+  }
   return { error: null };
 }
 

@@ -21,6 +21,12 @@ export function upsertPaymentRequest(
   cache.set(keyFor(merchantStoreId, paymentRequest.btcpayPaymentRequestId), paymentRequest);
 }
 
+/** Drops every cached record for every store. Used when the account itself is
+ * deleted, so no payment request can outlive its owner within this app session. */
+export function clearAllPaymentRequestCache(): void {
+  cache.clear();
+}
+
 /** Reads a cached record, or undefined on a miss (never throws). */
 export function getCachedPaymentRequest(
   merchantStoreId: string,

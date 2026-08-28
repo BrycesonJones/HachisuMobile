@@ -1,23 +1,20 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
-import { Alert, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { COLORS } from '@/constants/colors';
 import { useAuth } from '@/contexts/auth-context';
+import { useCloseAccount } from '@/hooks/use-close-account';
 
 export default function BusinessProfileScreen() {
   const router = useRouter();
   const { profile, user } = useAuth();
+  const { isClosingAccount, confirmCloseAccount } = useCloseAccount();
 
   // Opens the single-field editor; `field` picks which user_profiles column.
   function handleEdit(field: string) {
     router.push({ pathname: '/account/edit-business-field', params: { field } });
-  }
-
-  // UI-only for now: no deletion flow exists yet, so stay honest about it.
-  function handleCloseAccount() {
-    Alert.alert('Close Account', 'Account closure is not available yet.');
   }
 
   const email = profile?.email?.trim() || user?.email?.trim() || '';
@@ -98,11 +95,17 @@ export default function BusinessProfileScreen() {
 
         <View style={styles.closeAccountWrapper}>
           <Pressable
-            onPress={handleCloseAccount}
+            onPress={confirmCloseAccount}
+            disabled={isClosingAccount}
             style={({ pressed }) => [styles.closeAccountButton, pressed && styles.pressed]}
             accessibilityRole="button"
-            accessibilityLabel="Close Account">
-            <Text style={styles.closeAccountText}>Close Account</Text>
+            accessibilityLabel="Close Account"
+            accessibilityState={{ disabled: isClosingAccount, busy: isClosingAccount }}>
+            {isClosingAccount ? (
+              <ActivityIndicator size="small" color={COLORS.primaryText} />
+            ) : (
+              <Text style={styles.closeAccountText}>Close Account</Text>
+            )}
           </Pressable>
         </View>
       </View>
