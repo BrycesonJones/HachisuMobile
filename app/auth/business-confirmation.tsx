@@ -19,7 +19,7 @@ const CODE_LENGTH = 6;
 
 export default function BusinessEmailConfirmationScreen() {
   const router = useRouter();
-  const { devSignIn, refreshProfile } = useAuth();
+  const { devSignIn, isAuthenticated, profile: sessionProfile, refreshProfile } = useAuth();
   const { email, accountType } = useLocalSearchParams<{ email?: string; accountType?: string }>();
   const [code, setCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -35,6 +35,14 @@ export default function BusinessEmailConfirmationScreen() {
 
     setIsLoading(true);
     setErrorMessage(null);
+
+    // A previous attempt already verified this code and signed the user in, but
+    // failed while committing their answers. The code is single-use, so retry the
+    // commit rather than the verification — which would now fail as expired.
+    if (isAuthenticated) {
+      await finishSignUp(sessionProfile);
+      return;
+    }
 
     if (isAuthDevBypassEnabled) {
       console.warn(`[auth] Dev bypass: accepting code for ${email}`);
@@ -63,6 +71,15 @@ export default function BusinessEmailConfirmationScreen() {
       return;
     }
 
+    await finishSignUp(profile);
+  }
+
+  /**
+   * Writes the answers collected before this screen to the now-authenticated
+   * user, then routes from the resulting profile — the completed business flow
+   * lands on the dashboard, anything less resumes where it left off.
+   */
+  async function finishSignUp(profile: UserProfile | null) {
     // Signing in to an account that already finished onboarding: send them on
     // rather than through sign-up again, and never overwrite their profile with
     // answers collected in this session.
@@ -74,15 +91,6 @@ export default function BusinessEmailConfirmationScreen() {
       return;
     }
 
-    await finishSignUp(profile);
-  }
-
-  /**
-   * Writes the answers collected before this screen to the now-authenticated
-   * user, then routes from the resulting profile — the completed business flow
-   * lands on the dashboard, anything less resumes where it left off.
-   */
-  async function finishSignUp(profile: UserProfile | null) {
     const { profile: applied, error: applyError } = await applyOnboardingDraft();
 
     if (applyError) {
