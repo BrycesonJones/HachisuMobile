@@ -42,7 +42,12 @@ export default function PushNotificationScreen() {
   return (
     <ScreenContainer style={styles.container}>
       <View style={styles.header}>
-        <BackButton />
+        <BackButton
+          fallback={{
+            pathname: '/auth/choose-username',
+            params: isPersonalFlow ? { flow: 'personal' } : {},
+          }}
+        />
         <View style={styles.progressArea}>
           <ProgressIndicator
             totalSteps={

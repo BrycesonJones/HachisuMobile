@@ -74,7 +74,7 @@ export default function ChooseUsernameScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <CloseButton />
+            <CloseButton fallback="/auth/choose-account-type" />
             <View style={styles.progressArea}>
               <ProgressIndicator
                 totalSteps={

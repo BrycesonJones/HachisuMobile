@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -7,6 +7,8 @@ import { COLORS } from '@/constants/colors';
 
 interface CloseButtonProps {
   onPress?: () => void;
+  /** Where to go when the screen has no history behind it. See BackButton. */
+  fallback?: Href;
   /** Spoken description of what closing does. The icon alone is not a description,
    * so screens that close to a specific destination should say so. */
   accessibilityLabel?: string;
@@ -22,7 +24,11 @@ const CIRCLE = 40;
  * actually happen — it must never latch permanently disabled. */
 const REPEAT_GUARD_MS = 700;
 
-export function CloseButton({ onPress, accessibilityLabel = 'Close' }: CloseButtonProps) {
+export function CloseButton({
+  onPress,
+  fallback,
+  accessibilityLabel = 'Close',
+}: CloseButtonProps) {
   const router = useRouter();
   const lockedRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -46,8 +52,14 @@ export function CloseButton({ onPress, accessibilityLabel = 'Close' }: CloseButt
       onPress();
       return;
     }
-    router.back();
-  }, [onPress, router]);
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    if (fallback) {
+      router.replace(fallback);
+    }
+  }, [fallback, onPress, router]);
 
   return (
     <Pressable

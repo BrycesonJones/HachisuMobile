@@ -31,7 +31,11 @@ export default function VerifyBusinessScreen() {
 
   return (
     <ScreenContainer style={styles.container}>
-      <AuthProgressHeader variant="close" showProgress={false} />
+      <AuthProgressHeader
+        variant="close"
+        showProgress={false}
+        fallback="/auth/push-notifications"
+      />
 
       <AuthTitleBlock
         title="Verify your business"
