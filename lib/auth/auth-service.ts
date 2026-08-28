@@ -6,6 +6,13 @@ import {
   updateDevProfile,
   type DevProfileUpdates,
 } from '@/lib/auth/dev-session';
+import {
+  clearOnboardingDraft,
+  doesDraftCompleteOnboarding,
+  getOnboardingDraft,
+  hasOnboardingDraft,
+  stageOnboardingProfile,
+} from '@/lib/auth/onboarding-draft';
 import { createMerchantStore } from '@/lib/btcpay/stores';
 import { supabase } from '@/lib/supabase';
 import type { AccountType, OnboardingStatus, UserProfile } from '@/types/user-profile';
@@ -324,4 +331,67 @@ export async function updateUserProfile(
   updates: UpsertProfileInput,
 ): Promise<{ profile: UserProfile | null; error: AuthError | null }> {
   return upsertUserProfile(updates);
+}
+
+/** True when a real (or dev) session exists, so profile rows can be written. */
+async function hasActiveSession(): Promise<boolean> {
+  if (isDevAuthActive()) return true;
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  return session != null;
+}
+
+/**
+ * Saves onboarding answers for the current step.
+ *
+ * Business sign-up answers the questionnaire before authenticating, so when
+ * there is no session yet the fields are staged locally and written once the
+ * user verifies their email. Flows that authenticate first (personal sign-up,
+ * or a returning user resuming onboarding) write straight through, exactly as
+ * before. `staged` tells the caller which happened.
+ */
+export async function saveOnboardingProfile(
+  input: UpsertProfileInput,
+  options: { completesOnboarding?: boolean } = {},
+): Promise<{ profile: UserProfile | null; error: AuthError | null; staged: boolean }> {
+  const completesOnboarding = options.completesOnboarding === true;
+
+  if (await hasActiveSession()) {
+    const result = completesOnboarding
+      ? await completeOnboarding(input)
+      : await upsertUserProfile(input);
+    return { ...result, staged: false };
+  }
+
+  stageOnboardingProfile(input, completesOnboarding);
+  return { profile: null, error: null, staged: true };
+}
+
+/**
+ * Writes the answers collected before sign-in to the now-authenticated user, in
+ * a single upsert keyed on the user id. Returns a null profile (and no error)
+ * when nothing was staged. The draft is cleared only on success, so a failed
+ * write can be retried without losing what the user typed.
+ */
+export async function applyOnboardingDraft(): Promise<{
+  profile: UserProfile | null;
+  error: AuthError | null;
+}> {
+  if (!hasOnboardingDraft()) {
+    return { profile: null, error: null };
+  }
+
+  const draft = getOnboardingDraft();
+  const result = doesDraftCompleteOnboarding()
+    ? await completeOnboarding(draft)
+    : await upsertUserProfile(draft);
+
+  if (!result.error) {
+    clearOnboardingDraft();
+  }
+
+  return result;
 }
