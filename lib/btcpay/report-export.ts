@@ -27,6 +27,13 @@ export interface ExportStoreReportOptions {
   startDate?: string;
   /** ISO end bound. Omit to end at the moment the request is served. */
   endDate?: string;
+  /**
+   * Preferred name for the saved/shared file (e.g. a statement's
+   * "hachisu-my-store-statement-2026-07.csv"). Must satisfy SAFE_FILENAME or it
+   * is ignored in favor of the server-authored name. Affects only the local
+   * file — the CSV content and the server request are unchanged.
+   */
+  filename?: string;
 }
 
 type ReportExportErrorCode =
@@ -104,10 +111,16 @@ export async function exportStoreReport(
     throw new ReportExportError('INVALID_RESPONSE', 'The report response was malformed.');
   }
 
-  // The filename is authored server-side from an allow-list, but it is still
-  // validated here before it is ever used as a path component — a name is never
-  // trusted just because it came from our own backend.
-  const filename = SAFE_FILENAME.test(data.filename) ? data.filename : 'hachisu-report.csv';
+  // The filename is authored server-side from an allow-list (or supplied by the
+  // caller, e.g. Account Statements), but it is still validated here before it
+  // is ever used as a path component — a name is never trusted just because it
+  // came from our own backend.
+  const filename =
+    options.filename && SAFE_FILENAME.test(options.filename)
+      ? options.filename
+      : SAFE_FILENAME.test(data.filename)
+        ? data.filename
+        : 'hachisu-report.csv';
 
   let file: File;
   try {

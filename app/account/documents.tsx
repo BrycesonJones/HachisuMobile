@@ -14,14 +14,7 @@ export default function DocumentsScreen() {
       {
         id: 'account-statements',
         label: 'Account statements',
-        // TODO: route to account statements list when available.
-        onPress: undefined,
-      },
-      {
-        id: 'tax-forms',
-        label: 'Tax forms',
-        // TODO: route to tax forms list when available.
-        onPress: undefined,
+        onPress: () => router.push('/account/account-statements' as never),
       },
       {
         id: 'legal-documents',
