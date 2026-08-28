@@ -5,7 +5,6 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BackButton } from '@/components/auth/back-button';
 import { ScreenContainer } from '@/components/auth/screen-container';
 import { COLORS } from '@/constants/colors';
-import { clearOnboardingDraft } from '@/lib/auth/onboarding-draft';
 
 interface AccountTypeCardProps {
   icon: keyof typeof MaterialIcons.glyphMap;
@@ -35,12 +34,6 @@ function AccountTypeCard({ icon, title, description, onPress }: AccountTypeCardP
 export default function ChooseAccountTypeScreen() {
   const router = useRouter();
 
-  // Starting a sign-up flow discards answers left over from an abandoned one.
-  function startFlow(pathname: '/auth/personal-email' | '/auth/choose-username') {
-    clearOnboardingDraft();
-    router.push(pathname);
-  }
-
   return (
     <ScreenContainer>
       <View style={styles.header}>
@@ -57,13 +50,13 @@ export default function ChooseAccountTypeScreen() {
           icon="person"
           title="Personal account"
           description="For yourself"
-          onPress={() => startFlow('/auth/personal-email')}
+          onPress={() => router.push('/auth/personal-email')}
         />
         <AccountTypeCard
           icon="business"
           title="Business account"
           description="For your registered business"
-          onPress={() => startFlow('/auth/choose-username')}
+          onPress={() => router.push('/auth/business-email')}
         />
       </View>
     </ScreenContainer>

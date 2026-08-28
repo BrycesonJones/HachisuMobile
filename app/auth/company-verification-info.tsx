@@ -17,11 +17,7 @@ import { PrimaryButton } from '@/components/auth/primary-button';
 import { ScreenContainer } from '@/components/auth/screen-container';
 import { COLORS } from '@/constants/colors';
 import { useAuth } from '@/contexts/auth-context';
-import { saveOnboardingProfile } from '@/lib/auth/auth-service';
-import {
-  getStagedCompanyVerificationForm,
-  stageCompanyVerificationForm,
-} from '@/lib/auth/onboarding-draft';
+import { completeOnboarding } from '@/lib/auth/auth-service';
 import {
   INITIAL_COMPANY_VERIFICATION_FORM,
   isCompanyVerificationFormValid,
@@ -32,11 +28,7 @@ export default function CompanyVerificationInfoScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { refreshProfile } = useAuth();
-  // Restores what was typed if the screen is remounted after moving on to the
-  // email step (going back keeps the mounted screen, so this is a safety net).
-  const [form, setForm] = useState<CompanyVerificationForm>(
-    () => getStagedCompanyVerificationForm() ?? INITIAL_COMPANY_VERIFICATION_FORM,
-  );
+  const [form, setForm] = useState<CompanyVerificationForm>(INITIAL_COMPANY_VERIFICATION_FORM);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -55,18 +47,15 @@ export default function CompanyVerificationInfoScreen() {
     setIsSaving(true);
     setErrorMessage(null);
 
-    const { error, staged } = await saveOnboardingProfile(
-      {
-        account_type: 'business',
-        business_name: form.companyName.trim(),
-        business_address: form.businessAddress.trim(),
-        business_website: form.businessWebsite.trim() || null,
-        business_country: form.businessCountry.trim(),
-        business_description: form.businessDescription.trim(),
-        expected_monthly_volume: form.expectedMonthlyVolume.trim(),
-      },
-      { completesOnboarding: true },
-    );
+    const { error } = await completeOnboarding({
+      account_type: 'business',
+      business_name: form.companyName.trim(),
+      business_address: form.businessAddress.trim(),
+      business_website: form.businessWebsite.trim() || null,
+      business_country: form.businessCountry.trim(),
+      business_description: form.businessDescription.trim(),
+      expected_monthly_volume: form.expectedMonthlyVolume.trim(),
+    });
 
     if (error) {
       setIsSaving(false);
@@ -74,18 +63,8 @@ export default function CompanyVerificationInfoScreen() {
       return;
     }
 
-    setIsSaving(false);
-
-    // This is the last questionnaire screen. A new merchant signs up now — the
-    // staged answers are written once the email is verified. A user who is
-    // already signed in (resuming onboarding) has just been saved and is done.
-    if (staged) {
-      stageCompanyVerificationForm(form);
-      router.push('/auth/business-email');
-      return;
-    }
-
     await refreshProfile();
+    setIsSaving(false);
     router.replace('/(tabs)/home');
   }
 

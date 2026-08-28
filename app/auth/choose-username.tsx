@@ -18,7 +18,7 @@ import {
   PERSONAL_ONBOARDING_STEP_COUNT,
 } from '@/constants/personal-onboarding-progress';
 import { useAuth } from '@/contexts/auth-context';
-import { saveOnboardingProfile } from '@/lib/auth/auth-service';
+import { updateUserProfile } from '@/lib/auth/auth-service';
 
 export default function ChooseUsernameScreen() {
   const router = useRouter();
@@ -36,10 +36,7 @@ export default function ChooseUsernameScreen() {
     setIsLoading(true);
     setErrorMessage(null);
 
-    // Business sign-up reaches this screen before authenticating, so the answer
-    // is staged until the email step; the personal flow is already signed in and
-    // writes straight through.
-    const { error, staged } = await saveOnboardingProfile({
+    const { error } = await updateUserProfile({
       username: username.trim(),
       onboarding_status: 'username_set',
     });
@@ -50,10 +47,7 @@ export default function ChooseUsernameScreen() {
       return;
     }
 
-    if (!staged) {
-      await refreshProfile();
-    }
-
+    await refreshProfile();
     setIsLoading(false);
 
     if (isPersonalFlow) {

@@ -10,16 +10,14 @@ import { ScreenContainer } from '@/components/auth/screen-container';
 import { COLORS } from '@/constants/colors';
 import { useAuth } from '@/contexts/auth-context';
 import { isAuthDevBypassEnabled } from '@/lib/auth/config';
-import { applyOnboardingDraft, ensureUserProfile, verifyEmailOtp } from '@/lib/auth/auth-service';
-import { clearOnboardingDraft } from '@/lib/auth/onboarding-draft';
-import { resolvePostAuthRoute } from '@/lib/auth/onboarding-routing';
-import type { AccountType, UserProfile } from '@/types/user-profile';
+import { ensureUserProfile, verifyEmailOtp } from '@/lib/auth/auth-service';
+import type { AccountType } from '@/types/user-profile';
 
 const CODE_LENGTH = 6;
 
 export default function BusinessEmailConfirmationScreen() {
   const router = useRouter();
-  const { devSignIn, refreshProfile } = useAuth();
+  const { devSignIn } = useAuth();
   const { email, accountType } = useLocalSearchParams<{ email?: string; accountType?: string }>();
   const [code, setCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -39,7 +37,8 @@ export default function BusinessEmailConfirmationScreen() {
     if (isAuthDevBypassEnabled) {
       console.warn(`[auth] Dev bypass: accepting code for ${email}`);
       await devSignIn(email, resolvedAccountType);
-      await finishSignUp(null);
+      setIsLoading(false);
+      router.replace('/auth/choose-username');
       return;
     }
 
@@ -51,7 +50,7 @@ export default function BusinessEmailConfirmationScreen() {
       return;
     }
 
-    const { profile, error: profileError } = await ensureUserProfile({
+    const { error: profileError } = await ensureUserProfile({
       email,
       accountType: resolvedAccountType,
       onboardingStatus: 'email_verified',
@@ -63,41 +62,9 @@ export default function BusinessEmailConfirmationScreen() {
       return;
     }
 
-    // Signing in to an account that already finished onboarding: send them on
-    // rather than through sign-up again, and never overwrite their profile with
-    // answers collected in this session.
-    if (profile?.onboarding_completed) {
-      clearOnboardingDraft();
-      await refreshProfile();
-      setIsLoading(false);
-      router.replace(resolvePostAuthRoute(profile));
-      return;
-    }
-
-    await finishSignUp(profile);
-  }
-
-  /**
-   * Writes the answers collected before this screen to the now-authenticated
-   * user, then routes from the resulting profile — the completed business flow
-   * lands on the dashboard, anything less resumes where it left off.
-   */
-  async function finishSignUp(profile: UserProfile | null) {
-    const { profile: applied, error: applyError } = await applyOnboardingDraft();
-
-    if (applyError) {
-      setIsLoading(false);
-      setErrorMessage(applyError.message);
-      return;
-    }
-
-    await refreshProfile();
     setIsLoading(false);
 
-    const nextProfile = applied ?? profile;
-    router.replace(
-      nextProfile ? resolvePostAuthRoute(nextProfile) : '/auth/choose-username',
-    );
+    router.replace('/auth/choose-username');
   }
 
   return (
