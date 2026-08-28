@@ -106,7 +106,7 @@ export default function CompanyVerificationInfoScreen() {
           automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
           nestedScrollEnabled={true}>
           <View style={styles.header}>
-            <BackButton fallback="/auth/verify-business" />
+            <BackButton />
           </View>
 
           <AuthTitleBlock

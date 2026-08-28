@@ -49,7 +49,7 @@ export default function BusinessEmailScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <BackButton fallback="/auth/company-verification-info" />
+            <BackButton />
           </View>
 
           <AuthTitleBlock

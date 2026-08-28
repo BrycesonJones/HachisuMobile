@@ -118,7 +118,7 @@ export default function BusinessEmailConfirmationScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <BackButton fallback="/auth/business-email" />
+            <BackButton />
           </View>
 
           <AuthTitleBlock

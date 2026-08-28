@@ -6,7 +6,6 @@ import { BackButton } from '@/components/auth/back-button';
 import { ScreenContainer } from '@/components/auth/screen-container';
 import { COLORS } from '@/constants/colors';
 import { clearOnboardingDraft } from '@/lib/auth/onboarding-draft';
-import { LANDING_ROUTE } from '@/lib/auth/onboarding-routing';
 
 interface AccountTypeCardProps {
   icon: keyof typeof MaterialIcons.glyphMap;
@@ -45,7 +44,7 @@ export default function ChooseAccountTypeScreen() {
   return (
     <ScreenContainer>
       <View style={styles.header}>
-        <BackButton fallback={LANDING_ROUTE} />
+        <BackButton />
       </View>
 
       <View style={styles.titleArea}>

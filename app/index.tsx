@@ -1,4 +1,3 @@
-import { useIsFocused } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -7,22 +6,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/auth-context';
 import { COLORS } from '@/constants/colors';
 import { HachisuColors } from '@/constants/hachisu-colors';
+import { hasOnboardingDraft } from '@/lib/auth/onboarding-draft';
 import { resolvePostAuthRoute } from '@/lib/auth/onboarding-routing';
 
 export default function LandingScreen() {
   const router = useRouter();
   const { isAuthenticated, isLoading, profile } = useAuth();
-  const isFocused = useIsFocused();
 
   useEffect(() => {
-    // Only route away from this screen while it is the one being shown. Sign-up
-    // verifies the email last, so a session appears while the user is still on
-    // the confirmation screen committing their answers; redirecting from
-    // underneath it would pull them off mid-commit and hide a failure. Every
-    // screen that authenticates routes itself.
-    if (!isFocused || isLoading || !isAuthenticated) return;
+    if (isLoading || !isAuthenticated) return;
+    // Sign-up verifies the email last and then commits the answers it collected
+    // beforehand. The session exists for the whole of that write, so redirecting
+    // here would pull the user off the confirmation screen mid-commit — hiding a
+    // failure and stranding them with the commit still pending. That screen
+    // routes itself once the commit succeeds (and clears the draft).
+    if (hasOnboardingDraft()) return;
     router.replace(resolvePostAuthRoute(profile));
-  }, [isAuthenticated, isFocused, isLoading, profile, router]);
+  }, [isAuthenticated, isLoading, profile, router]);
 
   if (isLoading) {
     return (

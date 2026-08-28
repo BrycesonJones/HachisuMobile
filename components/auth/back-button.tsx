@@ -1,34 +1,15 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useRouter, type Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet } from 'react-native';
 
 import { COLORS } from '@/constants/colors';
 
-interface BackButtonProps {
-  /**
-   * Where to go when the screen has no history behind it — a URL restored after
-   * a development reload, or a deep link. Going back is otherwise unhandled and
-   * throws GO_BACK. Without a fallback the button is inert rather than throwing.
-   */
-  fallback?: Href;
-}
-
-export function BackButton({ fallback }: BackButtonProps = {}) {
+export function BackButton() {
   const router = useRouter();
-
-  function handlePress() {
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
-    if (fallback) {
-      router.replace(fallback);
-    }
-  }
 
   return (
     <Pressable
-      onPress={handlePress}
+      onPress={() => router.back()}
       style={({ pressed }) => [styles.button, pressed && styles.pressed]}
       accessibilityRole="button"
       accessibilityLabel="Go back">
