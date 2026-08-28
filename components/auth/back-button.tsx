@@ -1,15 +1,37 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { Pressable, StyleSheet } from 'react-native';
 
 import { COLORS } from '@/constants/colors';
 
-export function BackButton() {
+interface BackButtonProps {
+  /**
+   * Where to go when nothing is behind this screen. Post-auth routing resumes a
+   * user with `replace`, which swaps the landing screen for their next step
+   * rather than pushing onto it, so that step can be the only route in the
+   * stack — going back there is unhandled and logs a GO_BACK error. Screens
+   * without a meaningful earlier step omit this and the button simply does
+   * nothing.
+   */
+  fallback?: Href;
+}
+
+export function BackButton({ fallback }: BackButtonProps = {}) {
   const router = useRouter();
+
+  function handlePress() {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    if (fallback) {
+      router.replace(fallback);
+    }
+  }
 
   return (
     <Pressable
-      onPress={() => router.back()}
+      onPress={handlePress}
       style={({ pressed }) => [styles.button, pressed && styles.pressed]}
       accessibilityRole="button"
       accessibilityLabel="Go back">

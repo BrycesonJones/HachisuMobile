@@ -10,7 +10,7 @@ interface DashboardTabContextValue {
 const DashboardTabContext = createContext<DashboardTabContextValue | null>(null);
 
 export function DashboardTabProvider({ children }: { children: ReactNode }) {
-  const [activeTab, setActiveTab] = useState<DashboardTab>('activity');
+  const [activeTab, setActiveTab] = useState<DashboardTab>('bitcoin');
 
   return (
     <DashboardTabContext.Provider value={{ activeTab, setActiveTab }}>

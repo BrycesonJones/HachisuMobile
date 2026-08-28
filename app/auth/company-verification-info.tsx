@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -27,7 +27,8 @@ import {
 export default function CompanyVerificationInfoScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { refreshProfile } = useAuth();
+  const { isAuthenticated, refreshProfile } = useAuth();
+  const { username } = useLocalSearchParams<{ username?: string }>();
   const [form, setForm] = useState<CompanyVerificationForm>(INITIAL_COMPANY_VERIFICATION_FORM);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -43,6 +44,27 @@ export default function CompanyVerificationInfoScreen() {
 
   async function handleContinue() {
     if (!isFormValid || isSaving) return;
+
+    // Signup reaches this screen before email authentication, and completing
+    // onboarding (profile write + first-store provisioning) requires an
+    // authenticated user. With no session, carry the answers forward in the
+    // route params instead; sign-up commits them after the email is verified.
+    if (!isAuthenticated) {
+      const website = form.businessWebsite.trim();
+      router.push({
+        pathname: '/auth/business-email',
+        params: {
+          ...(typeof username === 'string' && username.length > 0 ? { username } : {}),
+          business_name: form.companyName.trim(),
+          business_address: form.businessAddress.trim(),
+          ...(website ? { business_website: website } : {}),
+          business_country: form.businessCountry.trim(),
+          business_description: form.businessDescription.trim(),
+          expected_monthly_volume: form.expectedMonthlyVolume.trim(),
+        },
+      });
+      return;
+    }
 
     setIsSaving(true);
     setErrorMessage(null);
@@ -89,7 +111,7 @@ export default function CompanyVerificationInfoScreen() {
           </View>
 
           <AuthTitleBlock
-            title="Company information"
+            title="Entity information"
             subtitle="Tell us about your business so we can set up your merchant account."
           />
 
@@ -99,7 +121,7 @@ export default function CompanyVerificationInfoScreen() {
 
           <View style={styles.form}>
             <LabeledTextInput
-              label="Legal company name"
+              label="Legal entity name"
               value={form.companyName}
               onChangeText={(value) => updateField('companyName', value)}
               placeholder="Hachisu Technologies LLC"

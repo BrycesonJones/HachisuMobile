@@ -10,15 +10,27 @@ import { ScreenContainer } from '@/components/auth/screen-container';
 import { COLORS } from '@/constants/colors';
 import { useAuth } from '@/contexts/auth-context';
 import { isAuthDevBypassEnabled } from '@/lib/auth/config';
-import { ensureUserProfile, verifyEmailOtp } from '@/lib/auth/auth-service';
+import { finalizeBusinessSignup, verifyEmailOtp } from '@/lib/auth/auth-service';
+import { HOME_ROUTE, resolvePostAuthRoute } from '@/lib/auth/onboarding-routing';
 import type { AccountType } from '@/types/user-profile';
 
 const CODE_LENGTH = 6;
 
 export default function BusinessEmailConfirmationScreen() {
   const router = useRouter();
-  const { devSignIn } = useAuth();
-  const { email, accountType } = useLocalSearchParams<{ email?: string; accountType?: string }>();
+  const { devSignIn, isAuthenticated, refreshProfile } = useAuth();
+  const params = useLocalSearchParams<{
+    email?: string;
+    accountType?: string;
+    username?: string;
+    business_name?: string;
+    business_address?: string;
+    business_website?: string;
+    business_country?: string;
+    business_description?: string;
+    expected_monthly_volume?: string;
+  }>();
+  const { email, accountType } = params;
   const [code, setCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -34,11 +46,18 @@ export default function BusinessEmailConfirmationScreen() {
     setIsLoading(true);
     setErrorMessage(null);
 
+    // A previous attempt already verified this code and signed the user in but
+    // failed while committing their answers. The code is single-use, so retry
+    // the commit rather than the verification — which would now fail as expired.
+    if (isAuthenticated) {
+      await finishSignUp();
+      return;
+    }
+
     if (isAuthDevBypassEnabled) {
       console.warn(`[auth] Dev bypass: accepting code for ${email}`);
       await devSignIn(email, resolvedAccountType);
-      setIsLoading(false);
-      router.replace('/auth/choose-username');
+      await finishSignUp();
       return;
     }
 
@@ -50,21 +69,37 @@ export default function BusinessEmailConfirmationScreen() {
       return;
     }
 
-    const { error: profileError } = await ensureUserProfile({
-      email,
-      accountType: resolvedAccountType,
-      onboardingStatus: 'email_verified',
-    });
+    await finishSignUp();
+  }
 
-    if (profileError) {
+  /**
+   * Email verification is the last step of business sign-up: commit the answers
+   * carried through the flow via the shared finalization (also used by Google
+   * sign-up), then land on the dashboard.
+   */
+  async function finishSignUp() {
+    const result = await finalizeBusinessSignup(
+      typeof email === 'string' ? email : null,
+      resolvedAccountType,
+      params,
+    );
+
+    if (result.status === 'error') {
       setIsLoading(false);
-      setErrorMessage(profileError.message);
+      setErrorMessage(result.error.message);
       return;
     }
 
+    await refreshProfile();
     setIsLoading(false);
 
-    router.replace('/auth/choose-username');
+    if (result.status === 'completed') {
+      router.replace(HOME_ROUTE);
+      return;
+    }
+
+    // Already-completed account, or answers missing: route by profile state.
+    router.replace(resolvePostAuthRoute(result.profile));
   }
 
   return (

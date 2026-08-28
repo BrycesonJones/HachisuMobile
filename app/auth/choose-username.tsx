@@ -22,7 +22,7 @@ import { updateUserProfile } from '@/lib/auth/auth-service';
 
 export default function ChooseUsernameScreen() {
   const router = useRouter();
-  const { refreshProfile } = useAuth();
+  const { isAuthenticated, refreshProfile } = useAuth();
   const { flow } = useLocalSearchParams<{ flow?: string }>();
   const [username, setUsername] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -32,6 +32,20 @@ export default function ChooseUsernameScreen() {
 
   async function handleNext() {
     if (!isUsernameValid || isLoading) return;
+
+    // Signup reaches this screen before email authentication, and the profile
+    // write below requires an authenticated user. With no session, carry the
+    // username forward in the route params instead; it is persisted once the
+    // user signs in at the end of the flow.
+    if (!isAuthenticated) {
+      router.push({
+        pathname: '/auth/push-notifications',
+        params: isPersonalFlow
+          ? { flow: 'personal', username: username.trim() }
+          : { username: username.trim() },
+      });
+      return;
+    }
 
     setIsLoading(true);
     setErrorMessage(null);
@@ -68,7 +82,7 @@ export default function ChooseUsernameScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <CloseButton />
+            <CloseButton fallback="/auth/choose-account-type" />
             <View style={styles.progressArea}>
               <ProgressIndicator
                 totalSteps={

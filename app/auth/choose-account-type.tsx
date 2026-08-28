@@ -50,13 +50,15 @@ export default function ChooseAccountTypeScreen() {
           icon="person"
           title="Personal account"
           description="For yourself"
-          onPress={() => router.push('/auth/personal-email')}
+          onPress={() =>
+            router.push({ pathname: '/auth/choose-username', params: { flow: 'personal' } })
+          }
         />
         <AccountTypeCard
           icon="business"
           title="Business account"
           description="For your registered business"
-          onPress={() => router.push('/auth/business-email')}
+          onPress={() => router.push('/auth/choose-username')}
         />
       </View>
     </ScreenContainer>

@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
 import { AuthProgressHeader } from '@/components/auth/auth-progress-header';
@@ -24,9 +24,15 @@ const BUSINESS_VERIFICATION_ROWS = [
 
 export default function VerifyBusinessScreen() {
   const router = useRouter();
+  const { username } = useLocalSearchParams<{ username?: string }>();
 
   function handleLetsGo() {
-    router.push('/auth/company-verification-info');
+    // Forward the pre-auth answers riding in the route params so they aren't
+    // dropped before sign-up commits them at the end of the flow.
+    router.push({
+      pathname: '/auth/company-verification-info',
+      params: typeof username === 'string' && username.length > 0 ? { username } : {},
+    });
   }
 
   return (

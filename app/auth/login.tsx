@@ -24,12 +24,20 @@ export default function LoginEmailScreen() {
     setIsLoading(true);
     setErrorMessage(null);
 
-    const { error } = await sendEmailOtp(email);
+    // Login only authenticates existing accounts; account creation belongs to
+    // the Join flow.
+    const { error } = await sendEmailOtp(email, { shouldCreateUser: false });
 
     setIsLoading(false);
 
     if (error) {
-      setErrorMessage(error.message);
+      // Supabase reports an unknown email as "Signups not allowed for otp";
+      // translate that into product language.
+      setErrorMessage(
+        /signups not allowed/i.test(error.message)
+          ? 'No Hachisu account exists for this email.'
+          : error.message,
+      );
       return;
     }
 

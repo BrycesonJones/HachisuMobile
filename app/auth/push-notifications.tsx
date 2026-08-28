@@ -19,30 +19,42 @@ import {
 
 export default function PushNotificationScreen() {
   const router = useRouter();
-  const { flow } = useLocalSearchParams<{ flow?: string }>();
+  const { flow, username } = useLocalSearchParams<{ flow?: string; username?: string }>();
   const isPersonalFlow = flow === 'personal';
 
-  function handleSkip() {
+  // Pre-auth signup answers ride through the flow as route params; forward them
+  // so they aren't dropped before sign-up commits them at the end.
+  const forwardedParams = {
+    ...(isPersonalFlow ? { flow: 'personal' } : {}),
+    ...(typeof username === 'string' && username.length > 0 ? { username } : {}),
+  };
+
+  function handleNext() {
     if (isPersonalFlow) {
-      router.push('/auth/personal-two-factor');
+      router.push({ pathname: '/auth/personal-two-factor', params: forwardedParams });
       return;
     }
-    router.push('/auth/verify-business');
+    router.push({ pathname: '/auth/verify-business', params: forwardedParams });
+  }
+
+  function handleSkip() {
+    handleNext();
   }
 
   async function handleEnable() {
     // TODO: request push notification permissions via expo-notifications when configured
-    if (isPersonalFlow) {
-      router.push('/auth/personal-two-factor');
-      return;
-    }
-    router.push('/auth/verify-business');
+    handleNext();
   }
 
   return (
     <ScreenContainer style={styles.container}>
       <View style={styles.header}>
-        <BackButton />
+        <BackButton
+          fallback={{
+            pathname: '/auth/choose-username',
+            params: isPersonalFlow ? { flow: 'personal' } : {},
+          }}
+        />
         <View style={styles.progressArea}>
           <ProgressIndicator
             totalSteps={

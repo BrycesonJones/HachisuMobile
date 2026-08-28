@@ -1,3 +1,4 @@
+import { useIsFocused } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -11,11 +12,17 @@ import { resolvePostAuthRoute } from '@/lib/auth/onboarding-routing';
 export default function LandingScreen() {
   const router = useRouter();
   const { isAuthenticated, isLoading, profile } = useAuth();
+  const isFocused = useIsFocused();
 
   useEffect(() => {
-    if (isLoading || !isAuthenticated) return;
+    // Only route away while this screen is the one being shown. Business
+    // sign-up verifies the email last, so the session appears while the user is
+    // still on the confirmation screen committing their answers — redirecting
+    // from underneath it would pull them off mid-commit and hide any failure.
+    // Every screen that authenticates routes itself.
+    if (!isFocused || isLoading || !isAuthenticated) return;
     router.replace(resolvePostAuthRoute(profile));
-  }, [isAuthenticated, isLoading, profile, router]);
+  }, [isAuthenticated, isFocused, isLoading, profile, router]);
 
   if (isLoading) {
     return (
@@ -65,8 +72,8 @@ export default function LandingScreen() {
             pressed && styles.signUpButtonPressed,
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Sign up">
-          <Text style={styles.signUpButtonText}>Sign up</Text>
+          accessibilityLabel="Join">
+          <Text style={styles.signUpButtonText}>Join</Text>
         </Pressable>
       </View>
     </SafeAreaView>

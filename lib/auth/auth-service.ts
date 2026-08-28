@@ -1,3 +1,6 @@
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
+
 import { isAuthDevBypassEnabled, isProfileDebugEnabled } from '@/lib/auth/config';
 import {
   clearDevAuth,
@@ -40,20 +43,27 @@ function authLog(label: string, payload: Record<string, unknown>) {
 /**
  * Sends a one-time passcode to the user's email.
  * In dev bypass mode, skips the network call so UI flows can be tested without email delivery.
+ *
+ * `shouldCreateUser` defaults to true (sign-up). Login passes false so an
+ * unknown email can never create an account through the login screen.
  */
-export async function sendEmailOtp(email: string): Promise<{ error: AuthError | null }> {
+export async function sendEmailOtp(
+  email: string,
+  options: { shouldCreateUser?: boolean } = {},
+): Promise<{ error: AuthError | null }> {
   const trimmedEmail = email.trim();
+  const shouldCreateUser = options.shouldCreateUser ?? true;
 
   if (isAuthDevBypassEnabled) {
     console.warn('[auth] Dev bypass: skipping signInWithOtp for', trimmedEmail);
     return { error: null };
   }
 
-  authLog('signInWithOtp:request', { email: trimmedEmail });
+  authLog('signInWithOtp:request', { email: trimmedEmail, shouldCreateUser });
 
   const { error } = await supabase.auth.signInWithOtp({
     email: trimmedEmail,
-    options: { shouldCreateUser: true },
+    options: { shouldCreateUser },
   });
 
   authLog('signInWithOtp:result', { email: trimmedEmail, sent: !error, message: error?.message });
@@ -324,4 +334,195 @@ export async function updateUserProfile(
   updates: UpsertProfileInput,
 ): Promise<{ profile: UserProfile | null; error: AuthError | null }> {
   return upsertUserProfile(updates);
+}
+
+
+/**
+ * Parses a Supabase OAuth callback URL. Tokens arrive in the URL fragment on
+ * the implicit flow and as a `code` query param on PKCE; errors can appear in
+ * either place, so both parts are merged.
+ */
+function parseOAuthCallbackParams(url: string): Record<string, string> {
+  const params: Record<string, string> = {};
+  const [beforeFragment, fragment] = url.split('#');
+  const query = beforeFragment.split('?')[1];
+
+  for (const part of [query, fragment]) {
+    if (!part) continue;
+    for (const pair of part.split('&')) {
+      const [key, ...rest] = pair.split('=');
+      if (!key) continue;
+      try {
+        params[decodeURIComponent(key)] = decodeURIComponent(rest.join('='));
+      } catch {
+        // Skip malformed pairs rather than failing the whole callback.
+      }
+    }
+  }
+
+  return params;
+}
+
+/**
+ * Signs the user in with Google via Supabase's browser-based OAuth flow
+ * (expo-web-browser auth session; works in Expo Go — no native module).
+ * `cancelled` means the user dismissed the browser; that is not an error.
+ */
+export async function signInWithGoogleOAuth(): Promise<{
+  error: AuthError | null;
+  cancelled?: boolean;
+}> {
+  if (isAuthDevBypassEnabled) {
+    return { error: { message: 'Google sign-in is unavailable in dev bypass mode. Use email.' } };
+  }
+
+  // In Expo Go this is exp://<host>/--/ and in a standalone build
+  // hachisumobile://. Must be listed in the Supabase auth redirect allowlist.
+  const redirectTo = Linking.createURL('');
+
+  authLog('google:request', { redirectTo });
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo, skipBrowserRedirect: true },
+  });
+
+  if (error) {
+    return { error: toAuthError(error) };
+  }
+  if (!data?.url) {
+    return { error: { message: 'Could not start Google sign-in.' } };
+  }
+
+  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+
+  if (result.type !== 'success') {
+    authLog('google:dismissed', { type: result.type });
+    return { error: null, cancelled: true };
+  }
+
+  const params = parseOAuthCallbackParams(result.url);
+
+  if (params.error_description || params.error) {
+    return { error: { message: params.error_description || params.error } };
+  }
+
+  if (params.code) {
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(params.code);
+    authLog('google:exchange', { ok: !exchangeError });
+    return { error: exchangeError ? toAuthError(exchangeError) : null };
+  }
+
+  if (params.access_token && params.refresh_token) {
+    const { error: sessionError } = await supabase.auth.setSession({
+      access_token: params.access_token,
+      refresh_token: params.refresh_token,
+    });
+    authLog('google:setSession', { ok: !sessionError });
+    return { error: sessionError ? toAuthError(sessionError) : null };
+  }
+
+  return { error: { message: 'Google sign-in did not return a session.' } };
+}
+
+/** The pre-auth business signup answers carried through the flow as route params. */
+export interface BusinessSignupParams {
+  username?: string;
+  business_name?: string;
+  business_address?: string;
+  business_website?: string;
+  business_country?: string;
+  business_description?: string;
+  expected_monthly_volume?: string;
+}
+
+export type FinalizeBusinessSignupResult =
+  | { status: 'completed' }
+  /** Not finalized (already-complete account, or missing answers): route by profile. */
+  | { status: 'resume'; profile: UserProfile | null }
+  | { status: 'error'; error: AuthError };
+
+function nonEmpty(value: string | undefined): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+/**
+ * The single finalization point for business sign-up, shared by every
+ * authentication method (email OTP, Google OAuth). Requires an authenticated
+ * session. Ensures the profile row exists, protects already-completed
+ * accounts, then commits the carried answers through the existing
+ * completeOnboarding lifecycle (profile upsert + onboarding_completed +
+ * first-store/BTCPay provisioning).
+ */
+export async function finalizeBusinessSignup(
+  email: string | null,
+  accountType: AccountType,
+  params: BusinessSignupParams,
+): Promise<FinalizeBusinessSignupResult> {
+  let resolvedEmail = nonEmpty(email ?? undefined);
+
+  if (!resolvedEmail && !isDevAuthActive()) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    resolvedEmail = nonEmpty(user?.email);
+  }
+
+  if (!resolvedEmail) {
+    return { status: 'error', error: { message: 'No email on the authenticated account.' } };
+  }
+
+  const { profile, error: profileError } = await ensureUserProfile({
+    email: resolvedEmail,
+    accountType,
+    onboardingStatus: 'email_verified',
+  });
+
+  if (profileError) {
+    return { status: 'error', error: profileError };
+  }
+
+  // An account that already finished onboarding is signing back in: never
+  // overwrite it with this session's answers, and never re-provision.
+  if (profile?.onboarding_completed) {
+    return { status: 'resume', profile };
+  }
+
+  const username = nonEmpty(params.username);
+  const businessName = nonEmpty(params.business_name);
+  const businessAddress = nonEmpty(params.business_address);
+  const businessCountry = nonEmpty(params.business_country);
+  const businessDescription = nonEmpty(params.business_description);
+  const expectedMonthlyVolume = nonEmpty(params.expected_monthly_volume);
+
+  // The business flow always arrives with the full set of carried answers.
+  // Reached without them (a stale link, an interrupted flow), resume
+  // onboarding instead of marking it complete with holes.
+  if (
+    !username ||
+    !businessName ||
+    !businessAddress ||
+    !businessCountry ||
+    !businessDescription ||
+    !expectedMonthlyVolume
+  ) {
+    return { status: 'resume', profile };
+  }
+
+  const { error } = await completeOnboarding({
+    account_type: accountType,
+    username,
+    business_name: businessName,
+    business_address: businessAddress,
+    business_website: nonEmpty(params.business_website),
+    business_country: businessCountry,
+    business_description: businessDescription,
+    expected_monthly_volume: expectedMonthlyVolume,
+  });
+
+  if (error) {
+    return { status: 'error', error };
+  }
+
+  return { status: 'completed' };
 }
