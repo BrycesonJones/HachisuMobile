@@ -7,6 +7,7 @@ import { AuthTitleBlock } from '@/components/auth/auth-title-block';
 import { BackButton } from '@/components/auth/back-button';
 import { GoogleSignInButton } from '@/components/auth/google-signin-button';
 import { LabeledTextInput } from '@/components/auth/labeled-text-input';
+import { LegalAgreementFooter } from '@/components/legal/legal-agreement-footer';
 import { PrimaryButton } from '@/components/auth/primary-button';
 import { ScreenContainer } from '@/components/auth/screen-container';
 import { COLORS } from '@/constants/colors';
@@ -160,6 +161,10 @@ export default function BusinessEmailScreen() {
             onPress={handleGoogle}
             disabled={isBusy}
           />
+
+          {/* Both actions above (email code and Google) lead to the signup
+              finalization that records this acceptance server-side. */}
+          <LegalAgreementFooter />
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenContainer>

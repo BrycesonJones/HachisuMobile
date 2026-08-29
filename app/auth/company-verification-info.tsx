@@ -15,6 +15,7 @@ import { AuthTitleBlock } from '@/components/auth/auth-title-block';
 import { LabeledTextInput } from '@/components/auth/labeled-text-input';
 import { PrimaryButton } from '@/components/auth/primary-button';
 import { ScreenContainer } from '@/components/auth/screen-container';
+import { LegalAgreementFooter } from '@/components/legal/legal-agreement-footer';
 import { COLORS } from '@/constants/colors';
 import { useAuth } from '@/contexts/auth-context';
 import { completeOnboarding } from '@/lib/auth/auth-service';
@@ -185,6 +186,11 @@ export default function CompanyVerificationInfoScreen() {
               disabled={!isFormValid || isSaving}
             />
           </View>
+
+          {/* Only the authenticated path completes onboarding from this
+              screen; the unauthenticated path sees the same disclosure on the
+              email/Google screen where signup actually commits. */}
+          {isAuthenticated ? <LegalAgreementFooter actionLabel="Continue" /> : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenContainer>

@@ -18,7 +18,7 @@ export default function AppNotificationsScreen() {
           {
             id: 'payments',
             label: 'Payments',
-            subtitle: 'Get notified when a payment is received',
+            subtitle: 'Alerts when a payment is received',
             value: preferences.payments,
             onValueChange: (value) => setPreference('payments', value),
             disabled: !loaded,
@@ -26,7 +26,7 @@ export default function AppNotificationsScreen() {
           {
             id: 'invoices',
             label: 'Invoices',
-            subtitle: 'Get notified when an invoice changes status',
+            subtitle: 'Alerts when an invoice changes status',
             value: preferences.invoices,
             onValueChange: (value) => setPreference('invoices', value),
             disabled: !loaded,
@@ -34,7 +34,7 @@ export default function AppNotificationsScreen() {
           {
             id: 'payment-requests',
             label: 'Payment requests',
-            subtitle: 'Get notified about payment request activity',
+            subtitle: 'Alerts about payment request activity',
             value: preferences.paymentRequests,
             onValueChange: (value) => setPreference('paymentRequests', value),
             disabled: !loaded,
@@ -45,5 +45,11 @@ export default function AppNotificationsScreen() {
     [preferences, loaded, setPreference],
   );
 
-  return <SwitchSettingsScreen title="App Notifications" sections={sections} />;
+  return (
+    <SwitchSettingsScreen
+      title="App Notifications"
+      sections={sections}
+      footnote="Notification delivery isn't live yet. These preferences are saved on this device and will apply when notifications launch."
+    />
+  );
 }

@@ -18,10 +18,13 @@ export default function PersonalPhoneScreen() {
   const [phone, setPhone] = useState('');
   const isPhoneValid = isValidPhone(phone);
 
+  // Plain profile-information collection: Hachisu has no SMS infrastructure,
+  // so there is no verification step — the number rides the flow as a param
+  // and is saved to the profile when onboarding completes.
   function handleNext() {
     if (!isPhoneValid) return;
     router.push({
-      pathname: '/auth/personal-phone-confirmation',
+      pathname: '/auth/verify-personal',
       params: { phone },
     });
   }
@@ -43,7 +46,7 @@ export default function PersonalPhoneScreen() {
 
           <AuthTitleBlock
             title="Enter your phone number"
-            subtitle="We will send you a confirmation code"
+            subtitle="A way to reach you about your account"
             centered
           />
 

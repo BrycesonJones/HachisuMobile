@@ -371,6 +371,79 @@ export async function deleteApp(config: BtcpayConfig, appId: string): Promise<vo
   );
 }
 
+/**
+ * Permanently removes a BTCPay store (Greenfield: DELETE /api/v1/stores/{storeId}).
+ *
+ * Verified against the BTCPay 2.4.3 Greenfield spec: "Removes the specified
+ * store. If there is another user with access, only your access will be
+ * removed." Hachisu's server API key is the sole owner of the stores it
+ * provisions, so this permanently removes the store together with its apps and
+ * wallet CONFIGURATION (the public derivation scheme), and no new invoices or
+ * checkout pages can be created for it. Live-observed on BTCPay 2.4.3
+ * (2026-08-29): BTCPay RETAINS historical invoice records — previously issued
+ * /i/{invoiceId} checkout pages stay viewable after store deletion, and an
+ * invoice still inside its validity window remains payable (to the merchant's
+ * own wallet) until it expires. It never touches private keys, wallet funds,
+ * or anything on the Bitcoin blockchain — those live entirely outside BTCPay.
+ *
+ * Idempotency: a 404 is treated as success (the store may already be gone from
+ * an earlier attempt). NOTE that BTCPay hides deleted stores as 403 rather
+ * than 404 (live-observed) — callers that need retry-safety must disambiguate
+ * a 403 via listServerStoreIds. Throws BtcpayApiError on other non-2xx.
+ */
+export async function deleteStore(config: BtcpayConfig, storeId: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(
+      `${config.serverUrl}/api/v1/stores/${encodeURIComponent(storeId)}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `token ${config.apiKey}` },
+      },
+    );
+  } catch (cause) {
+    throw new BtcpayApiError(
+      `Could not reach BTCPay Server at ${config.serverUrl}.`,
+      0,
+      { cause: String(cause) },
+    );
+  }
+
+  if (response.ok || response.status === 404) return;
+
+  const rawText = await response.text();
+  let parsed: unknown = rawText;
+  try {
+    parsed = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    // Leave parsed as the raw text.
+  }
+  throw new BtcpayApiError(
+    `BTCPay store deletion failed (HTTP ${response.status}).`,
+    response.status,
+    parsed,
+  );
+}
+
+/**
+ * Lists the ids of every store the server API key can access
+ * (Greenfield: GET /api/v1/stores). Hachisu's server key owns all stores it
+ * provisions, so a Hachisu-provisioned store that is ABSENT from this list no
+ * longer exists. Used to disambiguate a 403 on store deletion (BTCPay hides
+ * deleted stores as 403, not 404): if this list loads — proving the key works —
+ * and the id is missing, the store is already gone. Throws BtcpayApiError when
+ * the list itself cannot be fetched, so callers fail safe.
+ */
+export async function listServerStoreIds(config: BtcpayConfig): Promise<string[]> {
+  const { status, ok, parsed } = await btcpayGet(config, '/api/v1/stores');
+  if (!ok || !Array.isArray(parsed)) {
+    throw new BtcpayApiError(`BTCPay store list failed (HTTP ${status}).`, status, parsed);
+  }
+  return parsed
+    .map((store) => (store && typeof store === 'object' ? (store as { id?: unknown }).id : null))
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+}
+
 // ---------------------------------------------------------------------------
 // On-chain (Bitcoin) wallet configuration
 // ---------------------------------------------------------------------------

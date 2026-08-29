@@ -42,7 +42,7 @@ export function useCloseAccount() {
     if (inFlightRef.current) return;
     Alert.alert(
       'Close account?',
-      'Your Hachisu account and app data will be permanently deleted. This action cannot be undone.',
+      'Your Hachisu account, app data, and the payment-processing stores Hachisu set up for you will be permanently deleted, and no new invoices can be created. Export any reports you need first. Bitcoin in your own wallet is not affected. This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Close Account', style: 'destructive', onPress: () => void runCloseAccount() },

@@ -7,6 +7,7 @@ import { BackButton } from '@/components/auth/back-button';
 import { OtpInputPlaceholder } from '@/components/auth/otp-input-placeholder';
 import { PrimaryButton } from '@/components/auth/primary-button';
 import { ScreenContainer } from '@/components/auth/screen-container';
+import { LegalAgreementFooter } from '@/components/legal/legal-agreement-footer';
 import { COLORS } from '@/constants/colors';
 import { useAuth } from '@/contexts/auth-context';
 import { isAuthDevBypassEnabled } from '@/lib/auth/config';
@@ -140,6 +141,10 @@ export default function BusinessEmailConfirmationScreen() {
               disabled={!isCodeComplete || isLoading}
             />
           </View>
+
+          {/* Verifying the code finalizes signup, which records this
+              acceptance server-side before onboarding completes. */}
+          <LegalAgreementFooter actionLabel="Next" />
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenContainer>

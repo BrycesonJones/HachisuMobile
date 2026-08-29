@@ -11,6 +11,7 @@ import {
 } from '@/lib/auth/dev-session';
 import { readFunctionError } from '@/lib/btcpay/function-error';
 import { createMerchantStore } from '@/lib/btcpay/stores';
+import { recordCurrentLegalAcceptance } from '@/lib/legal/consent';
 import { supabase } from '@/lib/supabase';
 import type { AccountType, OnboardingStatus, UserProfile } from '@/types/user-profile';
 
@@ -336,10 +337,23 @@ async function ensureFirstStore(profile: UserProfile): Promise<void> {
 /**
  * Marks onboarding as complete and writes any final profile fields in one
  * upsert, then provisions the merchant's first store.
+ *
+ * Persists the legal acceptance record FIRST: every completion screen shows
+ * the "By tapping …, you agree to the Terms of Service …" disclosure above
+ * its action button, and onboarding must never finish without that
+ * acceptance durably recorded. The write is idempotent (unique per
+ * user/document/version), so a retried finalization cannot create duplicate
+ * records; on failure onboarding stays incomplete and the caller's normal
+ * error/retry path applies.
  */
 export async function completeOnboarding(
   input: UpsertProfileInput = {},
 ): Promise<{ profile: UserProfile | null; error: AuthError | null }> {
+  const { error: consentError } = await recordCurrentLegalAcceptance('onboarding');
+  if (consentError) {
+    return { profile: null, error: { message: consentError.message } };
+  }
+
   const result = await upsertUserProfile({
     ...input,
     onboarding_completed: true,

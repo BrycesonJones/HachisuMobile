@@ -38,11 +38,16 @@ export default function ChooseUsernameScreen() {
     // username forward in the route params instead; it is persisted once the
     // user signs in at the end of the flow.
     if (!isAuthenticated) {
+      if (isPersonalFlow) {
+        router.push({
+          pathname: '/auth/personal-country',
+          params: { flow: 'personal', username: username.trim() },
+        });
+        return;
+      }
       router.push({
-        pathname: '/auth/push-notifications',
-        params: isPersonalFlow
-          ? { flow: 'personal', username: username.trim() }
-          : { username: username.trim() },
+        pathname: '/auth/verify-business',
+        params: { username: username.trim() },
       });
       return;
     }
@@ -65,11 +70,11 @@ export default function ChooseUsernameScreen() {
     setIsLoading(false);
 
     if (isPersonalFlow) {
-      router.push({ pathname: '/auth/push-notifications', params: { flow: 'personal' } });
+      router.push({ pathname: '/auth/personal-country', params: { flow: 'personal' } });
       return;
     }
 
-    router.push('/auth/push-notifications');
+    router.push('/auth/verify-business');
   }
 
   return (

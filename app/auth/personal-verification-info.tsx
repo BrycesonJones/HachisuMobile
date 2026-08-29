@@ -14,6 +14,7 @@ import { AuthTitleBlock } from '@/components/auth/auth-title-block';
 import { BackButton } from '@/components/auth/back-button';
 import { LabeledTextInput } from '@/components/auth/labeled-text-input';
 import { PrimaryButton } from '@/components/auth/primary-button';
+import { LegalAgreementFooter } from '@/components/legal/legal-agreement-footer';
 import { COLORS } from '@/constants/colors';
 import { useAuth } from '@/contexts/auth-context';
 import { completeOnboarding } from '@/lib/auth/auth-service';
@@ -230,6 +231,10 @@ export default function PersonalVerificationInfoScreen() {
                 disabled={!isFormValid || isSaving}
               />
             </View>
+
+            {/* Continue completes onboarding, which records this acceptance
+                server-side first. */}
+            <LegalAgreementFooter actionLabel="Continue" />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

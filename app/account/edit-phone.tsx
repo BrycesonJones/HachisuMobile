@@ -62,7 +62,7 @@ export default function EditPhoneScreen() {
 
           <AuthTitleBlock
             title="Enter your phone number"
-            subtitle="We will send you a confirmation code"
+            subtitle="A way to reach you about your account"
             centered
           />
 

@@ -36,7 +36,9 @@ export function resolvePostAuthRoute(profile: UserProfile | null): Href {
     case 'onboarding_complete':
       return HOME_ROUTE;
     case 'username_set':
-      return { pathname: '/auth/push-notifications', params: flow === 'personal' ? { flow } : {} };
+      return flow === 'personal'
+        ? { pathname: '/auth/personal-country', params: { flow } }
+        : { pathname: '/auth/verify-business' };
     case 'email_verified':
     case 'started':
     default:

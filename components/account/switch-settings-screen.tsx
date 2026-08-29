@@ -25,12 +25,14 @@ export interface SwitchSettingsSection {
 interface SwitchSettingsScreenProps {
   title: string;
   sections: readonly SwitchSettingsSection[];
+  /** Muted explanatory text rendered below the sections. */
+  footnote?: string;
 }
 
 /** Account settings screen made of titled sections of rounded cards with
  * label/subtitle/toggle rows. Mirrors AccountListScreen's header and card
  * styling so the Account area stays visually consistent. */
-export function SwitchSettingsScreen({ title, sections }: SwitchSettingsScreenProps) {
+export function SwitchSettingsScreen({ title, sections, footnote }: SwitchSettingsScreenProps) {
   const router = useRouter();
 
   return (
@@ -63,6 +65,7 @@ export function SwitchSettingsScreen({ title, sections }: SwitchSettingsScreenPr
             </View>
           </View>
         ))}
+        {footnote ? <Text style={styles.footnote}>{footnote}</Text> : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -123,6 +126,13 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingBottom: 48,
+  },
+  footnote: {
+    marginTop: 4,
+    paddingHorizontal: 4,
+    fontSize: 13,
+    lineHeight: 18,
+    color: COLORS.mutedText,
   },
   section: {
     marginTop: 12,

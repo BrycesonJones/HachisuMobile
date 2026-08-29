@@ -10,6 +10,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
+import { LegalAcceptanceGate } from '@/components/legal/legal-acceptance-gate';
 import { ActiveStoreProvider } from '@/contexts/active-store-context';
 import { AuthProvider } from '@/contexts/auth-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -63,9 +64,21 @@ export default function RootLayout() {
                 animation: 'slide_from_right',
               }}
             />
+            <Stack.Screen
+              name="legal"
+              options={{
+                // Same push presentation as the account stack so document
+                // screens get correct top safe-area insets and swipe-back.
+                headerShown: false,
+                animation: 'slide_from_right',
+              }}
+            />
             <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
           </Stack>
           <StatusBar style="light" />
+          {/* Full-screen overlay: blocks app use for signed-in users missing
+              acceptance of the current Terms / E-Sign versions. */}
+          <LegalAcceptanceGate />
         </ThemeProvider>
       </ActiveStoreProvider>
     </AuthProvider>
