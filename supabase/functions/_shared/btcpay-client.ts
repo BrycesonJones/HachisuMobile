@@ -34,9 +34,35 @@ export function getBtcpayConfig(): BtcpayConfig {
     );
   }
 
+  // Fail closed on insecure transport. Every Greenfield request carries the
+  // privileged API key in an `Authorization: token ...` header, so a plaintext
+  // http:// endpoint would leak that credential to any network observer on
+  // every call. This value is also the origin allowlist for
+  // sanitizeCheckoutLink(), so a non-HTTPS server URL would additionally mint
+  // http:// checkout links for paying customers. A misconfigured endpoint must
+  // be a startup error, never a silent runtime downgrade.
+  let parsed: URL;
+  try {
+    parsed = new URL(serverUrl!.trim());
+  } catch {
+    throw new BtcpayConfigError(
+      'BTCPay is not configured on the server (BTCPAY_SERVER_URL is not a valid URL).',
+    );
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new BtcpayConfigError(
+      'BTCPay is not configured on the server (BTCPAY_SERVER_URL must use https://).',
+    );
+  }
+  if (parsed.username || parsed.password) {
+    throw new BtcpayConfigError(
+      'BTCPay is not configured on the server (BTCPAY_SERVER_URL must not embed credentials).',
+    );
+  }
+
   // Normalize: strip a trailing slash so `${serverUrl}/api/...` is well-formed.
   return {
-    serverUrl: serverUrl!.replace(/\/+$/, ''),
+    serverUrl: serverUrl!.trim().replace(/\/+$/, ''),
     apiKey: apiKey!,
   };
 }
