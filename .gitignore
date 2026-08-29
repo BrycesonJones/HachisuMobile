@@ -61,3 +61,7 @@ app-example
 supabase/.temp/
 supabase/.branches/
 supabase/functions/.env
+
+# deno toolchain artifacts (see docs/TESTING_POLICY.md) — never committed
+deno.lock
+supabase/functions/deno.json

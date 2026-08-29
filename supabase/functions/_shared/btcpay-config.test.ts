@@ -26,7 +26,7 @@
 // Configuration must fail CLOSED: a non-HTTPS BTCPay endpoint is a startup
 // error, not a runtime downgrade.
 
-import { assertEquals, assertThrows } from 'jsr:@std/assert@1';
+import { assertEquals, assertThrows } from 'jsr:@std/assert@1.0.19';
 
 import { BtcpayConfigError, getBtcpayConfig } from './btcpay-client.ts';
 

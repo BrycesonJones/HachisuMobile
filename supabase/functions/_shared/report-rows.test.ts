@@ -6,7 +6,7 @@
 // These pin the accounting behaviour: which columns are derived and how, how
 // abnormal payment states are represented, and that the CSV is RFC-4180 safe.
 
-import { assertEquals } from 'jsr:@std/assert@1';
+import { assertEquals } from 'jsr:@std/assert@1.0.19';
 
 import {
   buildReportRows,

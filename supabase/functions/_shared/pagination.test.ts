@@ -6,7 +6,7 @@
 // These cover the completeness invariants the CSV export depends on: a report
 // must never omit or duplicate a record, and must fail rather than truncate.
 
-import { assertEquals } from 'jsr:@std/assert@1';
+import { assertEquals } from 'jsr:@std/assert@1.0.19';
 
 import {
   decodeCursor,

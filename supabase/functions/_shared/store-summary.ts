@@ -4,7 +4,7 @@
 // only caches a summary + the default store. Call this after any merchant_stores
 // write. Idempotent and safe to run repeatedly.
 
-import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.112.4';
 
 interface StoreRow {
   id: string;

@@ -35,10 +35,16 @@ the outside instead.
 
    ```bash
    cd supabase/functions
-   printf '{ "nodeModulesDir": "auto" }\n' > deno.json   # not committed
-   deno test --allow-read _shared/
-   rm deno.json deno.lock
+   deno test --allow-read --allow-env --node-modules-dir=none _shared/
    ```
+
+   `--node-modules-dir=none` is not optional. Without it Deno walks up to the
+   root `package.json`, installs *the mobile app's* dependencies into
+   `node_modules/.deno`, and replaces npm's `node_modules/<pkg>` entries with
+   symlinks into that store. The tree then silently stops matching
+   `package-lock.json`, so local builds and tests exercise different dependency
+   versions than `npm ci` installs in CI/EAS. `npm run check:supplychain` fails
+   if this has happened; recover with `rm -rf node_modules && npm ci`.
 
 2. **Deterministic fixtures / mocked upstream responses.** Feed recorded BTCPay
    payloads to the shared modules rather than calling BTCPay.
@@ -67,13 +73,17 @@ the action this policy forbids.
 ## Type-checking Edge Functions
 
 `npx tsc --noEmit` excludes `supabase/functions` (it is Deno, not React Native).
-Type-check those separately, with the same temporary `deno.json` shown above:
+Type-check those separately, with the same flag shown above:
 
 ```bash
 cd supabase/functions
-deno check <function>/index.ts
+deno check --node-modules-dir=none <function>/index.ts
 ```
 
-Do not commit `deno.json` or `deno.lock` from `supabase/functions` — they exist
-only to let the local Deno toolchain resolve `npm:` transitive dependencies, and
-committing them would change how functions are bundled at deploy time.
+Do not commit a `deno.json` or `deno.lock` under `supabase/functions` — either
+would change how functions are bundled at deploy time. Determinism there comes
+from the import specifiers themselves: every remote import names an exact
+version (`jsr:@supabase/supabase-js@2.112.4`, not `@2`), so a deploy resolves the
+same code the repository was tested against. `npm run check:supplychain` enforces
+that. When bumping one, change every function together and re-run the checks
+above — these functions hold the service-role and BTCPay Greenfield keys.

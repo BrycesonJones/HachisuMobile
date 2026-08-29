@@ -45,7 +45,7 @@
 // BTCPAY_GREENFIELD_API_KEY.
 // Platform-provided: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'jsr:@supabase/supabase-js@2.112.4';
 
 import { collectBtcpayStoreIds } from '../_shared/account-deletion.ts';
 import {

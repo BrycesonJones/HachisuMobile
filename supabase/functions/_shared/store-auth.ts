@@ -9,7 +9,7 @@
 // A failure returns a ready-to-send Response so callers cannot accidentally
 // continue with a half-resolved context.
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'jsr:@supabase/supabase-js@2.112.4';
 
 import { jsonResponse } from './cors.ts';
 

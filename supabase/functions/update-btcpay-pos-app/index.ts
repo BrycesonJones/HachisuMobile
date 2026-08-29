@@ -8,7 +8,7 @@
 // still persisted to Supabase (the app's source of truth for the mobile UI) and
 // a warning is returned. The Greenfield key stays server-side.
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'jsr:@supabase/supabase-js@2.112.4';
 
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 import {
