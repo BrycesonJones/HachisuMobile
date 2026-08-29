@@ -5,10 +5,17 @@
 // present before this module constructs/uses the client.
 import 'react-native-url-polyfill/auto';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Must also load before the Supabase client: Hermes ships no WebCrypto, and
+// without it @supabase/auth-js generates the PKCE code verifier from
+// Math.random() and downgrades the challenge to `plain`. See
+// lib/crypto/web-crypto.ts.
+import '@/lib/crypto/polyfill';
+
 import { createClient } from '@supabase/supabase-js';
 
 import { isAuthDevBypassEnabled, isProfileDebugEnabled } from '@/lib/auth/config';
+import { sessionStorage } from '@/lib/auth/secure-session-storage';
+import { supabaseAuthOptions } from '@/lib/auth/supabase-auth-options';
 import type { Database } from '@/types/supabase';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -37,35 +44,9 @@ if (isProfileDebugEnabled) {
   });
 }
 
-const ssrSafeStorage = {
-  getItem: (key: string) => {
-    if (typeof window === 'undefined') {
-      return Promise.resolve(null);
-    }
-
-    return AsyncStorage.getItem(key);
-  },
-  setItem: (key: string, value: string) => {
-    if (typeof window === 'undefined') {
-      return Promise.resolve();
-    }
-
-    return AsyncStorage.setItem(key, value);
-  },
-  removeItem: (key: string) => {
-    if (typeof window === 'undefined') {
-      return Promise.resolve();
-    }
-
-    return AsyncStorage.removeItem(key);
-  },
-};
-
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: ssrSafeStorage,
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
+    ...supabaseAuthOptions,
+    storage: sessionStorage,
   },
 });

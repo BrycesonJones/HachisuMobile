@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Client configuration guard (OWASP A02:2025 — Security Misconfiguration).
+ * Client configuration guard (OWASP A02:2025 — Security Misconfiguration,
+ * and A04:2025 — Cryptographic Failures).
  *
  *   node scripts/check-client-config.mjs
  *   node scripts/check-client-config.mjs --root <dir>     # used by the self-test
@@ -15,6 +16,11 @@
  *   3. CWE-489/CWE-11 — a dev auth bypass that is not hard-gated behind __DEV__.
  *   4. CWE-489     — a dev-bypass call site that is not guarded.
  *   5. CWE-5       — a non-HTTPS endpoint configured for the client.
+ *   6. CWE-325     — OAuth without PKCE, so the redirect to this app's custom
+ *                    scheme carries replayable credentials.
+ *   7. CWE-338/757 — the Supabase client built before WebCrypto is installed,
+ *                    so auth-js falls back to Math.random() and `plain`.
+ *   8. CWE-320     — the auth session persisted to unencrypted device storage.
  *
  * These are guards, not bug reports: the tree is expected to pass today. Their
  * job is to make the insecure state unrepresentable going forward.
@@ -153,6 +159,60 @@ for (const file of clientFiles) {
   }
 }
 if (!failures.some((f) => f.rule === 'dev-bypass-callsite-unguarded')) pass('every devSignIn() call site is guarded');
+
+// ---------------------------------------------------------------------------
+// 6 + 7 + 8. Cryptographic configuration of the auth client (A04).
+// ---------------------------------------------------------------------------
+const authOptionsPath = join(ROOT, 'lib', 'auth', 'supabase-auth-options.ts');
+const authOptions = read(authOptionsPath);
+if (authOptions === null) {
+  fail('oauth-flow-not-pkce', `${rel(authOptionsPath)}: expected the auth flow configuration here`);
+} else if (!/flowType\s*:\s*'pkce'/.test(authOptions)) {
+  // supabase-js defaults to `implicit`, which returns the access AND refresh
+  // tokens in the redirect to hachisumobile:// — a scheme any app can claim.
+  fail('oauth-flow-not-pkce', `${rel(authOptionsPath)}: auth flowType must be 'pkce' (RFC 8252 §8.1)`);
+} else {
+  pass("OAuth uses the PKCE flow, not implicit");
+}
+
+const supabaseClientPath = join(ROOT, 'lib', 'supabase.ts');
+const supabaseClient = read(supabaseClientPath);
+if (supabaseClient === null) {
+  fail('webcrypto-not-installed', `${rel(supabaseClientPath)}: expected the Supabase client here`);
+} else {
+  // Hermes ships no WebCrypto. The polyfill import must come before the
+  // createClient call, or auth-js generates the PKCE verifier with Math.random().
+  const polyfillAt = supabaseClient.indexOf('lib/crypto/polyfill');
+  const createClientAt = supabaseClient.indexOf('createClient<');
+  if (polyfillAt === -1 || (createClientAt !== -1 && polyfillAt > createClientAt)) {
+    fail(
+      'webcrypto-not-installed',
+      `${rel(supabaseClientPath)}: must import lib/crypto/polyfill before constructing the client`,
+    );
+  } else {
+    pass('WebCrypto is installed before the Supabase client is constructed');
+  }
+
+  if (/async-storage/.test(supabaseClient)) {
+    fail(
+      'session-in-plaintext-storage',
+      `${rel(supabaseClientPath)}: the auth session must not be wired straight to AsyncStorage`,
+    );
+  }
+}
+
+const secureStoragePath = join(ROOT, 'lib', 'auth', 'secure-session-storage.ts');
+const secureStorage = read(secureStoragePath);
+if (secureStorage === null) {
+  fail('session-in-plaintext-storage', `${rel(secureStoragePath)}: expected the session storage wiring here`);
+} else if (!/expo-secure-store/.test(secureStorage)) {
+  fail(
+    'session-in-plaintext-storage',
+    `${rel(secureStoragePath)}: the auth session must be held by expo-secure-store on device`,
+  );
+} else if (!failures.some((f) => f.rule === 'session-in-plaintext-storage')) {
+  pass('the auth session is held in platform-backed secure storage');
+}
 
 // ---------------------------------------------------------------------------
 // Report

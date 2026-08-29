@@ -4,6 +4,10 @@
 // "Failed to send a request to the Edge Function" even though the REST client
 // (which concatenates URLs) works fine.
 import 'react-native-url-polyfill/auto';
+// Hermes has no WebCrypto. Install it at the entry point too, so any security
+// value generated before lib/supabase.ts is first imported still comes from the
+// platform CSPRNG rather than a library's Math.random() fallback.
+import '@/lib/crypto/polyfill';
 
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
