@@ -17,6 +17,11 @@ import {
   getBtcpayConfig,
   updatePosApp,
 } from '../_shared/btcpay-client.ts';
+import {
+  MAX_DESCRIPTION_LENGTH,
+  validateCurrency,
+  validateOptionalText,
+} from '../_shared/invoice-input.ts';
 import { buildTemplate, PosProductError } from '../_shared/pos-template.ts';
 
 const MAX_TITLE_LENGTH = 100;
@@ -104,14 +109,27 @@ Deno.serve(async (req) => {
     );
   }
 
-  const currency =
-    typeof body.currency === 'string' && body.currency.trim()
-      ? body.currency.trim().toUpperCase()
-      : 'USD';
-  const description =
-    typeof body.description === 'string' && body.description.trim()
-      ? body.description.trim()
-      : null;
+  // Currency and description are re-validated against the SAME shared rules the
+  // invoice path uses. Both are forwarded to BTCPay's POS app update and
+  // persisted to merchant_pos_apps, so neither may be an arbitrary unbounded
+  // string just because the picker in the app only offers valid codes — the
+  // client is untrusted. An absent currency keeps the previous 'USD' default.
+  const currencyResult = validateCurrency(body.currency, 'USD');
+  if (!currencyResult.ok) {
+    return jsonResponse({ error: currencyResult.message }, 400);
+  }
+  const currency = currencyResult.value;
+
+  const descriptionResult = validateOptionalText(
+    body.description,
+    MAX_DESCRIPTION_LENGTH,
+    'Description',
+  );
+  if (!descriptionResult.ok) {
+    return jsonResponse({ error: descriptionResult.message }, 400);
+  }
+  const description = descriptionResult.value;
+
   const products = Array.isArray(body.products) ? body.products : [];
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {

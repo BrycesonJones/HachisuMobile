@@ -20,11 +20,34 @@ const PRICE_TYPE_TO_BTCPAY: Record<string, string> = {
 
 const MAX_PRODUCTS = 250;
 
+// Server-side bounds on every free-form product field. The products array
+// arrives verbatim from the untrusted mobile client, and these strings are
+// forwarded to consumers that expect bounded identifiers/labels: BTCPay's POS
+// AppItem template (rendered on the store's PUBLIC point-of-sale page) and the
+// CSV export, where a cart item's `id` becomes a report COLUMN NAME. The client
+// caps description at 300 for UX; that is an affordance, not a boundary, so the
+// same limit is enforced here. Over-length input is REJECTED rather than
+// truncated — silently shortening a menu item would show the merchant one thing
+// and the customer another.
+const MAX_PRODUCT_ID_LENGTH = 100;
+const MAX_PRODUCT_TITLE_LENGTH = 200;
+const MAX_PRODUCT_DESCRIPTION_LENGTH = 300;
+const MAX_PRODUCT_CATEGORY_LENGTH = 100;
+
 /** Plain positive decimal, max 2 fraction digits (all supported currencies). */
 const PRICE_RE = /^\d+(\.\d{1,2})?$/;
 
 /** A product the merchant must fix before the menu can be saved. */
 export class PosProductError extends Error {}
+
+/** Rejects an over-long free-form product field. */
+function assertLength(value: string, maxLength: number, label: string, title: string): void {
+  if (value.length > maxLength) {
+    throw new PosProductError(
+      `"${title}": ${label} must be ${maxLength} characters or fewer.`,
+    );
+  }
+}
 
 /**
  * Serialize the product menu into BTCPay's POS app template (a JSON string of
@@ -42,6 +65,8 @@ export function buildTemplate(products: unknown[]): string {
       const id = String(prod.productId ?? '');
       const title = String(prod.name ?? '');
       if (!id || !title) return null;
+      assertLength(title, MAX_PRODUCT_TITLE_LENGTH, 'the name', title.slice(0, 40));
+      assertLength(id, MAX_PRODUCT_ID_LENGTH, 'the product id', title);
       const rawType = typeof prod.priceType === 'string' ? prod.priceType : 'fixed';
       const priceType = rawType in PRICE_TYPE_TO_BTCPAY ? rawType : 'fixed';
       const item: Record<string, unknown> = {
@@ -62,10 +87,14 @@ export function buildTemplate(products: unknown[]): string {
         item.price = 0;
       }
       if (typeof prod.description === 'string' && prod.description.trim()) {
-        item.description = prod.description.trim();
+        const description = prod.description.trim();
+        assertLength(description, MAX_PRODUCT_DESCRIPTION_LENGTH, 'the description', title);
+        item.description = description;
       }
       if (typeof prod.category === 'string' && prod.category.trim()) {
-        item.categories = [prod.category.trim()];
+        const category = prod.category.trim();
+        assertLength(category, MAX_PRODUCT_CATEGORY_LENGTH, 'the category', title);
+        item.categories = [category];
       }
       const inv = typeof prod.inventory === 'string' ? prod.inventory.trim() : '';
       if (inv && /^\d+$/.test(inv)) item.inventory = Number(inv);

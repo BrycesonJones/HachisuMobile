@@ -532,7 +532,11 @@ export function collectMetadataColumns(rows: ReportRow[]): string[] {
   return columns;
 }
 
-/** RFC 4180 CSV: header row + one line per report row. Timestamps are ISO 8601 UTC. */
+/**
+ * RFC 4180 CSV: header row + one line per report row. Timestamps are ISO 8601
+ * UTC. Every cell — header names included — is written through `csvCell`, which
+ * also neutralizes spreadsheet-formula syntax (see below).
+ */
 export function reportRowsToCsv(rows: ReportRow[], metadataColumns: string[]): string {
   const header = [...REPORT_BASE_COLUMNS, ...metadataColumns];
   const lines = [header.map(csvCell).join(',')];
@@ -546,9 +550,40 @@ export function reportRowsToCsv(rows: ReportRow[], metadataColumns: string[]): s
   return lines.join('\r\n') + '\r\n';
 }
 
+/** Leading characters Excel / LibreOffice / Google Sheets may read as the start
+ * of a formula or a DDE payload. */
+const FORMULA_LEAD_RE = /^[=+\-@\t\r]/;
+
+/** A plain decimal, optionally negative. These are real accounting figures and
+ * are never rewritten — InvoiceDue is legitimately negative on an overpayment. */
+const PLAIN_NUMBER_RE = /^-?\d+(\.\d+)?$/;
+
+/**
+ * Serializes one cell: spreadsheet-formula neutralization first, then RFC 4180
+ * quoting.
+ *
+ * The two are NOT the same protection and quoting alone does not stop the first.
+ * A spreadsheet strips the surrounding quotes while parsing and THEN evaluates a
+ * leading =/+/-/@ (or a leading tab/CR), so `"=HYPERLINK(...)"` is still a live
+ * formula when the file is opened.
+ *
+ * This matters because the report's metadata columns are not all merchant-typed.
+ * Enabling the Pay Button sets BTCPay's `anyoneCanCreateInvoice`, and the
+ * merchant publishes the store id in the snippet they paste on their website, so
+ * BTCPay's public pay-button endpoint lets an UNAUTHENTICATED payer choose the
+ * `orderId` / `checkoutDesc` that land on the invoice metadata this module
+ * flattens. Nothing attacker-chosen may reach the merchant's spreadsheet as
+ * executable syntax.
+ *
+ * A leading apostrophe is the neutralizer: the spreadsheet renders the value as
+ * literal text, and the text itself stays intact and legible for the merchant.
+ */
 function csvCell(value: ReportCellValue): string {
   if (value == null) return '';
-  const text = typeof value === 'string' ? value : String(value);
+  let text = typeof value === 'string' ? value : String(value);
+  if (FORMULA_LEAD_RE.test(text) && !PLAIN_NUMBER_RE.test(text)) {
+    text = `'${text}`;
+  }
   if (/[",\r\n]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`;
   }
