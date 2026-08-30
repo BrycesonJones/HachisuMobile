@@ -45,29 +45,19 @@ import {
   updateOnChainWalletSettings,
 } from '../_shared/btcpay-client.ts';
 import { fingerprintDerivationScheme } from '../_shared/onchain-fingerprint.ts';
+import {
+  acquireOnchainLock,
+  assertOnchainLockOwnership,
+  OnchainLockLost,
+  releaseOnchainLock,
+} from '../_shared/onchain-lock.ts';
 import { syncUserStoreSummary } from '../_shared/store-summary.ts';
 
 const LOOKS_LIKE_KEY = /(\(|[xyztuv]pub[1-9A-HJ-NP-Za-km-z]{20,})/i;
 const MAX_KEY_LENGTH = 2000;
-// A lock older than this may be superseded so a crashed/abandoned operation never
-// permanently wedges a store. This MUST exceed the platform's hard maximum Edge
-// Function wall-clock runtime (Supabase terminates a function long before this),
-// which GUARANTEES any request still holding a lock this old has already been
-// killed and can no longer commit a BTCPay/DB write — so supersession can never
-// overlap a live operation. The per-request ownership TOKEN (checked before the
-// BTCPay write and enforced on the DB commit) is the second, independent guard.
-const LOCK_STALE_MS = 15 * 60 * 1000;
 
 function fail(code: string, message: string, status: number) {
   return jsonResponse({ ok: false, code, error: message }, status);
-}
-
-/** Thrown when this request no longer owns the replacement lock (superseded). */
-class OwnershipLost extends Error {
-  constructor() {
-    super('Replacement lock ownership lost.');
-    this.name = 'OwnershipLost';
-  }
 }
 
 interface StoreRow {
@@ -268,45 +258,26 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: message }, 500);
   }
 
-  // --- Concurrency lock: flip onchain_operation none -> replacing atomically and
-  // stamp a UNIQUE ownership token for this request. A stale lock (older than the
-  // platform's max runtime — see LOCK_STALE_MS) can be superseded so a store never
-  // wedges; the token ensures only the current owner can ever commit.
-  const lockToken = crypto.randomUUID();
-  const staleBefore = new Date(Date.now() - LOCK_STALE_MS).toISOString();
-  const { data: locked, error: lockError } = await admin
-    .from('merchant_stores')
-    .update({
-      onchain_operation: 'replacing',
-      onchain_operation_started_at: new Date().toISOString(),
-      onchain_operation_token: lockToken,
-    })
-    .eq('id', store.id)
-    .or(`onchain_operation.eq.none,onchain_operation_started_at.lt.${staleBefore}`)
-    .select('id');
-  if (lockError) {
-    return jsonResponse({ ok: false, error: 'Could not start the replacement.' }, 500);
-  }
-  if (!locked || locked.length === 0) {
+  // --- Concurrency lock. Shared with connect / remove / sync so no two on-chain
+  // operations on the same store can ever overlap; see _shared/onchain-lock.ts
+  // for the stale-supersession and ownership-token rules.
+  const lock = await acquireOnchainLock(admin, store.id, 'replacing');
+  if (!lock.ok) {
+    if (lock.reason === 'error') {
+      return jsonResponse({ ok: false, error: 'Could not start the replacement.' }, 500);
+    }
     return fail(
       'WALLET_REPLACEMENT_ALREADY_IN_PROGRESS',
       'Another wallet operation is already in progress for this store.',
       409,
     );
   }
+  const lockToken = lock.token;
 
   // Confirms this request still owns the lock (was not superseded by a later
-  // operation). Throws OwnershipLost so callers can abort BEFORE any write.
-  const assertOwnership = async () => {
-    const { data: row } = await admin
-      .from('merchant_stores')
-      .select('onchain_operation, onchain_operation_token')
-      .eq('id', store.id)
-      .maybeSingle<{ onchain_operation: string; onchain_operation_token: string | null }>();
-    if (!row || row.onchain_operation !== 'replacing' || row.onchain_operation_token !== lockToken) {
-      throw new OwnershipLost();
-    }
-  };
+  // operation). Throws OnchainLockLost so callers can abort BEFORE any write.
+  const assertOwnership = () =>
+    assertOnchainLockOwnership(admin, store.id, lockToken, 'replacing');
 
   // Record the in-progress idempotency row. If a concurrent request inserted it
   // first, the unique index makes this fail -> treat as already-in-progress.
@@ -317,7 +288,7 @@ Deno.serve(async (req) => {
     status: 'in_progress',
   });
   if (opInsertError) {
-    await releaseLock(admin, store.id, lockToken);
+    await releaseOnchainLock(admin, store.id, lockToken);
     return fail(
       'WALLET_REPLACEMENT_ALREADY_IN_PROGRESS',
       'This replacement is already being processed.',
@@ -342,7 +313,7 @@ Deno.serve(async (req) => {
     if (!before.configured) {
       // The wallet vanished between preview and now: nothing to replace safely.
       await failOp(admin, store.id, idempotencyKey);
-      await releaseLock(admin, store.id, lockToken);
+      await releaseOnchainLock(admin, store.id, lockToken);
       return fail('WALLET_NOT_CONNECTED', 'No wallet is currently configured at BTCPay.', 409);
     }
     const preservedEnabled = before.enabled;
@@ -372,7 +343,7 @@ Deno.serve(async (req) => {
       });
       // Existing wallet is untouched at BTCPay and in the DB.
       await failOp(admin, store.id, idempotencyKey);
-      await releaseLock(admin, store.id, lockToken);
+      await releaseOnchainLock(admin, store.id, lockToken);
       return fail(
         'BTCPAY_REPLACEMENT_FAILED',
         'BTCPay rejected the new wallet configuration. Your current wallet is unchanged.',
@@ -393,7 +364,7 @@ Deno.serve(async (req) => {
       });
       // BTCPay may already have changed. Reconcile from whatever BTCPay actually
       // holds now — do NOT restore stale DB values blindly.
-      const reconcileState = await reconcileFromBtcpay(admin, config, store);
+      const reconcileState = await reconcileFromBtcpay(admin, config, store, lockToken);
       await markPreviewUsed(admin, preview.id);
       const responseBody = {
         ok: false,
@@ -406,7 +377,7 @@ Deno.serve(async (req) => {
         label: reconcileState.label,
       };
       await recordOp(admin, store.id, idempotencyKey, 'reconcile_required', responseBody);
-      await releaseLock(admin, store.id, lockToken);
+      await releaseOnchainLock(admin, store.id, lockToken);
       return jsonResponse(responseBody, 500);
     };
 
@@ -497,7 +468,7 @@ Deno.serve(async (req) => {
         label: after.label,
       };
       await recordOp(admin, store.id, idempotencyKey, 'reconcile_required', responseBody);
-      await releaseLock(admin, store.id, lockToken);
+      await releaseOnchainLock(admin, store.id, lockToken);
       return jsonResponse(responseBody, 500);
     }
 
@@ -529,7 +500,7 @@ Deno.serve(async (req) => {
     // We were superseded by a later operation (stale lock reclaimed). That op is
     // now authoritative: do NOT touch BTCPay/DB, do NOT release its lock, do NOT
     // reconcile. Bail out without side effects.
-    if (err instanceof OwnershipLost) {
+    if (err instanceof OnchainLockLost) {
       console.error(`[replace-onchain] store=${store.id} superseded — aborting without writes.`);
       return fail(
         'WALLET_REPLACEMENT_ALREADY_IN_PROGRESS',
@@ -541,7 +512,7 @@ Deno.serve(async (req) => {
     // reflects reality, then release the lock.
     console.error(`[replace-onchain] store=${store.id} unexpected: ${String(err)}`);
     try {
-      const reconcileState = await reconcileFromBtcpay(admin, config, store);
+      const reconcileState = await reconcileFromBtcpay(admin, config, store, lockToken);
       const responseBody = {
         ok: false,
         code: 'WALLET_REPLACEMENT_VERIFICATION_FAILED',
@@ -553,26 +524,16 @@ Deno.serve(async (req) => {
         label: reconcileState.label,
       };
       await recordOp(admin, store.id, idempotencyKey, 'reconcile_required', responseBody);
-      await releaseLock(admin, store.id, lockToken);
+      await releaseOnchainLock(admin, store.id, lockToken);
       return jsonResponse(responseBody, 500);
     } catch {
-      await releaseLock(admin, store.id, lockToken);
+      await releaseOnchainLock(admin, store.id, lockToken);
       return fail('BTCPAY_REPLACEMENT_FAILED', 'The replacement could not be completed.', 500);
     }
   }
 });
 
 // --- helpers ------------------------------------------------------------------
-
-async function releaseLock(admin: SupabaseClient, storeId: string, token: string) {
-  // Only release the lock if we still own it — never clobber a superseding op's.
-  const { error } = await admin
-    .from('merchant_stores')
-    .update({ onchain_operation: 'none', onchain_operation_started_at: null, onchain_operation_token: null })
-    .eq('id', storeId)
-    .eq('onchain_operation_token', token);
-  if (error) console.error('[replace-onchain] lock release failed:', error.message);
-}
 
 async function markPreviewUsed(admin: SupabaseClient, previewId: string) {
   const { error } = await admin
@@ -621,6 +582,7 @@ async function reconcileFromBtcpay(
   admin: SupabaseClient,
   config: Parameters<typeof getOnChainWallet>[0],
   store: StoreRow,
+  lockToken: string,
 ): Promise<{ onchain_status: string; enabled: boolean; label: string | null }> {
   const state = await getOnChainWallet(config, store.btcpay_store_id);
   if (state.configured) {
@@ -644,7 +606,10 @@ async function reconcileFromBtcpay(
         onchain_operation_started_at: null,
         onchain_operation_token: null,
       })
-      .eq('id', store.id);
+      .eq('id', store.id)
+      // Never write reconciled state over — or clear the lock of — an operation
+      // that superseded this one. That op is authoritative.
+      .eq('onchain_operation_token', lockToken);
     return { onchain_status: 'connected', enabled: state.enabled, label: state.label };
   }
 
@@ -664,6 +629,7 @@ async function reconcileFromBtcpay(
       onchain_operation_started_at: null,
       onchain_operation_token: null,
     })
-    .eq('id', store.id);
+    .eq('id', store.id)
+    .eq('onchain_operation_token', lockToken);
   return { onchain_status: 'not_connected', enabled: false, label: null };
 }

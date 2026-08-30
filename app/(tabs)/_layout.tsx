@@ -19,7 +19,6 @@ export default function TabLayout() {
         screenOptions={{ headerShown: false }}
         tabBar={() => <DashboardTabBar />}>
         <Tabs.Screen name="home" options={{ title: 'Activity' }} />
-        <Tabs.Screen name="explore" options={{ href: null }} />
       </Tabs>
     </DashboardTabProvider>
   );

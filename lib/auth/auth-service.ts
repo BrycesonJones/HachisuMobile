@@ -25,7 +25,40 @@ export interface EnsureUserProfileInput {
   onboardingStatus?: OnboardingStatus;
 }
 
-export type UpsertProfileInput = Partial<Omit<UserProfile, 'id' | 'created_at' | 'updated_at'>>;
+/**
+ * The user_profiles columns the client may write.
+ *
+ * The same row also carries the server-owned BTCPay "default store summary"
+ * (btcpay_store_id, wallet/onchain/lightning status, store_count,
+ * default_merchant_store_id, …). Those are written only by the Edge Functions
+ * via the service role, and since
+ * 20260830120000_lock_down_user_profile_server_columns the client has no grant
+ * on them at all — a write naming one is rejected by PostgreSQL.
+ *
+ * Listing the writable columns here rather than subtracting a couple from the
+ * row type keeps the client type in step with the grant: a new server-owned
+ * column is excluded by default instead of quietly becoming writable-looking,
+ * and passing one is a compile error rather than a runtime permission failure.
+ */
+export type WritableProfileColumn =
+  | 'email'
+  | 'account_type'
+  | 'onboarding_status'
+  | 'onboarding_completed'
+  | 'username'
+  | 'display_name'
+  | 'full_name'
+  | 'phone'
+  | 'country'
+  | 'personal_address'
+  | 'business_name'
+  | 'business_address'
+  | 'business_website'
+  | 'business_country'
+  | 'business_description'
+  | 'expected_monthly_volume';
+
+export type UpsertProfileInput = Partial<Pick<UserProfile, WritableProfileColumn>>;
 
 function toAuthError(error: { message: string }): AuthError {
   return { message: error.message };

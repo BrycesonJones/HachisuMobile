@@ -4,6 +4,12 @@
 // the on-chain fields on THAT store only. Lightning fields and other stores are
 // never touched. wallet_status is recomputed from the remaining Lightning state.
 //
+// Removal takes the SHARED on-chain operation lock for the whole BTCPay-delete +
+// DB-write sequence. Without it, a removal could interleave with a staged
+// replacement and land its "not_connected" write after the replacement's commit,
+// leaving BTCPay routing payments to a wallet the merchant's dashboard says is
+// disconnected. See _shared/onchain-lock.ts.
+//
 // Required secrets: BTCPAY_SERVER_URL, BTCPAY_GREENFIELD_API_KEY.
 // Platform-provided: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
 
@@ -17,6 +23,11 @@ import {
   getOnChainWallet,
   removeOnChainWallet,
 } from '../_shared/btcpay-client.ts';
+import {
+  acquireOnchainLock,
+  onchainLockBusyResponse,
+  releaseOnchainLock,
+} from '../_shared/onchain-lock.ts';
 import { syncUserStoreSummary } from '../_shared/store-summary.ts';
 
 Deno.serve(async (req) => {
@@ -110,11 +121,22 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: message }, 500);
   }
 
+  // Mutual exclusion with connect / replace / sync for this store.
+  const lock = await acquireOnchainLock(admin, store.id, 'removing');
+  if (!lock.ok) {
+    if (lock.reason === 'error') {
+      return jsonResponse({ ok: false, error: 'Could not start the removal.' }, 500);
+    }
+    return onchainLockBusyResponse();
+  }
+  const lockToken = lock.token;
+
   // Remove at BTCPay (idempotent), then confirm it's gone before touching state.
   try {
     await removeOnChainWallet(config, store.btcpay_store_id);
     const after = await getOnChainWallet(config, store.btcpay_store_id);
     if (after.configured) {
+      await releaseOnchainLock(admin, store.id, lockToken);
       return jsonResponse(
         { ok: false, error: 'BTCPay still reports a wallet configured. Please try again.' },
         502,
@@ -131,6 +153,7 @@ Deno.serve(async (req) => {
       message: isApiError ? `HTTP ${err.status}` : 'Unexpected error removing wallet.',
       btcpayStoreId: store.btcpay_store_id,
     });
+    await releaseOnchainLock(admin, store.id, lockToken);
     return jsonResponse(
       { ok: false, error: 'Could not remove the wallet. Please try again.' },
       502,
@@ -142,7 +165,10 @@ Deno.serve(async (req) => {
   const walletStatus =
     store.lightning_status === 'connected' ? 'payment_destination_connected' : 'store_created';
 
-  const { error: updateError } = await admin
+  // Commit + release in one write, conditional on STILL owning the lock. If a
+  // later operation superseded this one it is authoritative, so we must not
+  // write a stale "removed" state over it — and must not clear its lock.
+  const { data: committed, error: updateError } = await admin
     .from('merchant_stores')
     .update({
       onchain_status: 'not_connected',
@@ -151,13 +177,32 @@ Deno.serve(async (req) => {
       onchain_wallet_configured_at: null,
       onchain_enabled: false,
       onchain_label: null,
+      // The scheme fingerprint describes a wallet that no longer exists.
+      onchain_scheme_fingerprint: null,
       wallet_status: walletStatus,
+      onchain_operation: 'none',
+      onchain_operation_started_at: null,
+      onchain_operation_token: null,
     })
-    .eq('id', store.id);
+    .eq('id', store.id)
+    .eq('onchain_operation_token', lockToken)
+    .select('id');
   if (updateError) {
+    await releaseOnchainLock(admin, store.id, lockToken);
     return jsonResponse(
       { ok: false, error: 'Wallet removed at BTCPay but could not update the store.' },
       500,
+    );
+  }
+  if (!committed || committed.length === 0) {
+    console.error(`[remove-onchain] store=${store.id} superseded before commit`);
+    return jsonResponse(
+      {
+        ok: false,
+        code: 'WALLET_OPERATION_IN_PROGRESS',
+        error: 'Another wallet operation superseded this removal. Please re-check your wallet.',
+      },
+      409,
     );
   }
 

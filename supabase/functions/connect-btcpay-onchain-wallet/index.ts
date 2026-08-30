@@ -30,6 +30,11 @@ import {
   maskExtendedKey,
   setOnChainWallet,
 } from '../_shared/btcpay-client.ts';
+import {
+  acquireOnchainLock,
+  onchainLockBusyResponse,
+  releaseOnchainLock,
+} from '../_shared/onchain-lock.ts';
 import { syncUserStoreSummary } from '../_shared/store-summary.ts';
 
 // Accepts an output descriptor "(" anywhere, OR any extended-key token (single-
@@ -142,6 +147,20 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: message }, 500);
   }
 
+  // 4a. Mutual exclusion with replace / remove / sync for this store. The
+  //     BTCPay existence check below is a read; without the lock another
+  //     operation could change the payment method between that read and our
+  //     write, and the "no wallet exists" conclusion would be stale. Taken
+  //     BEFORE the check so the whole check-then-write sequence is exclusive.
+  const lock = await acquireOnchainLock(admin, store.id, 'connecting');
+  if (!lock.ok) {
+    if (lock.reason === 'error') {
+      return jsonResponse({ ok: false, error: 'Could not start the connection.' }, 500);
+    }
+    return onchainLockBusyResponse();
+  }
+  const lockToken = lock.token;
+
   // 4b. REPLACEMENT-GUARD: connect may ONLY configure a store that has no
   //     on-chain wallet yet. If a wallet already exists, connect would overwrite
   //     it while bypassing every replacement safeguard (preview proof, same-
@@ -162,6 +181,7 @@ Deno.serve(async (req) => {
         message: 'Connect rejected: store already has a configured on-chain wallet. Use replace.',
         btcpayStoreId: store.btcpay_store_id,
       });
+      await releaseOnchainLock(admin, store.id, lockToken);
       return jsonResponse(
         {
           ok: false,
@@ -178,6 +198,7 @@ Deno.serve(async (req) => {
       `[connect-onchain] store=${store.id} existence check failed: ${isApiError ? `HTTP ${err.status}` : String(err)}`,
     );
     // Do NOT proceed on an inconclusive lookup — refusing is the safe default.
+    await releaseOnchainLock(admin, store.id, lockToken);
     return jsonResponse(
       { ok: false, error: 'Could not verify the store wallet state. Please try again.' },
       502,
@@ -211,11 +232,13 @@ Deno.serve(async (req) => {
       btcpayStoreId: store.btcpay_store_id,
       rawError: isApiError ? { status: err.status } : null,
     });
-    // Reflect the failure on the store row.
+    // Reflect the failure on the store row (only if we still hold the lock).
     await admin
       .from('merchant_stores')
       .update({ onchain_status: 'error' })
-      .eq('id', store.id);
+      .eq('id', store.id)
+      .eq('onchain_operation_token', lockToken);
+    await releaseOnchainLock(admin, store.id, lockToken);
     const message = isApiError
       ? 'BTCPay rejected that wallet configuration. Please check the key and try again.'
       : 'Could not connect the wallet. Please try again.';
@@ -229,6 +252,7 @@ Deno.serve(async (req) => {
       message: 'BTCPay did not report the on-chain wallet as enabled.',
       btcpayStoreId: store.btcpay_store_id,
     });
+    await releaseOnchainLock(admin, store.id, lockToken);
     return jsonResponse(
       { ok: false, error: 'BTCPay did not confirm the wallet as connected.' },
       502,
@@ -237,7 +261,8 @@ Deno.serve(async (req) => {
 
   // 6. BTCPay confirmed -> persist connected state on THIS store only. We store
   //    no key material, only non-sensitive metadata.
-  const { error: updateError } = await admin
+  // Commit + release in one write, conditional on STILL owning the lock.
+  const { data: committed, error: updateError } = await admin
     .from('merchant_stores')
     .update({
       onchain_status: 'connected',
@@ -248,9 +273,26 @@ Deno.serve(async (req) => {
       // so a prior remove (which sets enabled=false) doesn't leave it disabled.
       onchain_enabled: true,
       wallet_status: 'payment_destination_connected',
+      onchain_operation: 'none',
+      onchain_operation_started_at: null,
+      onchain_operation_token: null,
     })
-    .eq('id', store.id);
+    .eq('id', store.id)
+    .eq('onchain_operation_token', lockToken)
+    .select('id');
+  if (!updateError && (!committed || committed.length === 0)) {
+    console.error(`[connect-onchain] store=${store.id} superseded before commit`);
+    return jsonResponse(
+      {
+        ok: false,
+        code: 'WALLET_OPERATION_IN_PROGRESS',
+        error: 'Another wallet operation superseded this one. Please re-check your wallet.',
+      },
+      409,
+    );
+  }
   if (updateError) {
+    await releaseOnchainLock(admin, store.id, lockToken);
     await logEvent({
       eventType: 'onchain_wallet_connect_failed',
       status: 'error',

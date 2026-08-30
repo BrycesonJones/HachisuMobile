@@ -49,7 +49,10 @@ export async function syncUserStoreSummary(
 
   if (error) throw new Error(`syncUserStoreSummary: ${error.message}`);
 
-  const stores = (data ?? []) as StoreRow[];
+  // An untyped SupabaseClient infers this select as GenericStringError[], which
+  // does not overlap StoreRow, so `deno check` rejects the direct assertion. The
+  // shape is guaranteed by the column list above; go through unknown.
+  const stores = (data ?? []) as unknown as StoreRow[];
   const storeCount = stores.length;
   const hasStores = storeCount > 0;
 

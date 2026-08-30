@@ -23,6 +23,11 @@ import {
   getOnChainWallet,
 } from '../_shared/btcpay-client.ts';
 import { fingerprintDerivationScheme } from '../_shared/onchain-fingerprint.ts';
+import {
+  acquireOnchainLock,
+  onchainLockBusyResponse,
+  releaseOnchainLock,
+} from '../_shared/onchain-lock.ts';
 import { syncUserStoreSummary } from '../_shared/store-summary.ts';
 
 function fail(code: string, message: string, status: number) {
@@ -100,6 +105,22 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: message }, 500);
   }
 
+  // Sync rewrites the on-chain mirror AND clears the operation lock, so it must
+  // hold the lock to do either. Previously it cleared the lock unconditionally:
+  // any authenticated owner could call sync mid-replacement and free a LIVE
+  // lock, letting a second operation start while the first was still writing
+  // BTCPay. Acquiring here keeps sync's recovery role — a STALE lock is still
+  // supersedable, which is how an abandoned operation gets cleaned up — while
+  // making it refuse to disturb an operation that is genuinely in flight.
+  const lock = await acquireOnchainLock(admin, store.id, 'connecting');
+  if (!lock.ok) {
+    if (lock.reason === 'error') {
+      return jsonResponse({ ok: false, error: 'Could not re-check the wallet status.' }, 500);
+    }
+    return onchainLockBusyResponse();
+  }
+  const lockToken = lock.token;
+
   try {
     const state = await getOnChainWallet(config, store.btcpay_store_id);
 
@@ -124,8 +145,10 @@ Deno.serve(async (req) => {
           onchain_operation_started_at: null,
           onchain_operation_token: null,
         })
-        .eq('id', store.id);
+        .eq('id', store.id)
+        .eq('onchain_operation_token', lockToken);
       if (updateError) {
+        await releaseOnchainLock(admin, store.id, lockToken);
         return jsonResponse({ ok: false, error: 'Could not save the wallet status.' }, 500);
       }
     } else {
@@ -145,8 +168,10 @@ Deno.serve(async (req) => {
           onchain_operation_started_at: null,
           onchain_operation_token: null,
         })
-        .eq('id', store.id);
+        .eq('id', store.id)
+        .eq('onchain_operation_token', lockToken);
       if (updateError) {
+        await releaseOnchainLock(admin, store.id, lockToken);
         return jsonResponse({ ok: false, error: 'Could not save the wallet status.' }, 500);
       }
     }
@@ -164,6 +189,7 @@ Deno.serve(async (req) => {
     console.error(
       `[sync-onchain] store=${store.id} failed: ${isApiError ? `HTTP ${err.status}` : String(err)}`,
     );
+    await releaseOnchainLock(admin, store.id, lockToken);
     return jsonResponse({ ok: false, error: 'Could not re-check the wallet status.' }, 502);
   }
 });

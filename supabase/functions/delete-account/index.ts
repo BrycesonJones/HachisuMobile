@@ -47,7 +47,10 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.112.4';
 
-import { collectBtcpayStoreIds } from '../_shared/account-deletion.ts';
+import {
+  collectBtcpayStoreIds,
+  unhandledBtcpayStoreIds,
+} from '../_shared/account-deletion.ts';
 import {
   BtcpayApiError,
   BtcpayConfigError,
@@ -56,6 +59,12 @@ import {
   listServerStoreIds,
 } from '../_shared/btcpay-client.ts';
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
+
+// Bound on the enumerate -> delete -> re-enumerate loop. A merchant closing an
+// account is not creating stores in a tight loop; more than a couple of passes
+// means something is actively racing the deletion, and refusing is the safe
+// answer (the account and its mapping survive, so a retry is clean).
+const MAX_CLEANUP_PASSES = 3;
 
 const RETRYABLE_CLEANUP_ERROR =
   'Could not remove your payment-processing stores. Your account was NOT deleted — please try again.';
@@ -116,25 +125,63 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: RETRYABLE_CLEANUP_ERROR }, 500);
   }
 
+  // user_profiles is client-writable, so its summary id is only admitted when a
+  // server-written provisioning event proves the store was provisioned for THIS
+  // user. btcpay_store_provisioning_events has a select-own policy and no client
+  // write path, so the attestation set cannot be forged.
+  const { data: attestedRows, error: attestedError } = await admin
+    .from('btcpay_store_provisioning_events')
+    .select('btcpay_store_id')
+    .eq('user_id', user.id)
+    .not('btcpay_store_id', 'is', null);
+  if (attestedError) {
+    console.error(
+      `[delete-account] user=${user.id} attestation lookup failed: ${attestedError.message}`,
+    );
+    return jsonResponse({ ok: false, error: RETRYABLE_CLEANUP_ERROR }, 500);
+  }
+  const attestedStoreIds = ((attestedRows ?? []) as { btcpay_store_id: string | null }[])
+    .map((row) => row.btcpay_store_id)
+    .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+
   const storeIds = collectBtcpayStoreIds(
     (storeRows ?? []) as { btcpay_store_id: string | null }[],
     profileRow?.btcpay_store_id,
+    attestedStoreIds,
   );
 
   // 2. Permanently delete each BTCPay store (idempotent: 404 = already gone).
   //    Any failure aborts BEFORE the Supabase account is touched.
-  if (storeIds.length > 0) {
-    let config;
-    try {
-      config = getBtcpayConfig();
-    } catch (err) {
-      const message =
-        err instanceof BtcpayConfigError ? err.message : 'BTCPay is not configured.';
-      console.error(`[delete-account] user=${user.id} ${message}`);
-      return jsonResponse({ ok: false, error: RETRYABLE_CLEANUP_ERROR }, 500);
+  //
+  //    Re-enumerated between passes: a store created concurrently (the same
+  //    account calling create-btcpay-store from another device) would otherwise
+  //    land after this step and be cascaded out of Supabase while staying alive
+  //    at BTCPay — an orphan with no owner record. We loop until a fresh read
+  //    adds nothing, and refuse to proceed if it never settles.
+  let config: ReturnType<typeof getBtcpayConfig> | null = null;
+  const handledStoreIds: string[] = [];
+  let pending = storeIds;
+
+  for (let pass = 0; pending.length > 0; pass++) {
+    if (pass >= MAX_CLEANUP_PASSES) {
+      console.error(
+        `[delete-account] user=${user.id} store set never settled after ${MAX_CLEANUP_PASSES} passes`,
+      );
+      return jsonResponse({ ok: false, error: RETRYABLE_CLEANUP_ERROR }, 409);
     }
 
-    for (const storeId of storeIds) {
+    if (!config) {
+      try {
+        config = getBtcpayConfig();
+      } catch (err) {
+        const message =
+          err instanceof BtcpayConfigError ? err.message : 'BTCPay is not configured.';
+        console.error(`[delete-account] user=${user.id} ${message}`);
+        return jsonResponse({ ok: false, error: RETRYABLE_CLEANUP_ERROR }, 500);
+      }
+    }
+
+    for (const storeId of pending) {
       try {
         await deleteStore(config, storeId);
       } catch (err) {
@@ -148,6 +195,7 @@ Deno.serve(async (req) => {
             const visibleIds = await listServerStoreIds(config);
             if (!visibleIds.includes(storeId)) {
               console.log(`[delete-account] user=${user.id} store=${storeId} already deleted (403 + absent from store list)`);
+              handledStoreIds.push(storeId);
               continue;
             }
           } catch (listErr) {
@@ -165,6 +213,30 @@ Deno.serve(async (req) => {
         }
         return jsonResponse({ ok: false, error: RETRYABLE_CLEANUP_ERROR }, 502);
       }
+      handledStoreIds.push(storeId);
+    }
+
+    // Fresh read: did anything appear while we were deleting?
+    const { data: recheckRows, error: recheckError } = await admin
+      .from('merchant_stores')
+      .select('btcpay_store_id')
+      .eq('user_id', user.id);
+    if (recheckError) {
+      console.error(
+        `[delete-account] user=${user.id} store re-check failed: ${recheckError.message}`,
+      );
+      return jsonResponse({ ok: false, error: RETRYABLE_CLEANUP_ERROR }, 500);
+    }
+    pending = unhandledBtcpayStoreIds(
+      handledStoreIds,
+      ((recheckRows ?? []) as { btcpay_store_id: string | null }[])
+        .map((row) => row.btcpay_store_id)
+        .filter((id): id is string => typeof id === 'string' && id.trim().length > 0),
+    );
+    if (pending.length > 0) {
+      console.warn(
+        `[delete-account] user=${user.id} ${pending.length} store(s) appeared during cleanup — another pass`,
+      );
     }
   }
 

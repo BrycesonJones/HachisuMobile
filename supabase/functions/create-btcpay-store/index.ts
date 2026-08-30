@@ -35,6 +35,25 @@ const SUPPORTED_CURRENCIES = new Set([
 const PREFERRED_PRICE_SOURCE = 'kraken';
 const MAX_NAME_LENGTH = 50;
 
+// Ceiling on stores per merchant account.
+//
+// Store creation is the only endpoint where one authenticated request mints a
+// durable entity on the SHARED BTCPay instance — a store plus its wallet
+// tracking, apps and invoice history — and nothing else bounded it. A single
+// free account could therefore enumerate BTCPay stores without limit, degrading
+// an instance every other Hachisu merchant depends on.
+//
+// 25 is chosen against real usage, not as a round number: a merchant runs one
+// store per location or storefront, and the store switcher is a list the user
+// scrolls. Twenty-five covers a multi-location business with room to spare while
+// making bulk provisioning pointless. A merchant who genuinely outgrows it is a
+// support conversation, which is the right way to find out.
+//
+// The count-then-insert is not serialized, so a deliberate concurrent burst can
+// overshoot by a few rows. That is acceptable: the purpose is to bound unbounded
+// growth, not to enforce an exact quota.
+const MAX_STORES_PER_USER = 25;
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -153,6 +172,19 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Could not check existing stores.' }, 500);
   }
   const isDefault = (existingCount ?? 0) === 0;
+
+  if ((existingCount ?? 0) >= MAX_STORES_PER_USER) {
+    console.warn(
+      `[create-store] user=${user.id} refused: at the ${MAX_STORES_PER_USER}-store limit`,
+    );
+    return jsonResponse(
+      {
+        code: 'STORE_LIMIT_REACHED',
+        error: `You have reached the limit of ${MAX_STORES_PER_USER} stores. Contact support if you need more.`,
+      },
+      409,
+    );
+  }
 
   await logEvent({
     eventType: 'store_provisioning_started',

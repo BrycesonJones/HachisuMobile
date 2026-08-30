@@ -19,6 +19,10 @@ import { COLORS } from '@/constants/colors';
 import { useActiveStore } from '@/contexts/active-store-context';
 import { useAuth } from '@/contexts/auth-context';
 import {
+  clearDerivationScheme,
+  readDerivationScheme,
+} from '@/lib/wallet/derivation-handoff';
+import {
   connectOnchainWallet,
   newReplacementIdempotencyKey,
   replaceOnchainWallet,
@@ -39,13 +43,19 @@ export default function ConfirmAddressesScreen() {
     storeId?: string;
     storeName?: string;
     mode?: string;
-    extendedPublicKey?: string;
+    keyHandle?: string;
     addressType?: string;
     addresses?: string;
     previewVerificationId?: string;
   }>();
 
   const isReplace = params.mode === 'replace';
+
+  // The extended public key is handed over in module memory, never as a route
+  // param — see lib/wallet/derivation-handoff.ts. A null here means the handle
+  // expired or this screen was reached without the previous one (a deep link, a
+  // restored navigation state, a cold resume), so there is nothing to confirm.
+  const extendedPublicKey = readDerivationScheme(params.keyHandle);
 
   const addresses = useMemo<PreviewAddress[]>(() => {
     try {
@@ -65,6 +75,7 @@ export default function ConfirmAddressesScreen() {
 
   function handleClose() {
     // Bail out of the whole connect flow, back to the dashboard.
+    clearDerivationScheme(params.keyHandle);
     if (router.canDismiss()) {
       router.dismissTo('/(tabs)/home');
     } else {
@@ -79,6 +90,7 @@ export default function ConfirmAddressesScreen() {
   }
 
   function goHome() {
+    clearDerivationScheme(params.keyHandle);
     if (router.canDismiss()) {
       router.dismissTo('/(tabs)/home');
     } else {
@@ -87,7 +99,11 @@ export default function ConfirmAddressesScreen() {
   }
 
   async function handleConfirm() {
-    if (loading || !params.storeId || !params.extendedPublicKey) return;
+    if (loading || !params.storeId) return;
+    if (!extendedPublicKey) {
+      setError('Please go back and enter your wallet key again.');
+      return;
+    }
     if (isReplace) {
       await handleReplaceConfirm();
       return;
@@ -98,7 +114,7 @@ export default function ConfirmAddressesScreen() {
 
     const result = await connectOnchainWallet({
       merchantStoreId: params.storeId,
-      extendedPublicKey: params.extendedPublicKey,
+      extendedPublicKey,
       confirmedAddresses: addresses,
     });
 
@@ -108,6 +124,7 @@ export default function ConfirmAddressesScreen() {
       // The store already has a wallet (raced/stale) — connect must not overwrite.
       // Route to settings so the merchant uses the staged replacement flow.
       if (result.code === 'WALLET_ALREADY_CONNECTED') {
+        clearDerivationScheme(params.keyHandle);
         router.replace({
           pathname: '/account/btc-wallet-settings',
           params: { storeId: params.storeId, storeName: params.storeName ?? '' },
@@ -124,7 +141,11 @@ export default function ConfirmAddressesScreen() {
   }
 
   async function handleReplaceConfirm() {
-    if (!params.storeId || !params.extendedPublicKey) return;
+    if (!params.storeId) return;
+    if (!extendedPublicKey) {
+      setError('Please go back and enter your wallet key again.');
+      return;
+    }
     if (!params.previewVerificationId) {
       setError('Please go back and preview the replacement addresses again.');
       return;
@@ -135,7 +156,7 @@ export default function ConfirmAddressesScreen() {
     const result = await replaceOnchainWallet({
       merchantStoreId: params.storeId,
       previewVerificationId: params.previewVerificationId,
-      extendedPublicKey: params.extendedPublicKey,
+      extendedPublicKey,
       idempotencyKey,
     });
 
@@ -145,6 +166,7 @@ export default function ConfirmAddressesScreen() {
     // save cleanly. Route to the SAFE wallet-status screen — never back through
     // another replacement — so the merchant re-checks before acting.
     if (result.reconcile) {
+      clearDerivationScheme(params.keyHandle);
       await refetchStores();
       await refreshProfile();
       router.replace({
@@ -161,6 +183,7 @@ export default function ConfirmAddressesScreen() {
 
     // Success: refresh the store wallet-status / balance-driving state and the
     // profile summary so the dashboard glow + settings reflect the new wallet.
+    clearDerivationScheme(params.keyHandle);
     await refetchStores();
     await refreshProfile();
     Alert.alert(

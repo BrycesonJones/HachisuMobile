@@ -27,6 +27,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2.112.4';
 
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
+import { LIGHTNING_ENABLED, lightningDisabledResponse } from '../_shared/feature-gates.ts';
 import {
   BtcpayApiError,
   BtcpayConfigError,
@@ -44,6 +45,11 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') {
     return jsonResponse({ ok: false, error: 'Method not allowed' }, 405);
   }
+
+  // Product gate, enforced server-side: Boltz/Lightning preparation must not be
+  // reachable while Lightning is switched off for users. The client flag hides
+  // the screens; this closes the capability. See _shared/feature-gates.ts.
+  if (!LIGHTNING_ENABLED) return lightningDisabledResponse();
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');

@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CloseFlowButton } from '@/components/account/close-flow-button';
 import { BackButton } from '@/components/auth/back-button';
 import { COLORS } from '@/constants/colors';
+import { stashDerivationScheme } from '@/lib/wallet/derivation-handoff';
 import {
   previewOnchainWallet,
   previewOnchainWalletReplacement,
@@ -124,13 +125,19 @@ export default function ImportXpubScreen() {
       return;
     }
 
+    // The key travels in module memory, not in the route. Router params are the
+    // URL on web (address bar, history, restored navigation state), and an xpub
+    // derives every receive address for this wallet — a durable privacy secret.
+    // See lib/wallet/derivation-handoff.ts.
+    const keyHandle = stashDerivationScheme(trimmed);
+
     router.push({
       pathname: '/account/confirm-addresses',
       params: {
         storeId,
         storeName: storeName ?? '',
         mode: isReplace ? 'replace' : 'connect',
-        extendedPublicKey: trimmed,
+        keyHandle,
         addressType: result.addressType ?? '',
         addresses: JSON.stringify(result.addresses),
         // Only replacement carries a server-issued, single-use preview token.
