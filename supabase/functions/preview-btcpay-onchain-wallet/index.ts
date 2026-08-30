@@ -28,6 +28,7 @@ import {
   previewOnChainWallet,
 } from '../_shared/btcpay-client.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 
 // Minimal sanity check so we don't bother BTCPay with obvious junk; BTCPay is
 // the real validator and accepts far more than plain xpub. Matches an output
@@ -69,10 +70,13 @@ Deno.serve(async (req) => {
   }
 
   // 2. Parse + validate input.
-  let body: { merchantStoreId?: unknown; extendedPublicKey?: unknown };
-  try {
-    body = await req.json();
-  } catch {
+  const body:
+    | {
+        merchantStoreId?: unknown;
+        extendedPublicKey?: unknown;
+      }
+    | null = await readJsonObjectBody(req);
+  if (!body) {
     return jsonResponse({ ok: false, error: 'Invalid JSON body.' }, 400);
   }
 

@@ -21,6 +21,7 @@ import {
   setStorePayButtonEnabled,
 } from '../_shared/btcpay-client.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -52,10 +53,13 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: 'Not authenticated.' }, 401);
   }
 
-  let body: { merchantStoreId?: unknown; enabled?: unknown };
-  try {
-    body = await req.json();
-  } catch {
+  const body:
+    | {
+        merchantStoreId?: unknown;
+        enabled?: unknown;
+      }
+    | null = await readJsonObjectBody(req);
+  if (!body) {
     return jsonResponse({ ok: false, error: 'Invalid JSON body.' }, 400);
   }
   const merchantStoreId =

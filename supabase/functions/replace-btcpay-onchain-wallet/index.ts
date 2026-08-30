@@ -53,6 +53,7 @@ import {
 } from '../_shared/onchain-lock.ts';
 import { syncUserStoreSummary } from '../_shared/store-summary.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 
 const LOOKS_LIKE_KEY = /(\(|[xyztuv]pub[1-9A-HJ-NP-Za-km-z]{20,})/i;
 const MAX_KEY_LENGTH = 2000;
@@ -104,15 +105,15 @@ Deno.serve(async (req) => {
   }
 
   // 2. Parse + validate input.
-  let body: {
-    merchantStoreId?: unknown;
-    previewVerificationId?: unknown;
-    extendedPublicKey?: unknown;
-    idempotencyKey?: unknown;
-  };
-  try {
-    body = await req.json();
-  } catch {
+  const body:
+    | {
+        merchantStoreId?: unknown;
+        previewVerificationId?: unknown;
+        extendedPublicKey?: unknown;
+        idempotencyKey?: unknown;
+      }
+    | null = await readJsonObjectBody(req);
+  if (!body) {
     return jsonResponse({ ok: false, error: 'Invalid JSON body.' }, 400);
   }
   const merchantStoreId =
@@ -541,9 +542,54 @@ Deno.serve(async (req) => {
       await recordOp(admin, store.id, idempotencyKey, 'reconcile_required', responseBody);
       await releaseOnchainLock(admin, store.id, lockToken);
       return jsonResponse(responseBody, 500);
-    } catch {
+    } catch (reconcileErr) {
+      // Last resort (OWASP A10:2025 — CWE-460/CWE-636). The reconcile read
+      // ITSELF threw, so BTCPay could not be asked what it holds — and the PUT
+      // at step 8 may well have landed. This is the one path where the outcome
+      // is genuinely UNKNOWN.
+      //
+      // Answering BTCPAY_REPLACEMENT_FAILED here was the defect: it tells the
+      // merchant the replacement did not happen, which means the OLD wallet is
+      // still receiving — while merchant_stores goes on asserting that same old
+      // wallet as `connected`, fingerprint and all. If the write did land,
+      // every screen then describes a wallet that no longer routes payments,
+      // and the merchant has been told nothing changed.
+      //
+      // So the uncertainty is recorded instead of resolved: onchain_status
+      // becomes 'error' (an explicit unknown, never a false 'connected'), the
+      // stale fingerprint is dropped, and the caller gets the same
+      // reconcile-required contract the other ambiguous paths use — which the
+      // app routes to the wallet-status screen's "Re-check wallet status"
+      // action rather than back through another replacement. The 'error' status
+      // additionally makes step 4 refuse a fresh replacement until a sync has
+      // re-established the truth: reconcile BEFORE retry, enforced by state.
+      console.error(
+        `[replace-onchain] store=${store.id} reconcile unavailable: ${String(reconcileErr)}`,
+      );
+      await logEvent({
+        eventType: 'onchain_wallet_replace_unreconciled',
+        status: 'error',
+        message:
+          'WALLET_REPLACEMENT_VERIFICATION_FAILED: BTCPay could not be re-read; wallet state unknown.',
+        btcpayStoreId: store.btcpay_store_id,
+      });
+      await markOnchainStateUnknown(admin, store.id, lockToken);
+      await markPreviewUsed(admin, preview.id);
+      const responseBody = {
+        ok: false,
+        code: 'WALLET_REPLACEMENT_VERIFICATION_FAILED',
+        error:
+          'The wallet may have been updated but we could not reach the payment server to ' +
+          'confirm it. Re-check your wallet status before making any further changes — do ' +
+          'not replace again yet.',
+        reconcile: true,
+        status: 'error',
+        enabled: false,
+        label: null,
+      };
+      await recordOp(admin, store.id, idempotencyKey, 'reconcile_required', responseBody);
       await releaseOnchainLock(admin, store.id, lockToken);
-      return fail('BTCPAY_REPLACEMENT_FAILED', 'The replacement could not be completed.', 500);
+      return jsonResponse(responseBody, 500);
     }
   }
 });
@@ -586,6 +632,40 @@ async function failOp(admin: SupabaseClient, storeId: string, idempotencyKey: st
     .eq('merchant_store_id', storeId)
     .eq('idempotency_key', idempotencyKey);
   if (error) console.error('[replace-onchain] op clear failed:', error.message);
+}
+
+/**
+ * Records that this store's on-chain wallet state is UNKNOWN, because BTCPay
+ * could not be re-read after a write that may have applied.
+ *
+ * 'error' is a value merchant_stores_onchain_status_check already allows, and
+ * it is the only truthful answer available here: 'connected' would assert a
+ * wallet that may no longer route payments, and 'not_connected' would assert
+ * the opposite with equally little evidence. The scheme fingerprint is cleared
+ * for the same reason — it names the wallet from BEFORE the write.
+ *
+ * Conditional on the lock token, so an operation that superseded this one is
+ * never overwritten, and its lock is never cleared.
+ */
+async function markOnchainStateUnknown(
+  admin: SupabaseClient,
+  storeId: string,
+  lockToken: string,
+): Promise<void> {
+  const { error } = await admin
+    .from('merchant_stores')
+    .update({
+      onchain_status: 'error',
+      onchain_scheme_fingerprint: null,
+      onchain_operation: 'none',
+      onchain_operation_started_at: null,
+      onchain_operation_token: null,
+    })
+    .eq('id', storeId)
+    .eq('onchain_operation_token', lockToken);
+  if (error) {
+    console.error(`[replace-onchain] store=${storeId} unknown-state write failed: ${error.message}`);
+  }
 }
 
 /**

@@ -1,6 +1,10 @@
 import { assertEquals } from 'jsr:@std/assert@1.0.19';
 
-import { collectBtcpayStoreIds, unhandledBtcpayStoreIds } from './account-deletion.ts';
+import {
+  collectBtcpayStoreIds,
+  confirmAccountDeleted,
+  unhandledBtcpayStoreIds,
+} from './account-deletion.ts';
 
 Deno.test('collects distinct store ids from rows and an attested profile id', () => {
   const ids = collectBtcpayStoreIds(
@@ -114,4 +118,61 @@ Deno.test('unhandled ids are de-duplicated and blank-safe', () => {
     unhandledBtcpayStoreIds(['store-a'], [' store-a ', 'store-b', 'store-b', '  ']),
     ['store-b'],
   );
+});
+
+// ---------------------------------------------------------------------------
+// Post-deletion verification (OWASP A10:2025 — CWE-252 unchecked return value,
+// CWE-636 not failing securely).
+// ---------------------------------------------------------------------------
+//
+// delete-account answers ok:true only after reading the account back and finding
+// it gone. That answer is a destructive instruction: on it the client drops the
+// session and wipes the device's local copy of the merchant's data.
+//
+// The read-back was written as `const { data: after } = await
+// admin.auth.admin.getUserById(id); if (after?.user) { fail }` — `error` was
+// never destructured. supabase-js answers a FAILED admin call with
+// `{ data: { user: null }, error }`, so a read-back that could not run produced
+// exactly the same shape as a confirmed deletion, and the guard passed. The
+// control inverted: not being able to check became the check.
+
+Deno.test('a read-back showing no user confirms the deletion', () => {
+  assertEquals(confirmAccountDeleted({ data: { user: null }, error: null }), {
+    confirmed: true,
+  });
+});
+
+Deno.test('a read-back that still finds the user does not confirm', () => {
+  assertEquals(confirmAccountDeleted({ data: { user: { id: 'u1' } }, error: null }), {
+    confirmed: false,
+    reason: 'still_exists',
+  });
+});
+
+Deno.test('a read-back that ITSELF failed does not confirm the deletion', () => {
+  // The regression: this is byte-for-byte the shape of a successful deletion
+  // except for `error`. Ignoring it reports a deletion nobody verified.
+  assertEquals(
+    confirmAccountDeleted({
+      data: { user: null },
+      error: { name: 'AuthApiError', message: 'service unavailable', status: 503 },
+    }),
+    { confirmed: false, reason: 'unverifiable' },
+  );
+});
+
+Deno.test('a read-back error outranks an absent user', () => {
+  // Fail-closed ordering: when both signals are present, the one that says
+  // "this answer is not trustworthy" wins.
+  assertEquals(
+    confirmAccountDeleted({ data: null, error: new Error('network') }).confirmed,
+    false,
+  );
+});
+
+Deno.test('a read-back with no data at all does not confirm silently', () => {
+  // A malformed/absent payload is not evidence of deletion either — but with no
+  // error to go on it is still the "gone" branch, so pin it explicitly rather
+  // than leaving it to chance.
+  assertEquals(confirmAccountDeleted({ data: null, error: null }), { confirmed: true });
 });

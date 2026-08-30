@@ -31,6 +31,7 @@ import {
   sanitizeCheckoutLink,
 } from '../_shared/btcpay-client.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 
 type ResultCode =
   | 'UNAUTHORIZED'
@@ -99,10 +100,13 @@ Deno.serve(async (req) => {
   }
 
   // --- 2. Parse + validate the body ---------------------------------------
-  let body: { merchantStoreId?: unknown; posAppId?: unknown };
-  try {
-    body = await req.json();
-  } catch {
+  const body:
+    | {
+        merchantStoreId?: unknown;
+        posAppId?: unknown;
+      }
+    | null = await readJsonObjectBody(req);
+  if (!body) {
     return errorResponse('INVALID_REQUEST', 'Invalid JSON body.', 400);
   }
   const merchantStoreId =

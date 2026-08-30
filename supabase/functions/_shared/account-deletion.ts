@@ -74,3 +74,40 @@ export function unhandledBtcpayStoreIds(
   }
   return pending;
 }
+
+// ---------------------------------------------------------------------------
+// Post-deletion verification (OWASP A10:2025 — CWE-252, CWE-636)
+// ---------------------------------------------------------------------------
+
+/** Why a deletion could not be confirmed, or that it was. */
+export type DeletionReadback =
+  | { confirmed: true }
+  | { confirmed: false; reason: 'still_exists' | 'unverifiable' };
+
+/**
+ * Decides whether the account is CONFIRMED gone, from the admin read-back that
+ * follows the delete.
+ *
+ * The read-back exists because ok:true is a destructive instruction to the
+ * client: on it, the app discards the session and wipes the device's local
+ * copy of the merchant's data. So a deletion that did not happen must never be
+ * reported as one.
+ *
+ * The failure mode this closes: reading only `data` and testing `data.user`.
+ * When the read-back CALL itself fails — a transient Admin API error, a network
+ * blip — supabase-js answers `{ data: { user: null }, error }`, and an absent
+ * user is then indistinguishable from a confirmed deletion. The control
+ * inverts: the inability to verify becomes the verification. A verification
+ * step must fail CLOSED, so an error is 'unverifiable', not success.
+ *
+ * Accepts the `UserResponse` shape structurally so it can be exercised without
+ * an Admin API client.
+ */
+export function confirmAccountDeleted(readback: {
+  data?: { user?: unknown } | null;
+  error?: unknown;
+}): DeletionReadback {
+  if (readback.error) return { confirmed: false, reason: 'unverifiable' };
+  if (readback.data?.user) return { confirmed: false, reason: 'still_exists' };
+  return { confirmed: true };
+}

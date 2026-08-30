@@ -49,6 +49,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2.112.4';
 
 import {
   collectBtcpayStoreIds,
+  confirmAccountDeleted,
   unhandledBtcpayStoreIds,
 } from '../_shared/account-deletion.ts';
 import {
@@ -268,10 +269,12 @@ Deno.serve(async (req) => {
 
   // Read back before claiming success: the client only discards its session and
   // local data on ok=true, so a deletion must never be reported that did not
-  // actually happen.
-  const { data: after } = await admin.auth.admin.getUserById(user.id);
-  if (after?.user) {
-    console.error(`[delete-account] user=${user.id} still exists after delete`);
+  // actually happen. A10 (CWE-252/CWE-636): the read-back's OWN error is
+  // checked — a verification that cannot run has not verified anything, and
+  // must not be read as a clean result. See confirmAccountDeleted().
+  const readback = confirmAccountDeleted(await admin.auth.admin.getUserById(user.id));
+  if (!readback.confirmed) {
+    console.error(`[delete-account] user=${user.id} deletion unconfirmed: ${readback.reason}`);
     return jsonResponse(
       { ok: false, error: 'Could not close your account. Please try again.' },
       500,

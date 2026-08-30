@@ -23,6 +23,7 @@ import {
   satsToBtcDecimalString,
 } from '../_shared/btcpay-client.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 
 /** Normalized backend error codes the client can branch on. */
 type BalanceErrorCode =
@@ -82,10 +83,8 @@ Deno.serve(async (req) => {
   }
 
   // 2. Accept ONLY the internal merchant store id (never a BTCPay store id).
-  let body: { merchantStoreId?: unknown };
-  try {
-    body = await req.json();
-  } catch {
+  const body: { merchantStoreId?: unknown } | null = await readJsonObjectBody(req);
+  if (!body) {
     return errorResponse('BAD_REQUEST', 'Invalid JSON body.', 400);
   }
   const merchantStoreId =

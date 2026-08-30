@@ -38,6 +38,7 @@ import {
 } from '../_shared/btcpay-client.ts';
 import { resolveOwnedStore } from '../_shared/store-auth.ts';
 import { decodeCursor, encodeCursor } from '../_shared/pagination.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 import {
   embeddedMethodsOutcome,
   normalizeExceptionStatus,
@@ -65,18 +66,18 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: 'Method not allowed' }, 405);
   }
 
-  let body: {
-    merchantStoreId?: unknown;
-    limit?: unknown;
-    cursor?: unknown;
-    statusFilter?: unknown;
-    search?: unknown;
-    startDate?: unknown;
-    endDate?: unknown;
-  };
-  try {
-    body = await req.json();
-  } catch {
+  const body:
+    | {
+        merchantStoreId?: unknown;
+        limit?: unknown;
+        cursor?: unknown;
+        statusFilter?: unknown;
+        search?: unknown;
+        startDate?: unknown;
+        endDate?: unknown;
+      }
+    | null = await readJsonObjectBody(req);
+  if (!body) {
     return jsonResponse({ ok: false, error: 'Invalid JSON body.' }, 400);
   }
 

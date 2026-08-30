@@ -40,6 +40,7 @@ import {
 } from '../_shared/btcpay-client.ts';
 import { syncUserStoreSummary } from '../_shared/store-summary.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 
 // L-BTC / Liquid core descriptors are script expressions: elwpkh(...), elsh(...),
 // elwsh(...), ct(...,elwpkh(...)), or plain wpkh(...). Require a balanced-looking
@@ -93,10 +94,14 @@ Deno.serve(async (req) => {
   }
 
   // 2. Parse + validate input.
-  let body: { merchantStoreId?: unknown; coreDescriptor?: unknown; walletName?: unknown };
-  try {
-    body = await req.json();
-  } catch {
+  const body:
+    | {
+        merchantStoreId?: unknown;
+        coreDescriptor?: unknown;
+        walletName?: unknown;
+      }
+    | null = await readJsonObjectBody(req);
+  if (!body) {
     return jsonResponse({ ok: false, error: 'Invalid JSON body.' }, 400);
   }
 

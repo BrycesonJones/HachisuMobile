@@ -18,7 +18,10 @@
     "check:deployed": "node ./scripts/check-deployed-functions.mjs",
     "check:deployed:selftest": "node ./scripts/check-deployed-functions.selftest.mjs",
     "check:logging": "node ./scripts/check-logging.mjs",
-    "check:logging:selftest": "node ./scripts/check-logging.selftest.mjs"
+    "check:logging:selftest": "node ./scripts/check-logging.selftest.mjs",
+    "check:exceptions": "node ./scripts/check-exceptional-conditions.mjs",
+    "check:exceptions:selftest": "node ./scripts/check-exceptional-conditions.selftest.mjs",
+    "test:functions": "cd supabase/functions && deno test --allow-env --allow-net"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

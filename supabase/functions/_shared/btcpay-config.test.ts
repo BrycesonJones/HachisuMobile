@@ -123,3 +123,90 @@ Deno.test('the configuration error never contains the API key', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// OWASP A10:2025 — Mishandling of Exceptional Conditions (CWE-209, CWE-550).
+// ---------------------------------------------------------------------------
+//
+// Thirty Edge Functions answer a configuration failure with
+// `err instanceof BtcpayConfigError ? err.message : '...'` in a RESPONSE BODY.
+// So whatever getBtcpayConfig() puts in `message` is handed to any authenticated
+// caller. It named the server's environment variables and described exactly how
+// the deployment was misconfigured — an operator-facing sentence answering a
+// merchant's request.
+//
+// The split: `message` is the safe public sentence, `detail` is the
+// operator-facing specifics for the log. The exception carries both so no call
+// site has to remember the difference.
+
+const ENV_VAR_NAMES = [URL_VAR, KEY];
+
+function configErrorFor(serverUrl: string | undefined): BtcpayConfigError {
+  let caught: unknown;
+  withEnv(serverUrl, () => {
+    try {
+      getBtcpayConfig();
+    } catch (err) {
+      caught = err;
+    }
+  });
+  if (!(caught instanceof BtcpayConfigError)) {
+    throw new Error('expected getBtcpayConfig to throw a BtcpayConfigError');
+  }
+  return caught;
+}
+
+Deno.test('the client-facing configuration message names no environment variable', () => {
+  // A missing secret is the case that spelled the variable names out in full.
+  const prevKey = Deno.env.get(KEY);
+  const prevUrl = Deno.env.get(URL_VAR);
+  try {
+    Deno.env.delete(KEY);
+    Deno.env.delete(URL_VAR);
+    let caught: unknown;
+    try {
+      getBtcpayConfig();
+    } catch (err) {
+      caught = err;
+    }
+    const message = (caught as BtcpayConfigError).message;
+    for (const name of ENV_VAR_NAMES) {
+      assertEquals(
+        message.includes(name),
+        false,
+        `the client-facing message discloses the environment variable ${name}: ${message}`,
+      );
+    }
+  } finally {
+    if (prevKey === undefined) Deno.env.delete(KEY);
+    else Deno.env.set(KEY, prevKey);
+    if (prevUrl === undefined) Deno.env.delete(URL_VAR);
+    else Deno.env.set(URL_VAR, prevUrl);
+  }
+});
+
+Deno.test('the client-facing configuration message does not describe the misconfiguration', () => {
+  // Every rejection reason must collapse to the SAME public sentence: which one
+  // tripped is a fact about the server, not an answer to the caller.
+  const messages = new Set(
+    [
+      'http://btcpay.hachisu.io',
+      'ftp://btcpay.hachisu.io',
+      'not-a-url',
+      'https://user:pass@btcpay.hachisu.io',
+    ].map((url) => configErrorFor(url).message),
+  );
+  assertEquals(
+    messages.size,
+    1,
+    `distinct rejection reasons leak through the public message: ${[...messages].join(' | ')}`,
+  );
+});
+
+Deno.test('the operator-facing detail is still available for the log', () => {
+  const err = configErrorFor('http://btcpay.hachisu.io');
+  assertEquals(typeof err.detail, 'string');
+  assertEquals(err.detail.length > 0, true);
+  // The detail is for the log, so it may be specific — but never the key itself.
+  assertEquals(err.detail.includes('test-greenfield-key-not-a-real-secret'), false);
+});

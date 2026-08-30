@@ -28,6 +28,7 @@ import {
   htmlToPlainText,
 } from '../_shared/btcpay-client.ts';
 import { customerDataOptionForFormId } from '../_shared/payment-request-input.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 import {
   logAuthorizationDenied,
   logSecurityEvent,
@@ -84,10 +85,13 @@ Deno.serve(async (req) => {
   }
 
   // 2. Parse + validate the payload.
-  let body: { merchantStoreId?: unknown; paymentRequestId?: unknown };
-  try {
-    body = await req.json();
-  } catch {
+  const body:
+    | {
+        merchantStoreId?: unknown;
+        paymentRequestId?: unknown;
+      }
+    | null = await readJsonObjectBody(req);
+  if (!body) {
     return errorResponse('INVALID_REQUEST', 'Invalid JSON body.', 400);
   }
   const merchantStoreId =

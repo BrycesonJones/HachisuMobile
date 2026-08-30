@@ -36,6 +36,7 @@ import {
 import { resolveOwnedStore } from '../_shared/store-auth.ts';
 import { decodeCursor, encodeCursor } from '../_shared/pagination.ts';
 import { toActivityEvents, type StoreActivityEvent } from '../_shared/report-rows.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 50;
@@ -53,16 +54,16 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: 'Method not allowed' }, 405);
   }
 
-  let body: {
-    merchantStoreId?: unknown;
-    limit?: unknown;
-    cursor?: unknown;
-    startDate?: unknown;
-    endDate?: unknown;
-  };
-  try {
-    body = await req.json();
-  } catch {
+  const body:
+    | {
+        merchantStoreId?: unknown;
+        limit?: unknown;
+        cursor?: unknown;
+        startDate?: unknown;
+        endDate?: unknown;
+      }
+    | null = await readJsonObjectBody(req);
+  if (!body) {
     return jsonResponse({ ok: false, error: 'Invalid JSON body.' }, 400);
   }
 

@@ -25,6 +25,7 @@ import {
   getBtcpayConfig,
 } from '../_shared/btcpay-client.ts';
 import { syncUserStoreSummary } from '../_shared/store-summary.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 
 // Supported default currencies. UI currently offers USD only; this list is the
 // backend allow-list and is intentionally easy to extend as the UI grows.
@@ -86,10 +87,14 @@ Deno.serve(async (req) => {
   }
 
   // 2. Parse + validate the request body.
-  let body: { name?: unknown; defaultCurrency?: unknown; preferredPriceSource?: unknown };
-  try {
-    body = await req.json();
-  } catch {
+  const body:
+    | {
+        name?: unknown;
+        defaultCurrency?: unknown;
+        preferredPriceSource?: unknown;
+      }
+    | null = await readJsonObjectBody(req);
+  if (!body) {
     return jsonResponse({ error: 'Invalid JSON body.' }, 400);
   }
 

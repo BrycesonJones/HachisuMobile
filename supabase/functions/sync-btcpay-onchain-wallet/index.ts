@@ -30,6 +30,7 @@ import {
 } from '../_shared/onchain-lock.ts';
 import { syncUserStoreSummary } from '../_shared/store-summary.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 
 function fail(code: string, message: string, status: number) {
   return jsonResponse({ ok: false, code, error: message }, status);
@@ -65,10 +66,8 @@ Deno.serve(async (req) => {
     return fail('UNAUTHORIZED', 'Not authenticated.', 401);
   }
 
-  let body: { merchantStoreId?: unknown };
-  try {
-    body = await req.json();
-  } catch {
+  const body: { merchantStoreId?: unknown } | null = await readJsonObjectBody(req);
+  if (!body) {
     return jsonResponse({ ok: false, error: 'Invalid JSON body.' }, 400);
   }
   const merchantStoreId =

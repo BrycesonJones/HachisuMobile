@@ -37,6 +37,7 @@ import {
 } from '../_shared/onchain-lock.ts';
 import { syncUserStoreSummary } from '../_shared/store-summary.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 
 // Accepts an output descriptor "(" anywhere, OR any extended-key token (single-
 // sig & multisig, mainnet & testnet, incl. suffixed / N-of- / key-origin forms).
@@ -75,14 +76,14 @@ Deno.serve(async (req) => {
   }
 
   // 2. Parse + validate input.
-  let body: {
-    merchantStoreId?: unknown;
-    extendedPublicKey?: unknown;
-    confirmedAddresses?: unknown;
-  };
-  try {
-    body = await req.json();
-  } catch {
+  const body:
+    | {
+        merchantStoreId?: unknown;
+        extendedPublicKey?: unknown;
+        confirmedAddresses?: unknown;
+      }
+    | null = await readJsonObjectBody(req);
+  if (!body) {
     return jsonResponse({ ok: false, error: 'Invalid JSON body.' }, 400);
   }
 

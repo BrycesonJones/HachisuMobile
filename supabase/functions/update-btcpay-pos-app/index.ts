@@ -4,9 +4,14 @@
 // caller, pushes the config + product template to BTCPay (Greenfield PUT
 // /apps/pos/{appId}), and saves config + products JSONB to Supabase.
 //
-// BTCPay sync is best-effort: if BTCPay rejects the update the products are
-// still persisted to Supabase (the app's source of truth for the mobile UI) and
-// a warning is returned. The Greenfield key stays server-side.
+// The BTCPay push happens FIRST and the save fails closed on it (OWASP A10:2025
+// — CWE-390/CWE-636). Two systems hold this menu and they are not
+// interchangeable: merchant_pos_apps renders the MERCHANT's screen, while the
+// POS the customer actually taps is served by BTCPay from BTCPay's own
+// template. Persisting a menu BTCPay refused would show the merchant a price
+// that is not the price being charged, so nothing is written that BTCPay did
+// not accept. update-btcpay-pos-mode holds the same contract.
+// The Greenfield key stays server-side.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.112.4';
 
@@ -24,6 +29,7 @@ import {
 } from '../_shared/invoice-input.ts';
 import { buildTemplate, PosProductError } from '../_shared/pos-template.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 
 const MAX_TITLE_LENGTH = 100;
 
@@ -79,17 +85,17 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Not authenticated.' }, 401);
   }
 
-  let body: {
-    posAppId?: unknown;
-    displayTitle?: unknown;
-    posMode?: unknown;
-    currency?: unknown;
-    description?: unknown;
-    products?: unknown;
-  };
-  try {
-    body = await req.json();
-  } catch {
+  const body:
+    | {
+        posAppId?: unknown;
+        displayTitle?: unknown;
+        posMode?: unknown;
+        currency?: unknown;
+        description?: unknown;
+        products?: unknown;
+      }
+    | null = await readJsonObjectBody(req);
+  if (!body) {
     return jsonResponse({ error: 'Invalid JSON body.' }, 400);
   }
 
@@ -178,8 +184,10 @@ Deno.serve(async (req) => {
     throw err;
   }
 
-  // Push to BTCPay (best-effort — products still persist to Supabase on failure).
-  let btcpayWarning: string | null = null;
+  // Push to BTCPay FIRST. A failure here ends the request: the merchant's menu
+  // and the menu customers are charged from must not diverge, and BTCPay is the
+  // one that charges. Nothing has been written to Supabase at this point, so the
+  // saved menu is exactly the one that was already live.
   try {
     const config = getBtcpayConfig();
     // The template is pushed in BOTH modes so switching to Quick Charge never
@@ -193,15 +201,25 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     if (err instanceof BtcpayApiError) {
-      btcpayWarning = err.message;
       // A09 (CWE-532): status only — the body echoes the submitted template.
-      console.error(`[update-pos-app] btcpayStatus=${err.status}`);
+      console.error(`[update-pos-app] app=${app.id} btcpayStatus=${err.status}`);
     } else if (err instanceof BtcpayConfigError) {
-      btcpayWarning = err.message;
+      // getBtcpayConfig() already recorded which variable is wrong.
+      console.error(`[update-pos-app] app=${app.id} BTCPay is not configured`);
     } else {
-      btcpayWarning = 'Could not sync with BTCPay.';
-      console.error('[update-pos-app] BTCPay sync failed:', String(err));
+      console.error(`[update-pos-app] app=${app.id} BTCPay sync failed:`, String(err));
     }
+    // A10 (CWE-209): the caller is told the save did not happen, never why
+    // BTCPay said no — the status and body are the operator's.
+    return jsonResponse(
+      {
+        code: 'BTCPAY_SYNC_FAILED',
+        error:
+          'Could not save these changes to the payment server, so nothing was changed. ' +
+          'Your Point of Sale is still using its previous settings. Please try again.',
+      },
+      502,
+    );
   }
 
   // Persist to Supabase (source of truth for the mobile UI).
@@ -223,5 +241,5 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Could not save the POS app.' }, 500);
   }
 
-  return jsonResponse({ posApp: updated, btcpayWarning });
+  return jsonResponse({ posApp: updated });
 });

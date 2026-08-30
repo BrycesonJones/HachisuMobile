@@ -36,6 +36,7 @@ import {
 } from '../_shared/btcpay-client.ts';
 import { fingerprintDerivationScheme } from '../_shared/onchain-fingerprint.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 
 const LOOKS_LIKE_KEY = /(\(|[xyztuv]pub[1-9A-HJ-NP-Za-km-z]{20,})/i;
 const MAX_KEY_LENGTH = 2000;
@@ -80,10 +81,13 @@ Deno.serve(async (req) => {
   }
 
   // 2. Parse + validate input.
-  let body: { merchantStoreId?: unknown; extendedPublicKey?: unknown };
-  try {
-    body = await req.json();
-  } catch {
+  const body:
+    | {
+        merchantStoreId?: unknown;
+        extendedPublicKey?: unknown;
+      }
+    | null = await readJsonObjectBody(req);
+  if (!body) {
     return jsonResponse({ ok: false, error: 'Invalid JSON body.' }, 400);
   }
   const merchantStoreId =

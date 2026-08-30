@@ -49,6 +49,7 @@ import {
   type EnrichmentOutcome,
 } from '../_shared/activity-normalize.ts';
 import { toActivityEvents } from '../_shared/report-rows.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 import {
   logAuthorizationDenied,
   logSecurityEvent,
@@ -105,10 +106,14 @@ Deno.serve(async (req) => {
   }
 
   // 2. Parse + validate the payload.
-  let body: { merchantStoreId?: unknown; invoiceId?: unknown; source?: unknown };
-  try {
-    body = await req.json();
-  } catch {
+  const body:
+    | {
+        merchantStoreId?: unknown;
+        invoiceId?: unknown;
+        source?: unknown;
+      }
+    | null = await readJsonObjectBody(req);
+  if (!body) {
     return errorResponse('INVALID_REQUEST', 'Invalid JSON body.', 400);
   }
   const merchantStoreId =

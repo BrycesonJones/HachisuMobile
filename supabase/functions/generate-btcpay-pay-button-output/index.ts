@@ -31,6 +31,7 @@ import {
   getStorePayButton,
 } from '../_shared/btcpay-client.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 
 type ButtonType = 'fixed' | 'custom' | 'slider';
 type OutputType = 'code' | 'link' | 'lnurl';
@@ -72,21 +73,21 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: 'Not authenticated.' }, 401);
   }
 
-  let body: {
-    merchantStoreId?: unknown;
-    price?: unknown;
-    min?: unknown;
-    max?: unknown;
-    step?: unknown;
-    currency?: unknown;
-    checkoutDescription?: unknown;
-    orderId?: unknown;
-    buttonType?: unknown;
-    outputType?: unknown;
-  };
-  try {
-    body = await req.json();
-  } catch {
+  const body:
+    | {
+        merchantStoreId?: unknown;
+        price?: unknown;
+        min?: unknown;
+        max?: unknown;
+        step?: unknown;
+        currency?: unknown;
+        checkoutDescription?: unknown;
+        orderId?: unknown;
+        buttonType?: unknown;
+        outputType?: unknown;
+      }
+    | null = await readJsonObjectBody(req);
+  if (!body) {
     return jsonResponse({ ok: false, error: 'Invalid JSON body.' }, 400);
   }
 

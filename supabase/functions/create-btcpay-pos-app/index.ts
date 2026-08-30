@@ -24,6 +24,7 @@ import {
   getBtcpayConfig,
 } from '../_shared/btcpay-client.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 
 const MAX_NAME_LENGTH = 50;
 
@@ -62,10 +63,13 @@ Deno.serve(async (req) => {
   }
 
   // 2. Parse + validate the request body.
-  let body: { merchantStoreId?: unknown; appName?: unknown };
-  try {
-    body = await req.json();
-  } catch {
+  const body:
+    | {
+        merchantStoreId?: unknown;
+        appName?: unknown;
+      }
+    | null = await readJsonObjectBody(req);
+  if (!body) {
     return jsonResponse({ error: 'Invalid JSON body.' }, 400);
   }
 

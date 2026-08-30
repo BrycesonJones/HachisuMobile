@@ -16,9 +16,13 @@ export interface BtcpayConfig {
 }
 
 /**
- * Reads and validates BTCPay env vars. Throws a safe (key-free) error when
- * either is missing so the function can return a graceful 500 without leaking
- * which secret is absent in a way that exposes its value.
+ * Reads and validates BTCPay env vars.
+ *
+ * Throws BtcpayConfigError on ANY problem. The exception deliberately carries
+ * two texts (OWASP A10:2025 — CWE-209/CWE-550): `message` is the one sentence
+ * safe to answer a request with, and `detail` names the variable and the reason
+ * for the operator. Thirty call sites return `err.message` in a response body,
+ * so the detail is logged HERE rather than handed back for a caller to leak.
  */
 export function getBtcpayConfig(): BtcpayConfig {
   const serverUrl = Deno.env.get('BTCPAY_SERVER_URL');
@@ -29,9 +33,7 @@ export function getBtcpayConfig(): BtcpayConfig {
   if (!apiKey) missing.push('BTCPAY_GREENFIELD_API_KEY');
 
   if (missing.length > 0) {
-    throw new BtcpayConfigError(
-      `BTCPay is not configured on the server (missing: ${missing.join(', ')}).`,
-    );
+    throw configError(`missing environment variable(s): ${missing.join(', ')}`);
   }
 
   // Fail closed on insecure transport. Every Greenfield request carries the
@@ -45,19 +47,13 @@ export function getBtcpayConfig(): BtcpayConfig {
   try {
     parsed = new URL(serverUrl!.trim());
   } catch {
-    throw new BtcpayConfigError(
-      'BTCPay is not configured on the server (BTCPAY_SERVER_URL is not a valid URL).',
-    );
+    throw configError('BTCPAY_SERVER_URL is not a valid URL');
   }
   if (parsed.protocol !== 'https:') {
-    throw new BtcpayConfigError(
-      'BTCPay is not configured on the server (BTCPAY_SERVER_URL must use https://).',
-    );
+    throw configError('BTCPAY_SERVER_URL must use https://');
   }
   if (parsed.username || parsed.password) {
-    throw new BtcpayConfigError(
-      'BTCPay is not configured on the server (BTCPAY_SERVER_URL must not embed credentials).',
-    );
+    throw configError('BTCPAY_SERVER_URL must not embed credentials');
   }
 
   // Normalize: strip a trailing slash so `${serverUrl}/api/...` is well-formed.
@@ -67,11 +63,37 @@ export function getBtcpayConfig(): BtcpayConfig {
   };
 }
 
+/**
+ * The single sentence a CLIENT may be told about a BTCPay configuration
+ * failure. Which variable is missing, and how the endpoint is wrong, is a fact
+ * about the deployment — not an answer to a merchant's request. Every rejection
+ * reason collapses to this exact string so the response cannot be used to probe
+ * the server's configuration.
+ */
+export const BTCPAY_CONFIG_PUBLIC_MESSAGE = 'BTCPay is not configured on the server.';
+
 export class BtcpayConfigError extends Error {
-  constructor(message: string) {
-    super(message);
+  /**
+   * Operator-facing specifics — names the variable and the reason. For the LOG
+   * only. Call sites return `message`; nothing returns `detail`, which
+   * `npm run check:exceptions` enforces.
+   */
+  readonly detail: string;
+
+  constructor(detail: string) {
+    super(BTCPAY_CONFIG_PUBLIC_MESSAGE);
     this.name = 'BtcpayConfigError';
+    this.detail = detail;
   }
+}
+
+/**
+ * Builds the configuration error AND records the operator-facing reason, so the
+ * detail survives even though no call site is allowed to return it.
+ */
+function configError(detail: string): BtcpayConfigError {
+  console.error(`[btcpay-config] refusing to run: ${detail}`);
+  return new BtcpayConfigError(detail);
 }
 
 export class BtcpayApiError extends Error {

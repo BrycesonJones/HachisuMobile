@@ -51,6 +51,7 @@ import {
   type InvoiceInputError,
 } from '../_shared/invoice-input.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 
 /**
  * Service-role client factory.
@@ -140,12 +141,8 @@ Deno.serve(async (req) => {
   }
 
   // --- 2. Parse + validate the body ---------------------------------------
-  let body: Record<string, unknown>;
-  try {
-    const parsed = await req.json();
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('shape');
-    body = parsed as Record<string, unknown>;
-  } catch {
+  const body: Record<string, unknown> | null = await readJsonObjectBody(req);
+  if (!body) {
     return errorResponse('INVALID_REQUEST', 'Invalid JSON body.', 400);
   }
 

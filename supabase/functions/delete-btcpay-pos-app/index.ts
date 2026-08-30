@@ -17,6 +17,7 @@ import {
   getBtcpayConfig,
 } from '../_shared/btcpay-client.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -50,10 +51,8 @@ Deno.serve(async (req) => {
   }
 
   // 2. Parse + validate input.
-  let body: { posAppId?: unknown };
-  try {
-    body = await req.json();
-  } catch {
+  const body: { posAppId?: unknown } | null = await readJsonObjectBody(req);
+  if (!body) {
     return jsonResponse({ error: 'Invalid JSON body.' }, 400);
   }
   const posAppId = typeof body.posAppId === 'string' ? body.posAppId.trim() : '';

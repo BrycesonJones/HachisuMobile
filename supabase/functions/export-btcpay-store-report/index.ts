@@ -39,6 +39,7 @@ import {
 } from '../_shared/btcpay-client.ts';
 import { resolveOwnedStore } from '../_shared/store-auth.ts';
 import { scanAllPages, type ScanAbortReason } from '../_shared/pagination.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 import {
   buildReportRows,
   collectMetadataColumns,
@@ -78,10 +79,14 @@ Deno.serve(async (req) => {
     return errorResponse('INVALID_REQUEST', 'Method not allowed', 405);
   }
 
-  let body: { merchantStoreId?: unknown; startDate?: unknown; endDate?: unknown };
-  try {
-    body = await req.json();
-  } catch {
+  const body:
+    | {
+        merchantStoreId?: unknown;
+        startDate?: unknown;
+        endDate?: unknown;
+      }
+    | null = await readJsonObjectBody(req);
+  if (!body) {
     return errorResponse('INVALID_REQUEST', 'Invalid JSON body.', 400);
   }
 

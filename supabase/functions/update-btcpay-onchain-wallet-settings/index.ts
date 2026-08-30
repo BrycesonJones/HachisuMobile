@@ -24,6 +24,7 @@ import {
 } from '../_shared/onchain-lock.ts';
 import { syncUserStoreSummary } from '../_shared/store-summary.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
+import { readJsonObjectBody } from '../_shared/request-body.ts';
 
 const MAX_LABEL_LENGTH = 100;
 
@@ -57,10 +58,14 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: 'Not authenticated.' }, 401);
   }
 
-  let body: { merchantStoreId?: unknown; enabled?: unknown; label?: unknown };
-  try {
-    body = await req.json();
-  } catch {
+  const body:
+    | {
+        merchantStoreId?: unknown;
+        enabled?: unknown;
+        label?: unknown;
+      }
+    | null = await readJsonObjectBody(req);
+  if (!body) {
     return jsonResponse({ ok: false, error: 'Invalid JSON body.' }, 400);
   }
 
