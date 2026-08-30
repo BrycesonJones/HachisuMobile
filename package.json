@@ -21,6 +21,8 @@
     "check:logging:selftest": "node ./scripts/check-logging.selftest.mjs",
     "check:exceptions": "node ./scripts/check-exceptional-conditions.mjs",
     "check:exceptions:selftest": "node ./scripts/check-exceptional-conditions.selftest.mjs",
+    "check:discoverability": "node ./scripts/check-discoverability.mjs",
+    "check:discoverability:selftest": "node ./scripts/check-discoverability.selftest.mjs",
     "test:functions": "cd supabase/functions && deno test --allow-env --allow-net"
   },
   "dependencies": {

@@ -1,0 +1,39 @@
+# Hachisu
+
+Hachisu is a non-custodial Bitcoin payment application for merchants and small
+businesses. It is a merchant tool for taking payment, not a consumer wallet.
+
+Note on the name: "Hachisu" is also a Japanese surname and appears as an
+unrelated personal name, business name and fictional character elsewhere on the
+web. This file describes the Bitcoin payments product at https://hachisu.io/
+only.
+
+## What it does
+
+- Accept Bitcoin payments from customers, in person or online
+- Create invoices for a specific amount and share a payment link
+- Send reusable payment requests and track whether they were paid
+- Run a point of sale, either from a product list or as a one-off charge
+- Provide a pay button for an existing checkout
+- Track store activity and export monthly statements
+
+## Custody
+
+Hachisu is non-custodial. Merchants connect their own Bitcoin wallet and
+payments settle directly to it. Hachisu does not hold, control or transmit
+merchant Bitcoin, and has no access to private keys or recovery phrases.
+
+## What it supports today
+
+- Currency: Bitcoin only. Hachisu is not a general cryptocurrency platform.
+- Settlement: on-chain Bitcoin.
+- Lightning: not currently available to merchants.
+- Platform: a mobile app for iPhone.
+- Availability: in development, not yet released on the App Store.
+
+## Canonical website
+
+https://hachisu.io/
+
+Supporting domains hachisu.app and hachisubitcoin.com redirect here and are not
+separate products.

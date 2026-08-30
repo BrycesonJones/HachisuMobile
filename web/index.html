@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Hachisu — Bitcoin Payments for Merchants</title>
+<meta name="description" content="Hachisu is a non-custodial Bitcoin payment app for merchants and small businesses. Accept Bitcoin payments, create invoices, send payment requests, and run a point of sale — with Bitcoin settling directly to a wallet only you control.">
+
+<link rel="canonical" href="https://hachisu.io/">
+
+<meta property="og:site_name" content="Hachisu">
+<meta property="og:title" content="Hachisu — Bitcoin Payments for Merchants">
+<meta property="og:description" content="A non-custodial Bitcoin payment app for merchants and small businesses. Accept Bitcoin, invoice customers, and run a point of sale — Bitcoin settles directly to a wallet only you control.">
+<meta property="og:url" content="https://hachisu.io/">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://hachisu.io/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Hachisu — Bitcoin payments for merchants">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Hachisu — Bitcoin Payments for Merchants">
+<meta name="twitter:description" content="A non-custodial Bitcoin payment app for merchants and small businesses. Bitcoin settles directly to a wallet only you control.">
+<meta name="twitter:image" content="https://hachisu.io/assets/og-image.png">
+
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#B0731A">
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+
+<style>
+  :root {
+    --ground:  #FAF8F5;
+    --surface: #FFFFFF;
+    --sunken:  #F2EEE8;
+    --ink:     #17130F;
+    --muted:   #675C53;
+    --line:    #E3DCD2;
+    --accent:  #A96B14;
+    --accent-ink: #7C4E0C;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:  #121009;
+      --surface: #1A1712;
+      --sunken:  #16130E;
+      --ink:     #F1ECE4;
+      --muted:   #A2968A;
+      --line:    #2C2620;
+      --accent:  #E3A644;
+      --accent-ink: #F0BE6B;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:  #121009;
+    --surface: #1A1712;
+    --sunken:  #16130E;
+    --ink:     #F1ECE4;
+    --muted:   #A2968A;
+    --line:    #2C2620;
+    --accent:  #E3A644;
+    --accent-ink: #F0BE6B;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; }
+
+  a { color: var(--accent-ink); text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+
+  /* ---------- header ---------- */
+  header.site {
+    border-bottom: 1px solid var(--line);
+    padding: 22px 0;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 700; font-size: 19px; letter-spacing: -0.01em;
+    color: var(--ink); text-decoration: none;
+  }
+  .brand svg { display: block; }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 68px 0 56px; }
+  .hero h1 {
+    font-size: clamp(34px, 6.2vw, 50px);
+    line-height: 1.06;
+    letter-spacing: -0.03em;
+    margin: 0 0 20px;
+    text-wrap: balance;
+    font-weight: 700;
+  }
+  .lede {
+    font-size: clamp(18px, 2.4vw, 21px);
+    color: var(--muted);
+    margin: 0;
+    max-width: 60ch;
+  }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  /* ---------- sections ---------- */
+  section { padding: 40px 0; border-top: 1px solid var(--line); }
+  h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.11em;
+    font-weight: 700;
+    color: var(--accent-ink);
+    margin: 0 0 20px;
+  }
+  h3 {
+    font-size: 17px;
+    font-weight: 650;
+    margin: 0 0 4px;
+    letter-spacing: -0.005em;
+  }
+  p { margin: 0 0 16px; max-width: 68ch; }
+  p:last-child { margin-bottom: 0; }
+
+  /* ---------- capability list ---------- */
+  .caps { display: grid; gap: 22px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .cap p { color: var(--muted); font-size: 15.5px; margin: 0; }
+
+  /* ---------- custody callout ---------- */
+  .custody {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    padding: 22px 24px;
+  }
+  .custody p { font-size: 16.5px; }
+
+  /* ---------- facts table ---------- */
+  dl.facts {
+    display: grid;
+    grid-template-columns: minmax(140px, auto) 1fr;
+    gap: 12px 28px;
+    margin: 0;
+    font-size: 16px;
+  }
+  dl.facts dt { color: var(--muted); }
+  dl.facts dd { margin: 0; }
+  @media (max-width: 520px) {
+    dl.facts { grid-template-columns: 1fr; gap: 2px; }
+    dl.facts dt { margin-top: 12px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em; }
+  }
+
+  /* ---------- footer ---------- */
+  footer.site {
+    border-top: 1px solid var(--line);
+    padding: 32px 0 56px;
+    color: var(--muted);
+    font-size: 14.5px;
+  }
+  footer.site p { margin: 0 0 8px; }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg width="22" height="24" viewBox="0 0 22 24" fill="none" aria-hidden="true">
+        <path d="M11 1.2 20.5 6.6v10.8L11 22.8 1.5 17.4V6.6L11 1.2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+        <path d="M11 7.4 15.9 10.2v5.6L11 18.6l-4.9-2.8v-5.6L11 7.4Z" fill="currentColor" opacity="0.28"/>
+      </svg>
+      Hachisu
+    </a>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <div class="hero">
+      <h1>Bitcoin payments for merchants.</h1>
+      <p class="lede">Hachisu is a <strong>non-custodial Bitcoin payment app</strong> for merchants and small businesses. Accept Bitcoin from your customers, invoice them, and run a point of sale — while every payment settles directly to a Bitcoin wallet only you control.</p>
+    </div>
+
+    <section>
+      <h2>What Hachisu does</h2>
+      <div class="caps">
+        <div class="cap">
+          <h3>Accept Bitcoin payments</h3>
+          <p>Take Bitcoin from customers in person or online, and watch payments settle in your store activity.</p>
+        </div>
+        <div class="cap">
+          <h3>Create invoices</h3>
+          <p>Bill a customer for a specific amount and share a payment link they can settle from any Bitcoin wallet.</p>
+        </div>
+        <div class="cap">
+          <h3>Send payment requests</h3>
+          <p>Issue a reusable request for a fixed or open amount, and track whether it has been paid.</p>
+        </div>
+        <div class="cap">
+          <h3>Run a point of sale</h3>
+          <p>Ring up items from a product list, or charge a one-off amount without building a cart.</p>
+        </div>
+        <div class="cap">
+          <h3>Add a pay button</h3>
+          <p>Put a Bitcoin payment button in front of customers without rebuilding your existing checkout.</p>
+        </div>
+        <div class="cap">
+          <h3>Track store activity</h3>
+          <p>Review payments as they arrive, open any transaction in detail, and export monthly statements.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Custody</h2>
+      <div class="custody">
+        <p><strong>Hachisu is non-custodial.</strong> You connect your own Bitcoin wallet, and customer payments settle directly to it. Hachisu never holds, controls, or transmits your Bitcoin, and never has access to your private keys or your recovery phrase.</p>
+        <p>Because Hachisu does not custody funds, closing your account does not put your Bitcoin at risk — your wallet is yours, and it keeps working whether or not you use Hachisu.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>Who it is for</h2>
+      <p>Hachisu is built for merchants and small businesses that want to accept Bitcoin without handing custody of it to a payment processor. It is a merchant tool, not a consumer wallet: it is designed around taking payment for goods and services, keeping a record of what was paid, and settling to infrastructure the business already controls.</p>
+    </section>
+
+    <section>
+      <h2>What Hachisu supports today</h2>
+      <dl class="facts">
+        <dt>Currency</dt>
+        <dd>Bitcoin only. Hachisu is not a general cryptocurrency payment platform.</dd>
+
+        <dt>Settlement</dt>
+        <dd>On-chain Bitcoin.</dd>
+
+        <dt>Lightning</dt>
+        <dd>Lightning is not currently available to merchants in Hachisu.</dd>
+
+        <dt>Custody</dt>
+        <dd>Non-custodial. Payments settle to a wallet you connect and control.</dd>
+
+        <dt>Platform</dt>
+        <dd>A mobile app for iPhone.</dd>
+
+        <dt>Availability</dt>
+        <dd>In development. Hachisu is not yet released on the App Store.</dd>
+      </dl>
+    </section>
+
+  </div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <p><strong>Hachisu</strong> — Bitcoin payments for merchants.</p>
+    <p>Canonical site: <a href="https://hachisu.io/">hachisu.io</a></p>
+  </div>
+</footer>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://hachisu.io/#organization",
+      "name": "Hachisu",
+      "url": "https://hachisu.io/",
+      "description": "Hachisu builds a non-custodial Bitcoin payment application for merchants and small businesses."
+    },
+    {
+      "@type": "MobileApplication",
+      "name": "Hachisu",
+      "url": "https://hachisu.io/",
+      "applicationCategory": "FinanceApplication",
+      "operatingSystem": "iOS",
+      "description": "A non-custodial Bitcoin payment app for merchants and small businesses. Accept Bitcoin payments, create invoices, send payment requests, run a point of sale, and track store activity. Bitcoin settles directly to a wallet the merchant controls; Hachisu never holds funds or private keys.",
+      "publisher": { "@id": "https://hachisu.io/#organization" }
+    }
+  ]
+}
+</script>
+
+</body>
+</html>

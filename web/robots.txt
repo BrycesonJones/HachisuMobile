@@ -1,0 +1,20 @@
+# https://hachisu.io/robots.txt
+#
+# Hachisu is a non-custodial Bitcoin payment app for merchants.
+# The public site is small and entirely public: everything here is
+# intended to be crawled, read and summarised.
+#
+# Search and AI discovery crawlers are welcome. This policy deliberately
+# does NOT enumerate individual bots — a hand-maintained allowlist goes
+# stale and starts blocking crawlers that did not exist when it was
+# written. Discovery crawlers that respect robots.txt are all covered by
+# the wildcard rule below.
+#
+# Note on scope: allowing discovery is not the same as allowing model
+# training. If a training-crawler policy is ever wanted, add it here as an
+# explicit, separate decision rather than inheriting one by default.
+
+User-agent: *
+Allow: /
+
+Sitemap: https://hachisu.io/sitemap.xml
