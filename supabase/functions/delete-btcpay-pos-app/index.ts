@@ -16,6 +16,7 @@ import {
   deleteApp,
   getBtcpayConfig,
 } from '../_shared/btcpay-client.ts';
+import { logAuthorizationDenied } from '../_shared/security-log.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -74,6 +75,13 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Could not load the POS app.' }, 500);
   }
   if (!app || app.user_id !== user.id) {
+    logAuthorizationDenied({
+      action: 'delete-btcpay-pos-app',
+      userId: user.id,
+      resourceType: 'pos_app',
+      resourceId: posAppId,
+      reason: app ? 'not_owner' : 'not_found',
+    });
     return jsonResponse({ error: 'POS app not found.' }, 404);
   }
 
@@ -92,7 +100,8 @@ Deno.serve(async (req) => {
   } catch (err) {
     const isApiError = err instanceof BtcpayApiError;
     if (isApiError) {
-      console.error('[delete-pos-app] BTCPay error', err.status, JSON.stringify(err.body));
+      // A09 (CWE-532): status only — never the upstream response body.
+      console.error(`[delete-pos-app] btcpayStatus=${err.status}`);
     }
     return jsonResponse(
       { error: isApiError ? err.message : 'Could not delete the POS app.' },

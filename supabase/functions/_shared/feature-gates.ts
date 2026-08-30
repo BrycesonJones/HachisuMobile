@@ -25,6 +25,7 @@
 export const LIGHTNING_ENABLED = false;
 
 import { jsonResponse } from './cors.ts';
+import { logFeatureDisabledAttempt } from './security-log.ts';
 
 /**
  * The refusal every Lightning-MUTATING endpoint returns while the product gate
@@ -32,7 +33,16 @@ import { jsonResponse } from './cors.ts';
  * Lightning configured from an earlier build must still be able to see it and
  * turn it off. Only paths that CREATE or CHANGE Lightning capability are closed.
  */
-export function lightningDisabledResponse(): Response {
+export function lightningDisabledResponse(action: string): Response {
+  // A09 (CWE-778): the refusal is RECORDED. This gate stands in front of a
+  // capability that can redirect a merchant's receipts (see above), so repeated
+  // attempts to reach it are exactly the signal an operator needs — and without
+  // this they were invisible, because the gate returns before anything else in
+  // the function runs. It fires BEFORE authentication (deliberately: a disabled
+  // feature should not do lookup work), so there is no user id to record; the
+  // platform's function_edge_logs carry the request id and source for the same
+  // request, which is what correlates the two.
+  logFeatureDisabledAttempt({ action, feature: 'lightning' });
   return jsonResponse(
     {
       ok: false,

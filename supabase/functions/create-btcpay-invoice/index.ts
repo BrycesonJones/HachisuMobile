@@ -50,6 +50,7 @@ import {
   validateOptionalText,
   type InvoiceInputError,
 } from '../_shared/invoice-input.ts';
+import { logAuthorizationDenied } from '../_shared/security-log.ts';
 
 /**
  * Service-role client factory.
@@ -200,6 +201,13 @@ Deno.serve(async (req) => {
   }
   // Not-found and not-yours are deliberately indistinguishable to the caller.
   if (!store || store.user_id !== user.id) {
+    logAuthorizationDenied({
+      action: 'create-btcpay-invoice',
+      userId: user.id,
+      resourceType: 'merchant_store',
+      resourceId: merchantStoreId,
+      reason: store ? 'not_owner' : 'not_found',
+    });
     return errorResponse('STORE_NOT_FOUND', 'Store not found.', 404);
   }
   if (!store.btcpay_store_id) {

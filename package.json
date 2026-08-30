@@ -16,7 +16,9 @@
     "check:design": "node ./scripts/check-design-invariants.mjs",
     "check:legal": "node ./scripts/check-legal-integrity.mjs",
     "check:deployed": "node ./scripts/check-deployed-functions.mjs",
-    "check:deployed:selftest": "node ./scripts/check-deployed-functions.selftest.mjs"
+    "check:deployed:selftest": "node ./scripts/check-deployed-functions.selftest.mjs",
+    "check:logging": "node ./scripts/check-logging.mjs",
+    "check:logging:selftest": "node ./scripts/check-logging.selftest.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

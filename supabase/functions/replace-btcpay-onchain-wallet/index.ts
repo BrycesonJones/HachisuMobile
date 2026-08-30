@@ -52,6 +52,7 @@ import {
   releaseOnchainLock,
 } from '../_shared/onchain-lock.ts';
 import { syncUserStoreSummary } from '../_shared/store-summary.ts';
+import { logAuthorizationDenied } from '../_shared/security-log.ts';
 
 const LOOKS_LIKE_KEY = /(\(|[xyztuv]pub[1-9A-HJ-NP-Za-km-z]{20,})/i;
 const MAX_KEY_LENGTH = 2000;
@@ -174,6 +175,13 @@ Deno.serve(async (req) => {
   }
   if (!store) return fail('STORE_NOT_FOUND', 'Store not found.', 404);
   if (store.user_id !== user.id) {
+    logAuthorizationDenied({
+      action: 'replace-btcpay-onchain-wallet',
+      userId: user.id,
+      resourceType: 'merchant_store',
+      resourceId: merchantStoreId,
+      reason: 'not_owner',
+    });
     return fail('STORE_ACCESS_DENIED', 'You do not have access to this store.', 403);
   }
 
@@ -226,6 +234,13 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: 'Could not validate the preview.' }, 500);
   }
   if (!preview || preview.user_id !== user.id) {
+    logAuthorizationDenied({
+      action: 'replace-btcpay-onchain-wallet',
+      userId: user.id,
+      resourceType: 'wallet_replacement_preview',
+      resourceId: previewVerificationId,
+      reason: preview ? 'not_owner' : 'not_found',
+    });
     return fail('PREVIEW_NOT_FOUND', 'Address preview not found. Please preview again.', 404);
   }
   if (preview.merchant_store_id !== store.id) {

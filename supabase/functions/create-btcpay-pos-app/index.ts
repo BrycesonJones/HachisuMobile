@@ -23,6 +23,7 @@ import {
   createPosApp,
   getBtcpayConfig,
 } from '../_shared/btcpay-client.ts';
+import { logAuthorizationDenied } from '../_shared/security-log.ts';
 
 const MAX_NAME_LENGTH = 50;
 
@@ -104,6 +105,13 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Could not load the store.' }, 500);
   }
   if (!store || store.user_id !== user.id) {
+    logAuthorizationDenied({
+      action: 'create-btcpay-pos-app',
+      userId: user.id,
+      resourceType: 'merchant_store',
+      resourceId: merchantStoreId,
+      reason: store ? 'not_owner' : 'not_found',
+    });
     return jsonResponse({ error: 'Store not found.' }, 404);
   }
   if (!store.btcpay_store_id) {
@@ -135,7 +143,10 @@ Deno.serve(async (req) => {
   } catch (err) {
     const isApiError = err instanceof BtcpayApiError;
     if (isApiError) {
-      console.error('[create-pos-app] BTCPay error', err.status, JSON.stringify(err.body));
+      // A09 (CWE-532): the STATUS, never the body. A BTCPay validation body
+      // echoes what was submitted — for a POS app that is the merchant's whole
+      // product template. The sibling wallet paths already record status only.
+      console.error(`[create-pos-app] btcpayStatus=${err.status}`);
     }
     return jsonResponse(
       { error: isApiError ? err.message : 'Could not create the POS app.' },

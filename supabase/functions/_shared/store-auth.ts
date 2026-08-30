@@ -12,6 +12,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2.112.4';
 
 import { jsonResponse } from './cors.ts';
+import { logAuthorizationDenied } from './security-log.ts';
 
 export interface OwnedStoreContext {
   userId: string;
@@ -82,6 +83,13 @@ export async function resolveOwnedStore(
   }
   // Not-found and not-owned are indistinguishable to the caller by design.
   if (!store || store.user_id !== user.id) {
+    logAuthorizationDenied({
+      action: 'resolve-owned-store',
+      userId: user.id,
+      resourceType: 'merchant_store',
+      resourceId: storeId,
+      reason: store ? 'not_owner' : 'not_found',
+    });
     return { ok: false, response: jsonResponse({ ok: false, error: 'Store not found.' }, 404) };
   }
   if (!store.btcpay_store_id) {

@@ -100,12 +100,16 @@ function walk(dir, out = []) {
         continue;
       }
       const imports = /from '\.\.\/_shared\/feature-gates\.ts'/.test(src);
-      const enforces = /if\s*\(!LIGHTNING_ENABLED\)\s*return lightningDisabledResponse\(\)/.test(src);
+      // A09 gave the gate an `action` argument so its refusal can be recorded as an
+      // attributable security event. The invariant is unchanged and now slightly
+      // STRONGER: the gate must still be the immediate return on !LIGHTNING_ENABLED,
+      // and it must name the action it is refusing (a bare call no longer passes).
+      const enforces = /if\s*\(!LIGHTNING_ENABLED\)\s*return lightningDisabledResponse\(\s*'[^']+'\s*\)/.test(src);
       if (!imports || !enforces) {
         fail(
           rule,
           `${name} does not enforce the server-side Lightning gate ` +
-            '(expected `if (!LIGHTNING_ENABLED) return lightningDisabledResponse();`)',
+            "(expected `if (!LIGHTNING_ENABLED) return lightningDisabledResponse('<action>');`)",
         );
       }
     }

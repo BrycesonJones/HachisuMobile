@@ -22,6 +22,7 @@ import {
   getStoreRate,
   satsToBtcDecimalString,
 } from '../_shared/btcpay-client.ts';
+import { logAuthorizationDenied } from '../_shared/security-log.ts';
 
 /** Normalized backend error codes the client can branch on. */
 type BalanceErrorCode =
@@ -110,6 +111,13 @@ Deno.serve(async (req) => {
   }
   // Report a non-owned or missing store identically so existence isn't leaked.
   if (!store || store.user_id !== user.id) {
+    logAuthorizationDenied({
+      action: 'get-btcpay-onchain-wallet-balance',
+      userId: user.id,
+      resourceType: 'merchant_store',
+      resourceId: merchantStoreId,
+      reason: store ? 'not_owner' : 'not_found',
+    });
     return errorResponse('STORE_ACCESS_DENIED', 'Store not found.', 404);
   }
   if (!store.btcpay_store_id || store.onchain_status !== 'connected') {

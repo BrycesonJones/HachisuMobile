@@ -23,6 +23,7 @@ import {
   releaseOnchainLock,
 } from '../_shared/onchain-lock.ts';
 import { syncUserStoreSummary } from '../_shared/store-summary.ts';
+import { logAuthorizationDenied } from '../_shared/security-log.ts';
 
 const MAX_LABEL_LENGTH = 100;
 
@@ -87,6 +88,13 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: 'Could not load the store.' }, 500);
   }
   if (!store || store.user_id !== user.id) {
+    logAuthorizationDenied({
+      action: 'update-btcpay-onchain-wallet-settings',
+      userId: user.id,
+      resourceType: 'merchant_store',
+      resourceId: merchantStoreId,
+      reason: store ? 'not_owner' : 'not_found',
+    });
     return jsonResponse({ ok: false, error: 'Store not found.' }, 404);
   }
 

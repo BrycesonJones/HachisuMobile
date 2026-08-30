@@ -29,6 +29,7 @@ import {
   releaseOnchainLock,
 } from '../_shared/onchain-lock.ts';
 import { syncUserStoreSummary } from '../_shared/store-summary.ts';
+import { logAuthorizationDenied } from '../_shared/security-log.ts';
 
 function fail(code: string, message: string, status: number) {
   return jsonResponse({ ok: false, code, error: message }, status);
@@ -94,6 +95,13 @@ Deno.serve(async (req) => {
   }
   if (!store) return fail('STORE_NOT_FOUND', 'Store not found.', 404);
   if (store.user_id !== user.id) {
+    logAuthorizationDenied({
+      action: 'sync-btcpay-onchain-wallet',
+      userId: user.id,
+      resourceType: 'merchant_store',
+      resourceId: merchantStoreId,
+      reason: 'not_owner',
+    });
     return fail('STORE_ACCESS_DENIED', 'You do not have access to this store.', 403);
   }
 

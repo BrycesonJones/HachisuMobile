@@ -49,6 +49,11 @@ import {
   type EnrichmentOutcome,
 } from '../_shared/activity-normalize.ts';
 import { toActivityEvents } from '../_shared/report-rows.ts';
+import {
+  logAuthorizationDenied,
+  logSecurityEvent,
+  SecurityEvents,
+} from '../_shared/security-log.ts';
 
 const DETAIL_TIMEOUT_MS = 8_000;
 
@@ -126,13 +131,31 @@ Deno.serve(async (req) => {
     .eq('id', merchantStoreId)
     .maybeSingle<{ id: string; user_id: string; btcpay_store_id: string; name: string }>();
   if (storeError) {
-    console.error(`[activity-detail] store-lookup-failed store=${merchantStoreId}`);
+    // A09 (CWE-117): merchantStoreId is raw client input. Interpolated into a
+    // newline-delimited line it forged a second, attacker-authored record; as a
+    // structured field it is quoted, neutralized and bounded.
+    logSecurityEvent({
+      event: SecurityEvents.STORE_LOOKUP_FAILED,
+      outcome: 'failure',
+      severity: 'error',
+      action: 'get-btcpay-activity-detail',
+      userId: user.id,
+      resourceType: 'merchant_store',
+      resourceId: merchantStoreId,
+    });
     return errorResponse('BTCPAY_DETAIL_FETCH_FAILED', 'Could not load the store.', 500);
   }
   if (!store) {
     return errorResponse('STORE_NOT_FOUND', 'Store not found.', 404);
   }
   if (store.user_id !== user.id) {
+    logAuthorizationDenied({
+      action: 'get-btcpay-activity-detail',
+      userId: user.id,
+      resourceType: 'merchant_store',
+      resourceId: merchantStoreId,
+      reason: 'not_owner',
+    });
     // Ownership is checked BEFORE any BTCPay call, so a caller can never probe an
     // invoice inside a store they do not own (no cross-store existence leak).
     console.warn(

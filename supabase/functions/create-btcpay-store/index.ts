@@ -203,7 +203,10 @@ Deno.serve(async (req) => {
       eventType: 'store_provisioning_failed',
       status: 'error',
       message: isApiError ? err.message : 'Unexpected error creating store.',
-      rawError: isApiError ? { status: err.status, body: err.body } : null,
+      // A09 (CWE-532): the audit row records the STATUS, not the upstream body.
+      // Every other provisioning event already does this; a body persisted here
+      // would be unreviewed upstream text in a durable, owner-readable table.
+      rawError: isApiError ? { status: err.status } : null,
     });
     return jsonResponse(
       { error: isApiError ? err.message : 'Could not create BTCPay store.' },

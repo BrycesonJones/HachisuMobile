@@ -39,6 +39,7 @@ import {
   setupBoltzForStore,
 } from '../_shared/btcpay-client.ts';
 import { syncUserStoreSummary } from '../_shared/store-summary.ts';
+import { logAuthorizationDenied } from '../_shared/security-log.ts';
 
 // L-BTC / Liquid core descriptors are script expressions: elwpkh(...), elsh(...),
 // elwsh(...), ct(...,elwpkh(...)), or plain wpkh(...). Require a balanced-looking
@@ -66,7 +67,7 @@ Deno.serve(async (req) => {
   // Product gate, enforced server-side: Lightning wallet connection must not be
   // reachable while Lightning is switched off for users. The client flag hides
   // the screens; this closes the capability. See _shared/feature-gates.ts.
-  if (!LIGHTNING_ENABLED) return lightningDisabledResponse();
+  if (!LIGHTNING_ENABLED) return lightningDisabledResponse('connect-btcpay-lbtc-wallet');
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
@@ -159,6 +160,13 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: 'Could not load the store.' }, 500);
   }
   if (!store || store.user_id !== user.id) {
+    logAuthorizationDenied({
+      action: 'connect-btcpay-lbtc-wallet',
+      userId: user.id,
+      resourceType: 'merchant_store',
+      resourceId: merchantStoreId,
+      reason: store ? 'not_owner' : 'not_found',
+    });
     return jsonResponse({ ok: false, error: 'Store not found.' }, 404);
   }
 

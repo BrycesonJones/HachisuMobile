@@ -27,6 +27,7 @@ import {
   maskExtendedKey,
   previewOnChainWallet,
 } from '../_shared/btcpay-client.ts';
+import { logAuthorizationDenied } from '../_shared/security-log.ts';
 
 // Minimal sanity check so we don't bother BTCPay with obvious junk; BTCPay is
 // the real validator and accepts far more than plain xpub. Matches an output
@@ -107,6 +108,13 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: 'Could not load the store.' }, 500);
   }
   if (!store || store.user_id !== user.id) {
+    logAuthorizationDenied({
+      action: 'preview-btcpay-onchain-wallet',
+      userId: user.id,
+      resourceType: 'merchant_store',
+      resourceId: merchantStoreId,
+      reason: store ? 'not_owner' : 'not_found',
+    });
     return jsonResponse({ ok: false, error: 'Store not found.' }, 404);
   }
 

@@ -21,6 +21,7 @@ import {
   removeLightningPaymentMethod,
 } from '../_shared/btcpay-client.ts';
 import { syncUserStoreSummary } from '../_shared/store-summary.ts';
+import { logAuthorizationDenied } from '../_shared/security-log.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -101,6 +102,13 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: 'Could not load the store.' }, 500);
   }
   if (!store || store.user_id !== user.id) {
+    logAuthorizationDenied({
+      action: 'remove-lightning',
+      userId: user.id,
+      resourceType: 'merchant_store',
+      resourceId: merchantStoreId,
+      reason: store ? 'not_owner' : 'not_found',
+    });
     return jsonResponse({ ok: false, error: 'Store not found.' }, 404);
   }
 

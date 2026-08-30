@@ -23,6 +23,7 @@ import {
   validateOptionalText,
 } from '../_shared/invoice-input.ts';
 import { buildTemplate, PosProductError } from '../_shared/pos-template.ts';
+import { logAuthorizationDenied } from '../_shared/security-log.ts';
 
 const MAX_TITLE_LENGTH = 100;
 
@@ -146,6 +147,13 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Could not load the POS app.' }, 500);
   }
   if (!app || app.user_id !== user.id) {
+    logAuthorizationDenied({
+      action: 'update-btcpay-pos-app',
+      userId: user.id,
+      resourceType: 'pos_app',
+      resourceId: posAppId,
+      reason: app ? 'not_owner' : 'not_found',
+    });
     return jsonResponse({ error: 'POS app not found.' }, 404);
   }
 
@@ -186,7 +194,8 @@ Deno.serve(async (req) => {
   } catch (err) {
     if (err instanceof BtcpayApiError) {
       btcpayWarning = err.message;
-      console.error('[update-pos-app] BTCPay error', err.status, JSON.stringify(err.body));
+      // A09 (CWE-532): status only — the body echoes the submitted template.
+      console.error(`[update-pos-app] btcpayStatus=${err.status}`);
     } else if (err instanceof BtcpayConfigError) {
       btcpayWarning = err.message;
     } else {

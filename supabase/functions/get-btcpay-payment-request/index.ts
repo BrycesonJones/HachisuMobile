@@ -28,6 +28,11 @@ import {
   htmlToPlainText,
 } from '../_shared/btcpay-client.ts';
 import { customerDataOptionForFormId } from '../_shared/payment-request-input.ts';
+import {
+  logAuthorizationDenied,
+  logSecurityEvent,
+  SecurityEvents,
+} from '../_shared/security-log.ts';
 
 const DETAIL_TIMEOUT_MS = 8_000;
 
@@ -106,13 +111,30 @@ Deno.serve(async (req) => {
     .eq('id', merchantStoreId)
     .maybeSingle<{ id: string; user_id: string; btcpay_store_id: string | null }>();
   if (storeError) {
-    console.error(`[payment-request:detail] store-lookup-failed store=${merchantStoreId}`);
+    // A09 (CWE-117): see get-btcpay-activity-detail — client input never goes
+    // into a log TEMPLATE, only into a structured field.
+    logSecurityEvent({
+      event: SecurityEvents.STORE_LOOKUP_FAILED,
+      outcome: 'failure',
+      severity: 'error',
+      action: 'get-btcpay-payment-request',
+      userId: user.id,
+      resourceType: 'merchant_store',
+      resourceId: merchantStoreId,
+    });
     return errorResponse('BTCPAY_DETAIL_FETCH_FAILED', 'Could not load the store.', 500);
   }
   if (!store) {
     return errorResponse('STORE_NOT_FOUND', 'Store not found.', 404);
   }
   if (store.user_id !== user.id) {
+    logAuthorizationDenied({
+      action: 'get-btcpay-payment-request',
+      userId: user.id,
+      resourceType: 'merchant_store',
+      resourceId: merchantStoreId,
+      reason: 'not_owner',
+    });
     // Ownership is checked BEFORE any BTCPay call — no cross-store probing.
     console.warn(
       `[payment-request:detail] access-denied user=${user.id} store=${store.id} request=${paymentRequestId}`,

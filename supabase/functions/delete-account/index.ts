@@ -53,6 +53,7 @@ import {
 } from '../_shared/account-deletion.ts';
 import {
   BtcpayApiError,
+  BtcpayTimeoutError,
   BtcpayConfigError,
   deleteStore,
   getBtcpayConfig,
@@ -199,17 +200,27 @@ Deno.serve(async (req) => {
               continue;
             }
           } catch (listErr) {
-            console.error(`[delete-account] user=${user.id} store=${storeId} 403 disambiguation failed:`, listErr);
+            // A09 (CWE-532): a normalized description, not the error object.
+            // Passing the object serializes its own properties, which for a
+            // BtcpayApiError includes the upstream response body.
+            console.error(
+              `[delete-account] user=${user.id} store=${storeId} 403 disambiguation failed: ` +
+                describeBtcpayError(listErr),
+            );
           }
         }
         if (err instanceof BtcpayApiError) {
+          // A09 (CWE-532): status only — the body is upstream-controlled text.
           console.error(
-            `[delete-account] user=${user.id} store=${storeId} BTCPay delete failed`,
-            err.status,
-            JSON.stringify(err.body),
+            `[delete-account] user=${user.id} store=${storeId} ` +
+              `BTCPay delete failed btcpayStatus=${err.status}`,
           );
         } else {
-          console.error(`[delete-account] user=${user.id} store=${storeId} delete threw:`, err);
+          // A09 (CWE-532): normalized description, never the raw error object.
+          console.error(
+            `[delete-account] user=${user.id} store=${storeId} delete failed: ` +
+              describeBtcpayError(err),
+          );
         }
         return jsonResponse({ ok: false, error: RETRYABLE_CLEANUP_ERROR }, 502);
       }
@@ -269,3 +280,12 @@ Deno.serve(async (req) => {
 
   return jsonResponse({ ok: true });
 });
+
+/** Non-sensitive one-line description of a BTCPay failure for the log. Never
+ * includes the Greenfield key or a response body that could carry upstream text.
+ * Mirrors the helper in the other BTCPay-facing functions. */
+function describeBtcpayError(err: unknown): string {
+  if (err instanceof BtcpayTimeoutError) return 'btcpay=timeout';
+  if (err instanceof BtcpayApiError) return `btcpayStatus=${err.status}`;
+  return `btcpay=unexpected(${err instanceof Error ? err.name : typeof err})`;
+}

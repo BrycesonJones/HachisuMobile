@@ -35,6 +35,7 @@ import {
   previewOnChainWallet,
 } from '../_shared/btcpay-client.ts';
 import { fingerprintDerivationScheme } from '../_shared/onchain-fingerprint.ts';
+import { logAuthorizationDenied } from '../_shared/security-log.ts';
 
 const LOOKS_LIKE_KEY = /(\(|[xyztuv]pub[1-9A-HJ-NP-Za-km-z]{20,})/i;
 const MAX_KEY_LENGTH = 2000;
@@ -123,6 +124,13 @@ Deno.serve(async (req) => {
     return fail('STORE_NOT_FOUND', 'Store not found.', 404);
   }
   if (store.user_id !== user.id) {
+    logAuthorizationDenied({
+      action: 'preview-btcpay-onchain-wallet-replacement',
+      userId: user.id,
+      resourceType: 'merchant_store',
+      resourceId: merchantStoreId,
+      reason: 'not_owner',
+    });
     return fail('STORE_ACCESS_DENIED', 'You do not have access to this store.', 403);
   }
 

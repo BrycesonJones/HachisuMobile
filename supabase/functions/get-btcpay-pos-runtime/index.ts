@@ -30,6 +30,7 @@ import {
   getPosApp,
   sanitizeCheckoutLink,
 } from '../_shared/btcpay-client.ts';
+import { logAuthorizationDenied } from '../_shared/security-log.ts';
 
 type ResultCode =
   | 'UNAUTHORIZED'
@@ -134,6 +135,21 @@ Deno.serve(async (req) => {
     app.merchant_store_id !== merchantStoreId ||
     app.status !== 'active'
   ) {
+    logAuthorizationDenied({
+      action: 'get-btcpay-pos-runtime',
+      userId: user.id,
+      resourceType: 'pos_app',
+      resourceId: posAppId,
+      storeId: merchantStoreId,
+      reason:
+        !app
+        ? 'not_found'
+        : app.user_id !== user.id
+        ? 'not_owner'
+        : app.merchant_store_id !== merchantStoreId
+        ? 'wrong_store'
+        : 'inactive',
+    });
     return errorResponse('POS_APP_NOT_FOUND', 'POS app not found.', 404);
   }
 
