@@ -2,6 +2,7 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 
 import { isAuthDevBypassEnabled, isProfileDebugEnabled } from '@/lib/auth/config';
+import { interpretOAuthCallback } from '@/lib/auth/oauth-callback';
 import {
   clearDevAuth,
   getDevProfile,
@@ -412,32 +413,6 @@ export async function updateUserProfile(
 
 
 /**
- * Parses a Supabase OAuth callback URL. Tokens arrive in the URL fragment on
- * the implicit flow and as a `code` query param on PKCE; errors can appear in
- * either place, so both parts are merged.
- */
-function parseOAuthCallbackParams(url: string): Record<string, string> {
-  const params: Record<string, string> = {};
-  const [beforeFragment, fragment] = url.split('#');
-  const query = beforeFragment.split('?')[1];
-
-  for (const part of [query, fragment]) {
-    if (!part) continue;
-    for (const pair of part.split('&')) {
-      const [key, ...rest] = pair.split('=');
-      if (!key) continue;
-      try {
-        params[decodeURIComponent(key)] = decodeURIComponent(rest.join('='));
-      } catch {
-        // Skip malformed pairs rather than failing the whole callback.
-      }
-    }
-  }
-
-  return params;
-}
-
-/**
  * Signs the user in with Google via Supabase's browser-based OAuth flow
  * (expo-web-browser auth session; works in Expo Go — no native module).
  * `cancelled` means the user dismissed the browser; that is not an error.
@@ -475,27 +450,23 @@ export async function signInWithGoogleOAuth(): Promise<{
     return { error: null, cancelled: true };
   }
 
-  const params = parseOAuthCallbackParams(result.url);
+  const action = interpretOAuthCallback(result.url);
 
-  if (params.error_description || params.error) {
-    return { error: { message: params.error_description || params.error } };
+  if (action.kind === 'error') {
+    return { error: { message: action.message } };
   }
 
-  if (params.code) {
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(params.code);
+  if (action.kind === 'code') {
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(action.code);
     authLog('google:exchange', { ok: !exchangeError });
     return { error: exchangeError ? toAuthError(exchangeError) : null };
   }
 
-  if (params.access_token && params.refresh_token) {
-    const { error: sessionError } = await supabase.auth.setSession({
-      access_token: params.access_token,
-      refresh_token: params.refresh_token,
-    });
-    authLog('google:setSession', { ok: !sessionError });
-    return { error: sessionError ? toAuthError(sessionError) : null };
-  }
-
+  // `none`: the client only runs PKCE (supabase-auth-options.ts), so a
+  // completed sign-in always returns a `code`. Access/refresh tokens delivered
+  // in the callback URL are deliberately ignored by interpretOAuthCallback —
+  // the custom-scheme redirect is interceptable, so honouring tokens carried
+  // there would be a session fixation/replay vector (A07 CWE-294, CWE-384).
   return { error: { message: 'Google sign-in did not return a session.' } };
 }
 
