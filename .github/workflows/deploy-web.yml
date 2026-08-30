@@ -27,10 +27,12 @@ jobs:
     name: Verify discoverability invariants
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
+      # No `npm ci` here on purpose: the guard scripts import only node: builtins,
+      # so the gate runs without installing or executing any dependency code.
       # The guard is the gate: a site that would ship a wrong canonical host,
       # registrar identity, blocked robots.txt, or Lightning copy the app gates
       # off must not reach the public domain.
@@ -47,10 +49,15 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/checkout@v7
+      # enablement: true turns Pages on for this repo if it is not already, so
+      # publishing does not silently depend on a one-off setting in the web UI.
+      # Without it the deploy job fails with "Get Pages site failed".
+      - uses: actions/configure-pages@v6
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: web
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
