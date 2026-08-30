@@ -458,3 +458,91 @@ Deno.test('activity: no fiat amount is invented when the rate is missing', () =>
   assertEquals(events[0].fiatAmount, null);
   assertEquals(events[0].cryptoAmount, '0.0001');
 });
+
+// ---------------------------------------------------------------------------
+// A08 (Software or Data Integrity Failures / CWE-345, CWE-915) — invoice
+// metadata keys are UPSTREAM data and must not collide with Object.prototype.
+//
+// The flattened-metadata accumulator is a plain `{}`, and both the "TryAdd"
+// guard (`fieldName in result`) and the CSV cell lookup (`name in row.metadata`)
+// walk the prototype chain. So a BTCPay invoice carrying a metadata field named
+// `toString`, `valueOf`, `constructor`, ... is reported as already present and
+// is silently discarded: the merchant's export and Activity detail omit real
+// upstream data with no error and no warning. Invoices reach a Hachisu store
+// from BTCPay's own admin UI and any other integration on that store, so these
+// keys are not hypothetical.
+//
+// The export replicates BTCPay's InvoicesReportProvider, whose TryAdd is an
+// own-key operation — every metadata leaf must survive to a column.
+// ---------------------------------------------------------------------------
+
+Deno.test('metadata fields named after Object.prototype members are not dropped', () => {
+  const rows = buildReportRows(
+    withPayments(
+      invoice({
+        id: 'INV-PROTO',
+        metadata: {
+          orderId: 'ORDER-1',
+          toString: 'real-upstream-value-1',
+          valueOf: 'real-upstream-value-2',
+          constructor: 'real-upstream-value-3',
+          hasOwnProperty: 'real-upstream-value-4',
+        },
+      }),
+      [{ id: 'pay-1', value: '0.0001' }],
+    ),
+  );
+  const columns = collectMetadataColumns(rows);
+  for (const name of ['orderId', 'toString', 'valueOf', 'constructor', 'hasOwnProperty']) {
+    assertEquals(
+      columns.includes(name),
+      true,
+      `metadata field "${name}" must appear as a report column`,
+    );
+  }
+});
+
+Deno.test('a prototype-named metadata value reaches its CSV cell verbatim', () => {
+  const rows = buildReportRows(
+    withPayments(
+      invoice({
+        id: 'INV-PROTO-2',
+        metadata: { toString: 'HACHISU-VALUE' },
+      }),
+      [{ id: 'pay-1', value: '0.0001' }],
+    ),
+  );
+  const columns = collectMetadataColumns(rows);
+  const csv = reportRowsToCsv(rows, columns);
+  assertEquals(
+    csv.includes('HACHISU-VALUE'),
+    true,
+    'the upstream metadata value must be present in the exported CSV',
+  );
+});
+
+Deno.test('no metadata cell is ever filled from the prototype chain', () => {
+  // One invoice contributes the column; a second invoice does not carry it.
+  // The absent cell must be EMPTY, never a stringified Object.prototype member.
+  const rows = [
+    ...buildReportRows(
+      withPayments(invoice({ id: 'A', metadata: { toString: 'A-VALUE' } }), [
+        { id: 'pa', value: '0.0001' },
+      ]),
+    ),
+    ...buildReportRows(
+      withPayments(invoice({ id: 'B', metadata: { orderId: 'ORDER-B' } }), [
+        { id: 'pb', value: '0.0002' },
+      ]),
+    ),
+  ];
+  const columns = collectMetadataColumns(rows);
+  const lines = reportRowsToCsv(rows, columns).trimEnd().split('\r\n');
+  for (const line of lines) {
+    assertEquals(
+      line.includes('function ') || line.includes('[object Object]'),
+      false,
+      `a prototype member leaked into a CSV row: ${line}`,
+    );
+  }
+});

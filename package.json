@@ -13,7 +13,10 @@
     "check:config": "node ./scripts/check-client-config.mjs",
     "check:supplychain": "node ./scripts/check-supply-chain.mjs",
     "generate:legal": "node ./scripts/generate-legal-content.js",
-    "check:design": "node ./scripts/check-design-invariants.mjs"
+    "check:design": "node ./scripts/check-design-invariants.mjs",
+    "check:legal": "node ./scripts/check-legal-integrity.mjs",
+    "check:deployed": "node ./scripts/check-deployed-functions.mjs",
+    "check:deployed:selftest": "node ./scripts/check-deployed-functions.selftest.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

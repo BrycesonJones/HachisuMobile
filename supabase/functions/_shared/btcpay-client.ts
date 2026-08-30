@@ -99,6 +99,52 @@ export class BtcpayTimeoutError extends BtcpayApiError {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Response authenticity (OWASP A08:2025 — CWE-345)
+// ---------------------------------------------------------------------------
+//
+// TLS proves Hachisu reached the configured BTCPay Server. It says nothing about
+// whether a given JSON body is a valid answer to the request just made. The
+// create* calls below turn a 2xx body into a DURABLE merchant-resource mapping
+// (merchant_stores.btcpay_store_id, merchant_pos_apps.btcpay_app_id,
+// merchant_invoices.btcpay_invoice_id, ...), and every later request is routed
+// by that mapping — updatePosApp, notably, is a FULL REPLACE. So two things are
+// checked before any success payload is believed:
+//
+//   1. the id is a usable identifier (a blank string is a permanent dangling
+//      mapping, not an id), and
+//   2. when the payload echoes `storeId`, it is the store the request addressed.
+//
+// (2) is the same re-check get-btcpay-payment-request and get-btcpay-pos-runtime
+// already perform on their READ paths; the mutation paths that mint the mapping
+// must not be laxer than the reads that consume it. An ABSENT storeId is not
+// evidence of a mismatch — only a present, different one is.
+
+/** A non-empty, non-whitespace id string, or null. */
+function readResourceId(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+/**
+ * Throws when a payload echoes a `storeId` that is not the store the request
+ * addressed. A missing/non-string echo is accepted (see above).
+ */
+function assertEchoedStore(
+  payload: { storeId?: unknown },
+  expectedStoreId: string,
+  what: string,
+  status: number,
+): void {
+  const echoed = payload.storeId;
+  if (typeof echoed === 'string' && echoed !== expectedStoreId) {
+    throw new BtcpayApiError(
+      `BTCPay returned a ${what} belonging to a different store.`,
+      status,
+      { expectedStoreId, echoedStoreId: echoed },
+    );
+  }
+}
+
 export interface BtcpayStore {
   id: string;
   name: string;
@@ -159,7 +205,7 @@ export async function createStore(
   }
 
   const store = parsed as Partial<BtcpayStore> | null;
-  if (!store || typeof store.id !== 'string') {
+  if (!store || typeof store !== 'object' || !readResourceId(store.id)) {
     throw new BtcpayApiError(
       'BTCPay returned an unexpected store payload (no id).',
       response.status,
@@ -249,13 +295,14 @@ export async function createPosApp(
   }
 
   const app = parsed as Partial<BtcpayPosApp> | null;
-  if (!app || typeof app.id !== 'string') {
+  if (!app || typeof app !== 'object' || !readResourceId(app.id)) {
     throw new BtcpayApiError(
       'BTCPay returned an unexpected POS app payload (no id).',
       response.status,
       parsed,
     );
   }
+  assertEchoedStore(app, btcpayStoreId, 'POS app', response.status);
 
   return app as BtcpayPosApp;
 }
@@ -2460,13 +2507,14 @@ export async function createStoreInvoice(
   }
 
   const invoice = parsed as Partial<BtcpayInvoice> | null;
-  if (!invoice || typeof invoice !== 'object' || typeof invoice.id !== 'string' || !invoice.id) {
+  if (!invoice || typeof invoice !== 'object' || !readResourceId(invoice.id)) {
     throw new BtcpayApiError(
       'BTCPay returned an unexpected invoice payload (no id).',
       response.status,
       parsed,
     );
   }
+  assertEchoedStore(invoice, btcpayStoreId, 'invoice', response.status);
   return invoice as BtcpayInvoice;
 }
 
@@ -2626,13 +2674,14 @@ export async function createStorePaymentRequest(
   }
 
   const pr = parsed as Partial<BtcpayPaymentRequest> | null;
-  if (!pr || typeof pr !== 'object' || typeof pr.id !== 'string' || !pr.id) {
+  if (!pr || typeof pr !== 'object' || !readResourceId(pr.id)) {
     throw new BtcpayApiError(
       'BTCPay returned an unexpected payment request payload (no id).',
       status,
       parsed,
     );
   }
+  assertEchoedStore(pr, btcpayStoreId, 'payment request', status);
   return pr as BtcpayPaymentRequest;
 }
 

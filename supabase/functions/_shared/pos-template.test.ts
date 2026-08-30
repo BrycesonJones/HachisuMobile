@@ -134,3 +134,62 @@ Deno.test('a product with a malformed price is still rejected', () => {
   assertThrows(() => buildTemplate([product({ price: '1e5' })]), PosProductError);
   assertThrows(() => buildTemplate([product({ price: '-1' })]), PosProductError);
 });
+
+// ---------------------------------------------------------------------------
+// A08 (Software or Data Integrity Failures / CWE-915) — the priceType allow-list
+// must be an OWN-property lookup.
+//
+// `priceType` arrives verbatim from the untrusted client. The mapping table is
+// an object literal, so it inherits Object.prototype: an `in` test answers TRUE
+// for `toString`, `constructor`, `valueOf`, `hasOwnProperty` and `__proto__`,
+// which walks the fallback-to-'fixed' branch straight past the allow-list. The
+// item then reaches BTCPay with the merchant's price type AND price silently
+// missing — on a page customers pay from — and the poisoned product is persisted
+// to merchant_pos_apps, so every later mode switch re-serializes it.
+//
+// An unrecognized value must always land on 'fixed' with the price intact.
+// ---------------------------------------------------------------------------
+
+const PROTOTYPE_KEYS = [
+  'toString',
+  'constructor',
+  'valueOf',
+  'hasOwnProperty',
+  '__proto__',
+  'isPrototypeOf',
+  'propertyIsEnumerable',
+  'toLocaleString',
+];
+
+Deno.test('a prototype-named priceType cannot bypass the allow-list fallback', () => {
+  for (const key of PROTOTYPE_KEYS) {
+    const items = parse(buildTemplate([product({ priceType: key })]));
+    assertEquals(
+      items[0].priceType,
+      'Fixed',
+      `priceType="${key}" must fall back to Fixed like any other unknown value`,
+    );
+    assertEquals(
+      items[0].price,
+      3.5,
+      `priceType="${key}" must keep the merchant's price`,
+    );
+  }
+});
+
+Deno.test('a prototype-named priceType never emits a non-string priceType', () => {
+  for (const key of PROTOTYPE_KEYS) {
+    const items = parse(buildTemplate([product({ priceType: key })]));
+    assertEquals(
+      typeof items[0].priceType,
+      'string',
+      `priceType="${key}" must serialize as a BTCPay enum string`,
+    );
+  }
+});
+
+Deno.test('an ordinary unknown priceType still falls back to Fixed', () => {
+  const items = parse(buildTemplate([product({ priceType: 'not-a-real-type' })]));
+  assertEquals(items[0].priceType, 'Fixed');
+  assertEquals(items[0].price, 3.5);
+});

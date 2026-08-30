@@ -68,7 +68,14 @@ export function buildTemplate(products: unknown[]): string {
       assertLength(title, MAX_PRODUCT_TITLE_LENGTH, 'the name', title.slice(0, 40));
       assertLength(id, MAX_PRODUCT_ID_LENGTH, 'the product id', title);
       const rawType = typeof prod.priceType === 'string' ? prod.priceType : 'fixed';
-      const priceType = rawType in PRICE_TYPE_TO_BTCPAY ? rawType : 'fixed';
+      // OWN-key lookup, never `in`. PRICE_TYPE_TO_BTCPAY is an object literal, so
+      // `in` answers true for every Object.prototype member ('toString',
+      // 'constructor', '__proto__', ...). A client sending one of those as
+      // priceType would walk past this allow-list and emit an AppItem whose
+      // priceType resolved to an inherited function/object — dropped by
+      // JSON.stringify — leaving BTCPay a public checkout item with NO price type
+      // and NO price. An unrecognized value must always mean 'fixed'.
+      const priceType = Object.hasOwn(PRICE_TYPE_TO_BTCPAY, rawType) ? rawType : 'fixed';
       const item: Record<string, unknown> = {
         id,
         title,

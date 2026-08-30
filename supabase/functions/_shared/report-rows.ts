@@ -435,7 +435,14 @@ export function buildReportRows(invoice: BtcpayInvoice): ReportRow[] {
 // ---------------------------------------------------------------------------
 
 function flattenReportMetadata(invoice: BtcpayInvoice): Record<string, ReportCellValue> {
-  const result: Record<string, ReportCellValue> = {};
+  // Prototype-free accumulator: the KEYS are upstream data (BTCPay invoice
+  // metadata, which any integration on the store — including BTCPay's own admin
+  // UI — can name freely). On a plain `{}` a field called `toString`, `valueOf`,
+  // `constructor`, ... is already "present" via Object.prototype, so the TryAdd
+  // guard below would discard real upstream data, and a later `metadata[name]`
+  // could read an inherited member instead of a cell. Object.create(null) has no
+  // prototype, so a metadata key can only ever collide with another metadata key.
+  const result: Record<string, ReportCellValue> = Object.create(null);
   const metadata = invoice.metadata;
   if (!metadata || typeof metadata !== 'object') return result;
   const currency = typeof invoice.currency === 'string' ? invoice.currency : '';
@@ -507,8 +514,10 @@ function flattenNode(
     fieldName = `${itemId}-${fieldName}`;
   }
 
-  // TryAdd: first value wins.
-  if (!(fieldName in result)) {
+  // TryAdd: first value wins. Own-key test (the accumulator is prototype-free,
+  // so this is the same set `in` would see — stated explicitly so the invariant
+  // survives a future change of accumulator).
+  if (!Object.hasOwn(result, fieldName)) {
     result[fieldName] = value;
   }
 }
@@ -543,7 +552,11 @@ export function reportRowsToCsv(rows: ReportRow[], metadataColumns: string[]): s
   for (const row of rows) {
     const cells = [
       ...row.base,
-      ...metadataColumns.map((name) => (name in row.metadata ? row.metadata[name] : null)),
+      // Own-key lookup: a cell is filled only from this row's OWN metadata, never
+      // from anything reachable on a prototype chain.
+      ...metadataColumns.map((name) =>
+        Object.hasOwn(row.metadata, name) ? row.metadata[name] : null,
+      ),
     ];
     lines.push(cells.map(csvCell).join(','));
   }
