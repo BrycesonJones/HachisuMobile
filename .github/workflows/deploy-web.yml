@@ -50,12 +50,15 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
-      # enablement: true turns Pages on for this repo if it is not already, so
-      # publishing does not silently depend on a one-off setting in the web UI.
-      # Without it the deploy job fails with "Get Pages site failed".
+      # Pages must already be enabled for this repo, with Settings -> Pages ->
+      # Source set to "GitHub Actions". That is a one-time manual step and it
+      # cannot be automated from here: the workflow's GITHUB_TOKEN can deploy to
+      # an existing Pages site but cannot create one. Passing `enablement: true`
+      # was tried in run 33315254561 and failed with "Create Pages site failed:
+      # Resource not accessible by integration", because creating a Pages site
+      # needs admin rights the workflow token is not granted. If this job fails
+      # with "Get Pages site failed", that setting is what is missing.
       - uses: actions/configure-pages@v6
-        with:
-          enablement: true
       - uses: actions/upload-pages-artifact@v5
         with:
           path: web
