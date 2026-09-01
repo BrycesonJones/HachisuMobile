@@ -1,6 +1,6 @@
 # Hachisu Privacy Notice
 
-**Effective date:** [EFFECTIVE DATE]
+**Effective date:** August 1, 2026
 
 > **Draft for attorney review.** This document is a working draft prepared from the current
 > Hachisu application behavior. It has not been reviewed by licensed counsel and must not be
@@ -8,12 +8,9 @@
 
 ## 1. Who We Are
 
-Hachisu is a mobile application operated by [LEGAL ENTITY NAME] ("Hachisu," "we," "us," or
-"our") that helps merchants accept Bitcoin payments using their own Bitcoin wallets and
-payment infrastructure. You can contact us at:
-
-- Email: [PRIVACY EMAIL]
-- Mail: [MAILING ADDRESS]
+Hachisu is a mobile application ("Hachisu," "we," "us," or "our") that helps merchants
+accept Bitcoin payments using their own Bitcoin wallets and payment infrastructure. You
+can contact us through the Contact form at https://hachisu.io/#contact.
 
 ## 2. Scope of This Notice
 
@@ -114,7 +111,7 @@ kits. However, like essentially all internet services:
 
 ### 4.7 Communications and support
 
-If you contact us (for example, by email at [SUPPORT EMAIL]), we collect the information
+If you contact us (for example, through our Contact form), we collect the information
 you choose to send, such as your email address and the contents of your message.
 
 ## 5. How We Collect Information
@@ -255,15 +252,16 @@ not yet been determined. [NOTE FOR REVIEW: counsel to assess state privacy-law
 applicability and finalize this section.]
 
 Regardless of legal thresholds, you can always access and edit your profile in the app,
-delete your account as described above, or contact us at [PRIVACY EMAIL] with privacy
-questions or requests. We do not sell personal information or use it for targeted
+delete your account as described above, or contact us through
+the Contact form at https://hachisu.io/#contact with privacy questions or requests. We do not sell personal information or use it for targeted
 advertising, so no "do not sell or share" opt-out is required to achieve that result.
 
 ## 14. Children's Privacy
 
 The Service is intended for business use by adults. It is not directed to children, and we
 do not knowingly collect personal information from anyone under 18. If you believe a child
-has provided us personal information, contact us at [PRIVACY EMAIL] and we will delete it.
+has provided us personal information, contact us through the Contact form at https://hachisu.io/#contact
+and we will delete it.
 
 ## 15. International Users
 
@@ -281,7 +279,5 @@ use of the Service after an updated Notice takes effect means the updated Notice
 
 ## 17. Contact Us
 
-Questions or requests about this Privacy Notice or your information:
-
-- Email: [PRIVACY EMAIL]
-- Mail: [LEGAL ENTITY NAME], [MAILING ADDRESS]
+Questions or requests about this Privacy Notice or your information: contact us through
+the Contact form at https://hachisu.io/#contact.

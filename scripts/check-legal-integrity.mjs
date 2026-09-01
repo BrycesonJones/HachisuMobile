@@ -101,6 +101,59 @@ if (committed === null) {
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
+
+  // -------------------------------------------------------------------------
+  // 2b. The PUBLIC legal pages derive from the same source. web/{terms,privacy,
+  // e-sign}.html are committed artifacts of scripts/generate-legal-pages.js,
+  // which consumes the same parser as the app artifact — one legal policy set,
+  // multiple presentation surfaces. A hand edit to a page, or a docs/legal/
+  // change without regeneration, is the same CWE-345 drift as rule 2.
+  // -------------------------------------------------------------------------
+  const PAGE_GENERATOR = join(ROOT, 'scripts', 'generate-legal-pages.js');
+  const WEB_PAGES = ['terms.html', 'privacy.html', 'e-sign.html'];
+  if (!existsSync(PAGE_GENERATOR)) {
+    fail('web-pages-generator-missing', `${rel(PAGE_GENERATOR)}: the public legal-page generator is missing`);
+  } else {
+    const webWork = mkdtempSync(join(tmpdir(), 'hachisu-legal-web-'));
+    try {
+      mkdirSync(join(webWork, 'docs'), { recursive: true });
+      mkdirSync(join(webWork, 'scripts'), { recursive: true });
+      mkdirSync(join(webWork, 'web'), { recursive: true });
+      cpSync(SOURCE_DIR, join(webWork, 'docs', 'legal'), { recursive: true });
+      cpSync(GENERATOR, join(webWork, 'scripts', 'generate-legal-content.js'));
+      cpSync(PAGE_GENERATOR, join(webWork, 'scripts', 'generate-legal-pages.js'));
+
+      execFileSync(process.execPath, [join(webWork, 'scripts', 'generate-legal-pages.js')], {
+        cwd: webWork,
+        stdio: 'pipe',
+      });
+
+      let webOk = true;
+      for (const page of WEB_PAGES) {
+        const committedPage = read(join(ROOT, 'web', page));
+        const regeneratedPage = read(join(webWork, 'web', page));
+        if (committedPage === null) {
+          webOk = false;
+          fail('web-legal-page-missing', `web/${page}: the public legal page is not committed`);
+        } else if (regeneratedPage === null) {
+          webOk = false;
+          fail('web-regeneration-failed', `web/${page}: the page generator produced no output`);
+        } else if (committedPage !== regeneratedPage) {
+          webOk = false;
+          fail(
+            'web-legal-content-drift',
+            `web/${page} does not match docs/legal/*.md — the public site shows legal text ` +
+              'that no longer matches its reviewed source. Run `npm run generate:legal`.',
+          );
+        }
+      }
+      if (webOk) pass('the public web legal pages are byte-identical to docs/legal/*.md');
+    } catch (err) {
+      fail('web-regeneration-failed', `could not re-derive the web legal pages: ${err.message}`);
+    } finally {
+      rmSync(webWork, { recursive: true, force: true });
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

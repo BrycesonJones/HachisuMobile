@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Hachisu Privacy Notice</title>
+<meta name="description" content="How Hachisu collects, uses, shares, and protects information.">
+<link rel="canonical" href="https://hachisu.io/privacy">
+<meta property="og:site_name" content="Hachisu">
+<meta property="og:title" content="Hachisu Privacy Notice">
+<meta property="og:description" content="How Hachisu collects, uses, shares, and protects information.">
+<meta property="og:url" content="https://hachisu.io/privacy">
+<meta property="og:type" content="website">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+
+<style>
+  /* Tokens mirror the landing page (web/index.html). */
+  :root {
+    --ground: #000000;
+    --line: #1A1A1A;
+    --ink: #F2EDE3;
+    --muted: #A0958A;
+    --faint: #8A8076;
+    --cream: #F1EBDD;
+    --cream-2: #DED6C4;
+    --orange: #F28C10;
+    --orange-ink: #E9A445;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI",
+            Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, "JetBrains Mono",
+            "IBM Plex Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  a { color: var(--orange-ink); text-decoration-color: rgba(233, 164, 69, 0.4); text-underline-offset: 3px; }
+  a:hover { text-decoration-color: var(--orange-ink); }
+  :focus-visible { outline: 2px solid var(--orange); outline-offset: 3px; border-radius: 2px; }
+
+  header.site {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(0, 0, 0, 0.92);
+  }
+  @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    header.site {
+      background: rgba(0, 0, 0, 0.72);
+      -webkit-backdrop-filter: blur(18px);
+              backdrop-filter: blur(18px);
+    }
+  }
+  header.site .bar {
+    max-width: 820px; margin: 0 auto;
+    display: flex; align-items: center; gap: 20px;
+    padding: 20px clamp(20px, 5vw, 32px) 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .brand {
+    display: inline-flex; align-items: center; gap: 10px;
+    color: var(--ink); text-decoration: none;
+    font-weight: 600; font-size: 18px; letter-spacing: -0.015em;
+  }
+  .brand svg { display: block; color: var(--cream); }
+  .spacer { flex: 1 1 auto; }
+  .back {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--faint); text-decoration: none;
+  }
+  .back:hover { color: var(--orange-ink); }
+
+  main { max-width: 820px; margin: 0 auto; padding: clamp(36px, 6vw, 64px) clamp(20px, 5vw, 32px) 24px; }
+  article { max-width: 70ch; }
+  h1 {
+    margin: 0 0 10px;
+    font-size: clamp(30px, 5vw, 42px);
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    font-weight: 600;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  h2 {
+    margin: 2.2em 0 0.55em;
+    font-size: clamp(20px, 2.6vw, 24px);
+    line-height: 1.25;
+    letter-spacing: -0.018em;
+    font-weight: 600;
+    color: var(--cream);
+  }
+  p { margin: 0 0 1em; color: var(--cream-2); }
+  strong { color: var(--ink); font-weight: 600; }
+  ul { margin: 0 0 1em; padding-left: 1.35em; color: var(--cream-2); }
+  li { margin: 0 0 0.5em; }
+  li::marker { color: var(--faint); }
+
+  footer.site { border-top: 1px solid var(--line); margin-top: clamp(40px, 7vw, 72px); }
+  footer.site .wrap {
+    max-width: 820px; margin: 0 auto;
+    display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+    padding: 24px clamp(20px, 5vw, 32px) 34px;
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.13em; text-transform: uppercase; color: var(--faint);
+  }
+  footer.site a { color: var(--faint); text-decoration: none; }
+  footer.site a:hover { color: var(--orange-ink); }
+  footer.site [aria-current] { color: var(--cream-2); }
+  footer.site .sep { color: var(--line); }
+  footer.site .spacer { flex: 1 1 auto; }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="bar">
+    <a class="brand" href="/" aria-label="Hachisu home">
+      <svg width="21" height="21" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <polygon points="24.00,3.60 41.67,13.80 41.67,34.20 24.00,44.40 6.33,34.20 6.33,13.80"
+          stroke="currentColor" stroke-width="3.2" stroke-linejoin="round" fill="none"/>
+        <polygon points="25.24,12.17 34.87,19.16 33.63,30.99 22.76,35.83 13.13,28.84 14.37,17.01"
+          fill="currentColor" stroke="#FBFAF4" stroke-opacity="0.55" stroke-width="0.9" stroke-linejoin="round"/>
+      </svg>
+      Hachisu
+    </a>
+    <span class="spacer"></span>
+    <a class="back" href="/">Back to hachisu.io</a>
+  </div>
+</header>
+
+<main>
+  <article>
+      <h1>Hachisu Privacy Notice</h1>
+      <p><strong>Effective date:</strong> August 1, 2026</p>
+      <h2>1. Who We Are</h2>
+      <p>Hachisu is a mobile application (&quot;Hachisu,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;) that helps merchants accept Bitcoin payments using their own Bitcoin wallets and payment infrastructure. You can contact us through the Contact form at <a href="/#contact">https://hachisu.io/#contact</a>.</p>
+      <h2>2. Scope of This Notice</h2>
+      <p>This Privacy Notice describes how we collect, use, share, and retain information when you use the Hachisu mobile application and the backend services that power it (together, the &quot;Service&quot;). It applies to merchants and other individuals who create Hachisu accounts.</p>
+      <p>If you are a <strong>customer of a Hachisu merchant</strong> (for example, you paid a Bitcoin invoice at a store that uses Hachisu), the merchant — not Hachisu — decides what information about you to enter into the Service. Hachisu processes that information to provide the Service to the merchant. Questions about a merchant's practices should be directed to that merchant.</p>
+      <h2>3. Hachisu Is Non-Custodial</h2>
+      <p>Hachisu is designed so that we never hold your money or your keys:</p>
+      <ul>
+        <li>We do <strong>not</strong> collect, store, or have access to private keys, seed phrases, or recovery phrases.</li>
+        <li>We do <strong>not</strong> custody, hold, or control Bitcoin on your behalf. Bitcoin paid to you goes to wallets you control.</li>
+        <li>When you connect a Bitcoin wallet, you provide only <strong>public</strong> wallet information — an extended public key (&quot;xpub&quot;) or output descriptor — which can be used to generate receiving addresses and view related activity, but cannot be used to spend your Bitcoin.</li>
+      </ul>
+      <h2>4. Information We Collect</h2>
+      <h2>4.1 Account and authentication information</h2>
+      <ul>
+        <li><strong>Email address.</strong> Used to create and sign in to your account. We use one-time email passcodes instead of passwords, so we do not collect or store a password.</li>
+        <li><strong>Google account information (optional).</strong> If you sign in with Google, our authentication provider receives basic information from your Google account (such as your email address) to sign you in. We do not receive your Google password.</li>
+        <li><strong>Session information.</strong> Authentication tokens are stored locally on your device to keep you signed in.</li>
+      </ul>
+      <h2>4.2 Profile information</h2>
+      <p>Depending on your account type, you may provide:</p>
+      <ul>
+        <li><strong>Personal profiles:</strong> name, phone number, country, mailing address, and a username.</li>
+        <li><strong>Business profiles:</strong> business name, business address, business website (optional), business country, a description of the business, expected monthly payment volume, and a username.</li>
+      </ul>
+      <p>We do not collect Social Security numbers, dates of birth, EINs, or government ID documents.</p>
+      <h2>4.3 Merchant store and payment configuration</h2>
+      <ul>
+        <li>Store names, display names, default currency, and preferred exchange-rate source.</li>
+        <li>Identifiers linking your Hachisu store to the payment-processing infrastructure (BTCPay Server) that Hachisu provisions for it.</li>
+        <li>Point-of-sale (POS) app configuration, including product names, prices, and settings you define.</li>
+        <li>Pay Button configuration.</li>
+      </ul>
+      <h2>4.4 Wallet-related public information</h2>
+      <ul>
+        <li><strong>Extended public keys / output descriptors.</strong> When you connect a Bitcoin wallet, the public wallet information you provide is transmitted through our backend to the BTCPay Server payment infrastructure so it can generate receiving addresses for your store. We do <strong>not</strong> persist the extended public key or descriptor itself in our application database. We store only:</li>
+        <li>a one-way cryptographic fingerprint (a SHA-256 hash) of the wallet scheme, used to detect whether a later wallet change refers to the same wallet;</li>
+        <li>non-sensitive metadata such as the address type (for example, native SegWit) and the date the wallet was connected.</li>
+        <li><strong>Receiving addresses</strong> derived from your public wallet information may be shown to you in the app (for example, so you can confirm the wallet is the one you expect).</li>
+      </ul>
+      <h2>4.5 Invoice, payment request, and transaction information</h2>
+      <ul>
+        <li><strong>Invoices:</strong> amount, currency, description, order ID, an optional customer email address you enter, and the invoice's checkout link and status.</li>
+        <li><strong>Payment requests:</strong> amount, currency, title, memo, reference ID, an optional recipient email address you enter, and related settings and links.</li>
+        <li><strong>Payment activity:</strong> information about payments to your store retrieved from your store's payment infrastructure, such as invoice identifiers, amounts, payment method (for example, on-chain Bitcoin), Bitcoin addresses, transaction identifiers, statuses, and timestamps.</li>
+        <li><strong>Balances and exchange rates:</strong> your store's on-chain wallet balance and exchange-rate information used to display approximate fiat values.</li>
+      </ul>
+      <p>If you enter information about your customers (such as a customer email address on an invoice), you are responsible for having the right to provide it to us.</p>
+      <h2>4.6 Technical and log information</h2>
+      <p>The Hachisu app does not include analytics, advertising, or tracking software development kits. However, like essentially all internet services:</p>
+      <ul>
+        <li>Our infrastructure providers (described in Section 7) automatically generate server-side logs when your device communicates with our backend. These logs may include information such as IP address, request timestamps, and request metadata, and are used for security, debugging, and operating the Service.</li>
+        <li>Certain preferences (such as in-app notification preferences and your selected store) are stored locally on your device and are not transmitted to us.</li>
+      </ul>
+      <h2>4.7 Communications and support</h2>
+      <p>If you contact us (for example, through our Contact form), we collect the information you choose to send, such as your email address and the contents of your message.</p>
+      <h2>5. How We Collect Information</h2>
+      <ul>
+        <li><strong>Directly from you</strong> — when you create an account, complete onboarding, edit your profile, create stores, connect wallets, and create invoices, payment requests, or POS apps.</li>
+        <li><strong>From your use of the Service</strong> — payment activity and balances retrieved from the payment infrastructure associated with your stores.</li>
+        <li><strong>From third-party sign-in</strong> — if you choose to sign in with Google.</li>
+        <li><strong>Automatically, at the infrastructure level</strong> — server logs generated by our service providers, as described above.</li>
+      </ul>
+      <h2>6. How We Use Information</h2>
+      <p>We use the information described above to:</p>
+      <ul>
+        <li>create and manage your account and verify sign-ins;</li>
+        <li>provision and manage your merchant stores and their payment-processing infrastructure;</li>
+        <li>connect and manage your Bitcoin wallet configuration using the public wallet information you provide;</li>
+        <li>create and manage invoices, payment requests, POS apps, and Pay Buttons;</li>
+        <li>display your payment activity, balances, and reports, including CSV exports you request;</li>
+        <li>respond to support requests;</li>
+        <li>secure the Service, prevent abuse, and debug problems; and</li>
+        <li>comply with applicable law.</li>
+      </ul>
+      <p>We do <strong>not</strong> use your information for targeted advertising, and we do <strong>not</strong> sell your personal information.</p>
+      <h2>7. How We Share Information</h2>
+      <p>We share information only as needed to run the Service:</p>
+      <ul>
+        <li><strong>Supabase</strong> — our backend platform. Supabase hosts our database, authentication (including delivery of one-time sign-in codes to your email), and server-side functions. Your account, profile, store, invoice, and payment-request records are stored on Supabase infrastructure.</li>
+        <li><strong>BTCPay Server payment infrastructure</strong> — the payment-processing system your Hachisu store runs on. It receives your store configuration, your public wallet information (xpub/descriptor), invoice and payment-request details, and POS configuration, and it generates the checkout pages your customers use.</li>
+        <li><strong>Google</strong> — only if you choose to sign in with Google, to authenticate you.</li>
+        <li><strong>Exchange-rate sources</strong> — the payment infrastructure retrieves Bitcoin exchange rates from public rate providers (for example, Kraken) to price invoices and display fiat values. Your personal information is not sent to rate providers.</li>
+        <li><strong>Apple and Google (app platforms)</strong> — the app is distributed through mobile app platforms, which have their own privacy practices governing app downloads and your device.</li>
+        <li><strong>Professional advisers, authorities, and successors</strong> — we may share information when required by law, to protect our rights or users' safety, with professional advisers, or in connection with a merger, acquisition, or sale of assets (in which case this Notice will continue to apply to previously collected information until updated).</li>
+      </ul>
+      <p>We do not sell personal information, and we do not share it with data brokers or advertising networks.</p>
+      <h2>8. Bitcoin and Public Blockchains</h2>
+      <p>Bitcoin transactions are recorded on the public Bitcoin blockchain. This means:</p>
+      <ul>
+        <li>Transaction details — including addresses, amounts, and transaction identifiers — are <strong>publicly visible to anyone</strong> and are replicated across the Bitcoin network worldwide.</li>
+        <li>Blockchain records are designed to be permanent. <strong>Hachisu cannot modify, delete, or conceal information recorded on the Bitcoin blockchain</strong>, including after you delete your Hachisu account.</li>
+        <li>Bitcoin addresses are pseudonymous, but they can sometimes be linked to identities through outside information. Be thoughtful about what you associate with your addresses.</li>
+      </ul>
+      <h2>9. Data Retention</h2>
+      <p>We keep your account and related records while your account is active. Specifically:</p>
+      <ul>
+        <li>Application records (profile, stores, invoices, payment requests, POS configuration, activity metadata) are retained until you delete your account.</li>
+        <li>Infrastructure-level logs and database backups maintained by our service providers are retained for limited periods according to those providers' practices.</li>
+        <li>We may retain limited records where reasonably necessary to comply with law, resolve disputes, enforce agreements, or protect the security of the Service.</li>
+      </ul>
+      <h2>10. Account Deletion</h2>
+      <p>You can permanently delete your Hachisu account from within the app (Account → Close Account). When you delete your account:</p>
+      <ul>
+        <li><strong>Deleted:</strong> your account and application data — your authentication account, profile, merchant store records, POS app records, invoice and payment-request records, legal consent records, and related operational records — are permanently deleted. The payment-processing (BTCPay Server) stores that Hachisu provisioned for your account are also permanently deleted, including their apps and wallet configuration, and no new invoices or checkout pages can be created for them. If this payment-infrastructure cleanup cannot be completed, account deletion stops with an error so no records are left behind without an owner — you can retry.</li>
+        <li><strong>May persist temporarily:</strong> copies in service-provider backups and server logs, which expire on those providers' schedules. The payment infrastructure also retains historical invoice records, so a previously issued invoice or checkout page may remain viewable after your account is deleted; an invoice still within its validity window at deletion remains payable — to your own wallet — until it expires.</li>
+        <li><strong>Cannot be deleted:</strong> Bitcoin blockchain records, and any Bitcoin in your own wallets (which we never held in the first place — deleting your account does not affect your Bitcoin, but make sure you retain your own wallet backups and any exported reports you need before deleting).</li>
+      </ul>
+      <h2>11. Security</h2>
+      <p>We take reasonable measures designed to protect your information, including:</p>
+      <ul>
+        <li>database access rules that restrict each account's records to that account;</li>
+        <li>keeping payment-infrastructure API credentials on the server side only — they are never sent to or stored on your device;</li>
+        <li>never collecting private keys or seed phrases at all, which keeps the most sensitive wallet material entirely out of our systems; and</li>
+        <li>transmitting data between the app and our backend over encrypted (HTTPS) connections.</li>
+      </ul>
+      <p>No system is perfectly secure, and we cannot guarantee absolute security.</p>
+      <h2>12. Your Choices</h2>
+      <ul>
+        <li><strong>Profile information.</strong> You can view and edit your profile and business information in the app.</li>
+        <li><strong>Optional fields.</strong> Some fields (such as a customer email on an invoice) are optional — you decide whether to provide them.</li>
+        <li><strong>Google sign-in.</strong> Signing in with Google is optional; email sign-in is available.</li>
+        <li><strong>In-app notification preferences.</strong> Stored only on your device.</li>
+        <li><strong>Account deletion.</strong> Available in the app, as described in Section 10.</li>
+      </ul>
+      <p>The Hachisu app does not use advertising identifiers or cross-app tracking, so there is no advertising opt-out to manage.</p>
+      <h2>13. U.S. State Privacy Rights</h2>
+      <p>Depending on where you live, state privacy laws may give you rights over personal information, such as the right to access, correct, or delete it. Many of these laws apply only to businesses above certain size or revenue thresholds, and some exclude business-contact and business-to-business data; whether and how they apply to Hachisu has not yet been determined.</p>
+      <p>Regardless of legal thresholds, you can always access and edit your profile in the app, delete your account as described above, or contact us through the Contact form at <a href="/#contact">https://hachisu.io/#contact</a> with privacy questions or requests. We do not sell personal information or use it for targeted advertising, so no &quot;do not sell or share&quot; opt-out is required to achieve that result.</p>
+      <h2>14. Children's Privacy</h2>
+      <p>The Service is intended for business use by adults. It is not directed to children, and we do not knowingly collect personal information from anyone under 18. If you believe a child has provided us personal information, contact us through the Contact form at <a href="/#contact">https://hachisu.io/#contact</a> and we will delete it.</p>
+      <h2>15. International Users</h2>
+      <p>The Service is operated from the United States and is intended for U.S.-based use during this stage of the product. If you use the Service from outside the United States, your information will be transferred to and processed in the United States (and in the regions where our service providers host data), where privacy laws may differ from those of your jurisdiction.</p>
+      <h2>16. Changes to This Notice</h2>
+      <p>We may update this Privacy Notice from time to time. If we make material changes, we will notify you through the app or by email and update the effective date above. Your continued use of the Service after an updated Notice takes effect means the updated Notice applies.</p>
+      <h2>17. Contact Us</h2>
+      <p>Questions or requests about this Privacy Notice or your information: contact us through the Contact form at <a href="/#contact">https://hachisu.io/#contact</a>.</p>
+  </article>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>© 2026 Hachisu</span>
+    <span class="spacer"></span>
+    <nav aria-label="Legal documents" style="display:flex; gap:14px; align-items:center;">
+      <a href="/terms">Terms</a>
+      <span class="sep">·</span>
+      <span aria-current="page">Privacy</span>
+      <span class="sep">·</span>
+      <a href="/e-sign">E-Sign</a>
+    </nav>
+  </div>
+</footer>
+
+</body>
+</html>

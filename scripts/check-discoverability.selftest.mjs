@@ -137,9 +137,21 @@ try {
   {
     const dir = fresh('red-6');
     edit(dir, 'web/index.html', (s) =>
-      s.replace('<dd>On-chain Bitcoin.</dd>', '<dd>On-chain Bitcoin. Hachisu supports Lightning.</dd>'),
+      s.replace('</body>', '<p>Hachisu supports Lightning.</p></body>'),
     );
     check('RED-6  copy advertises gated Lightning', 'lightning-not-advertised', dir);
+  }
+
+  // RED-6B — a gated feature with no public unavailable/coming-soon status.
+  {
+    const dir = fresh('red-6b');
+    edit(dir, 'web/index.html', (s) =>
+      s.replace(
+        /<div><dt>Lightning<\/dt><dd>[^<]*<\/dd><\/div>/,
+        '<div><dt>Lightning</dt><dd>Roadmap.</dd></div>',
+      ),
+    );
+    check('RED-6B gated Lightning status omitted', 'lightning-not-advertised', dir);
   }
 
   // RED-7 — machine-readable fiction: schema outrunning visible content.

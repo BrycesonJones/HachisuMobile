@@ -1,13 +1,13 @@
 # Hachisu Terms of Service
 
-**Effective date:** [EFFECTIVE DATE]
+**Effective date:** August 1, 2026
 
 > **Draft for attorney review.** This document is a working draft prepared from the current
 > Hachisu application behavior. It has not been reviewed by licensed counsel and must not be
 > published or relied upon until it has been.
 
-These Terms of Service ("Terms") are an agreement between you and [LEGAL ENTITY NAME]
-("Hachisu," "we," "us," or "our") governing your use of the Hachisu mobile application and
+These Terms of Service ("Terms") are an agreement between you and Hachisu ("we," "us,"
+or "our") governing your use of the Hachisu mobile application and
 the backend services that power it (together, the "Service").
 
 ## 1. Acceptance of These Terms
@@ -72,7 +72,8 @@ and description) — and to keep it up to date.
 You are responsible for everything that happens under your account. Keep control of the
 email account and any Google account you use to sign in, and of any device where you are
 signed in; anyone with access to them can access your Hachisu account. Notify us promptly
-at [SUPPORT EMAIL] if you suspect unauthorized access.
+through the Contact form at https://hachisu.io/#contact if you suspect unauthorized
+access.
 
 ## 5. Merchant Stores
 
@@ -238,7 +239,7 @@ the Service will retain or reproduce records indefinitely.
 ## 15. Intellectual Property
 
 The Service — including the app, its design, and its content (other than what you and
-other users provide) — is owned by [LEGAL ENTITY NAME] and its licensors and is protected
+other users provide) — is owned by Hachisu and its licensors and is protected
 by intellectual-property laws. We grant you a limited, non-exclusive, non-transferable,
 revocable license to use the app for your business use of the Service under these Terms.
 You may not copy, modify, distribute, sell, or lease any part of the Service, or reverse
@@ -365,5 +366,4 @@ waiver, small-claims carve-outs, opt-out mechanics, and venue.]
 
 ## 25. Contact
 
-- Email: [SUPPORT EMAIL]
-- Mail: [LEGAL ENTITY NAME], [MAILING ADDRESS]
+You can reach us through the Contact form at https://hachisu.io/#contact.

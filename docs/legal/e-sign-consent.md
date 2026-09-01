@@ -1,13 +1,13 @@
 # Hachisu Electronic Communications and E-Sign Consent
 
-**Effective date:** [EFFECTIVE DATE]
+**Effective date:** August 1, 2026
 
 > **Draft for attorney review.** This document is a working draft prepared from the current
 > Hachisu application behavior. It has not been reviewed by licensed counsel and must not be
 > published or relied upon until it has been.
 
-This Electronic Communications and E-Sign Consent ("Consent") explains how [LEGAL ENTITY
-NAME] ("Hachisu," "we," "us") delivers agreements, notices, and other communications to you
+This Electronic Communications and E-Sign Consent ("Consent") explains how Hachisu
+("we," "us") delivers agreements, notices, and other communications to you
 electronically, and asks for your agreement to receive them that way. Please read it and
 keep a copy.
 
@@ -63,7 +63,8 @@ withdraw consent without charge.
 Your email address is our primary way to reach you outside the app, and it is also how you
 sign in. You agree to maintain a valid, working email address on your account and to
 update it promptly if it changes. You can view your email in the app's account section;
-to change the email associated with your account, contact us at [SUPPORT EMAIL].
+to change the email associated with your account, contact us through
+the Contact form at https://hachisu.io/#contact.
 [NOTE FOR REVIEW: the app does not currently include a self-service email-change flow —
 confirm the supported process before publishing.]
 
@@ -71,7 +72,8 @@ confirm the supported process before publishing.]
 
 You can view the current Terms of Service, Privacy Notice, and this Consent in the app at
 any time, and you can save or print copies from your device. You may also request an
-electronic copy of these documents by emailing [SUPPORT EMAIL].
+electronic copy of these documents by contacting us through
+the Contact form at https://hachisu.io/#contact.
 
 **Paper copies:** Hachisu is a digital service and does not currently offer paper delivery
 of Communications or maintain a paper-mail workflow. If we choose to provide a paper copy
@@ -80,8 +82,8 @@ reasonable fee applies.
 
 ## 7. Withdrawing Your Consent
 
-You may withdraw your consent to receive Communications electronically by contacting us at
-[SUPPORT EMAIL].
+You may withdraw your consent to receive Communications electronically by contacting us
+through the Contact form at https://hachisu.io/#contact.
 
 **Please note:** electronic delivery is essential to how Hachisu works. Hachisu is an
 app-based service with no paper-based alternative, so if you withdraw this Consent we will
@@ -107,7 +109,5 @@ permit electronic delivery.
 
 ## 10. Contact
 
-Questions about this Consent, or requests described above:
-
-- Email: [SUPPORT EMAIL]
-- Mail: [LEGAL ENTITY NAME], [MAILING ADDRESS]
+Questions about this Consent, or requests described above: contact us through
+the Contact form at https://hachisu.io/#contact.

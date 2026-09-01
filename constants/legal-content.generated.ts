@@ -37,7 +37,7 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
           "bold": true
         },
         {
-          "text": " [EFFECTIVE DATE]",
+          "text": " August 1, 2026",
           "bold": false
         }
       ]
@@ -46,7 +46,7 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       "type": "paragraph",
       "segments": [
         {
-          "text": "These Terms of Service (\"Terms\") are an agreement between you and [LEGAL ENTITY NAME] (\"Hachisu,\" \"we,\" \"us,\" or \"our\") governing your use of the Hachisu mobile application and the backend services that power it (together, the \"Service\").",
+          "text": "These Terms of Service (\"Terms\") are an agreement between you and Hachisu (\"we,\" \"us,\" or \"our\") governing your use of the Hachisu mobile application and the backend services that power it (together, the \"Service\").",
           "bold": false
         }
       ]
@@ -258,7 +258,7 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       "type": "paragraph",
       "segments": [
         {
-          "text": "You are responsible for everything that happens under your account. Keep control of the email account and any Google account you use to sign in, and of any device where you are signed in; anyone with access to them can access your Hachisu account. Notify us promptly at [SUPPORT EMAIL] if you suspect unauthorized access.",
+          "text": "You are responsible for everything that happens under your account. Keep control of the email account and any Google account you use to sign in, and of any device where you are signed in; anyone with access to them can access your Hachisu account. Notify us promptly through the Contact form at https://hachisu.io/#contact if you suspect unauthorized access.",
           "bold": false
         }
       ]
@@ -873,7 +873,7 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       "type": "paragraph",
       "segments": [
         {
-          "text": "The Service — including the app, its design, and its content (other than what you and other users provide) — is owned by [LEGAL ENTITY NAME] and its licensors and is protected by intellectual-property laws. We grant you a limited, non-exclusive, non-transferable, revocable license to use the app for your business use of the Service under these Terms. You may not copy, modify, distribute, sell, or lease any part of the Service, or reverse engineer it except where the law permits despite this restriction.",
+          "text": "The Service — including the app, its design, and its content (other than what you and other users provide) — is owned by Hachisu and its licensors and is protected by intellectual-property laws. We grant you a limited, non-exclusive, non-transferable, revocable license to use the app for your business use of the Service under these Terms. You may not copy, modify, distribute, sell, or lease any part of the Service, or reverse engineer it except where the law permits despite this restriction.",
           "bold": false
         }
       ]
@@ -1208,19 +1208,10 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       ]
     },
     {
-      "type": "listItem",
+      "type": "paragraph",
       "segments": [
         {
-          "text": "Email: [SUPPORT EMAIL]",
-          "bold": false
-        }
-      ]
-    },
-    {
-      "type": "listItem",
-      "segments": [
-        {
-          "text": "Mail: [LEGAL ENTITY NAME], [MAILING ADDRESS]",
+          "text": "You can reach us through the Contact form at https://hachisu.io/#contact.",
           "bold": false
         }
       ]
@@ -1244,7 +1235,7 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
           "bold": true
         },
         {
-          "text": " [EFFECTIVE DATE]",
+          "text": " August 1, 2026",
           "bold": false
         }
       ]
@@ -1253,7 +1244,7 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       "type": "paragraph",
       "segments": [
         {
-          "text": "This Electronic Communications and E-Sign Consent (\"Consent\") explains how [LEGAL ENTITY NAME] (\"Hachisu,\" \"we,\" \"us\") delivers agreements, notices, and other communications to you electronically, and asks for your agreement to receive them that way. Please read it and keep a copy.",
+          "text": "This Electronic Communications and E-Sign Consent (\"Consent\") explains how Hachisu (\"we,\" \"us\") delivers agreements, notices, and other communications to you electronically, and asks for your agreement to receive them that way. Please read it and keep a copy.",
           "bold": false
         }
       ]
@@ -1486,7 +1477,7 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       "type": "paragraph",
       "segments": [
         {
-          "text": "Your email address is our primary way to reach you outside the app, and it is also how you sign in. You agree to maintain a valid, working email address on your account and to update it promptly if it changes. You can view your email in the app's account section; to change the email associated with your account, contact us at [SUPPORT EMAIL].",
+          "text": "Your email address is our primary way to reach you outside the app, and it is also how you sign in. You agree to maintain a valid, working email address on your account and to update it promptly if it changes. You can view your email in the app's account section; to change the email associated with your account, contact us through the Contact form at https://hachisu.io/#contact.",
           "bold": false
         }
       ]
@@ -1504,7 +1495,7 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       "type": "paragraph",
       "segments": [
         {
-          "text": "You can view the current Terms of Service, Privacy Notice, and this Consent in the app at any time, and you can save or print copies from your device. You may also request an electronic copy of these documents by emailing [SUPPORT EMAIL].",
+          "text": "You can view the current Terms of Service, Privacy Notice, and this Consent in the app at any time, and you can save or print copies from your device. You may also request an electronic copy of these documents by contacting us through the Contact form at https://hachisu.io/#contact.",
           "bold": false
         }
       ]
@@ -1535,7 +1526,7 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       "type": "paragraph",
       "segments": [
         {
-          "text": "You may withdraw your consent to receive Communications electronically by contacting us at [SUPPORT EMAIL].",
+          "text": "You may withdraw your consent to receive Communications electronically by contacting us through the Contact form at https://hachisu.io/#contact.",
           "bold": false
         }
       ]
@@ -1602,25 +1593,7 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       "type": "paragraph",
       "segments": [
         {
-          "text": "Questions about this Consent, or requests described above:",
-          "bold": false
-        }
-      ]
-    },
-    {
-      "type": "listItem",
-      "segments": [
-        {
-          "text": "Email: [SUPPORT EMAIL]",
-          "bold": false
-        }
-      ]
-    },
-    {
-      "type": "listItem",
-      "segments": [
-        {
-          "text": "Mail: [LEGAL ENTITY NAME], [MAILING ADDRESS]",
+          "text": "Questions about this Consent, or requests described above: contact us through the Contact form at https://hachisu.io/#contact.",
           "bold": false
         }
       ]
@@ -1644,7 +1617,7 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
           "bold": true
         },
         {
-          "text": " [EFFECTIVE DATE]",
+          "text": " August 1, 2026",
           "bold": false
         }
       ]
@@ -1662,25 +1635,7 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       "type": "paragraph",
       "segments": [
         {
-          "text": "Hachisu is a mobile application operated by [LEGAL ENTITY NAME] (\"Hachisu,\" \"we,\" \"us,\" or \"our\") that helps merchants accept Bitcoin payments using their own Bitcoin wallets and payment infrastructure. You can contact us at:",
-          "bold": false
-        }
-      ]
-    },
-    {
-      "type": "listItem",
-      "segments": [
-        {
-          "text": "Email: [PRIVACY EMAIL]",
-          "bold": false
-        }
-      ]
-    },
-    {
-      "type": "listItem",
-      "segments": [
-        {
-          "text": "Mail: [MAILING ADDRESS]",
+          "text": "Hachisu is a mobile application (\"Hachisu,\" \"we,\" \"us,\" or \"our\") that helps merchants accept Bitcoin payments using their own Bitcoin wallets and payment infrastructure. You can contact us through the Contact form at https://hachisu.io/#contact.",
           "bold": false
         }
       ]
@@ -2124,7 +2079,7 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       "type": "paragraph",
       "segments": [
         {
-          "text": "If you contact us (for example, by email at [SUPPORT EMAIL]), we collect the information you choose to send, such as your email address and the contents of your message.",
+          "text": "If you contact us (for example, through our Contact form), we collect the information you choose to send, such as your email address and the contents of your message.",
           "bold": false
         }
       ]
@@ -2741,7 +2696,7 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       "type": "paragraph",
       "segments": [
         {
-          "text": "Regardless of legal thresholds, you can always access and edit your profile in the app, delete your account as described above, or contact us at [PRIVACY EMAIL] with privacy questions or requests. We do not sell personal information or use it for targeted advertising, so no \"do not sell or share\" opt-out is required to achieve that result.",
+          "text": "Regardless of legal thresholds, you can always access and edit your profile in the app, delete your account as described above, or contact us through the Contact form at https://hachisu.io/#contact with privacy questions or requests. We do not sell personal information or use it for targeted advertising, so no \"do not sell or share\" opt-out is required to achieve that result.",
           "bold": false
         }
       ]
@@ -2759,7 +2714,7 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       "type": "paragraph",
       "segments": [
         {
-          "text": "The Service is intended for business use by adults. It is not directed to children, and we do not knowingly collect personal information from anyone under 18. If you believe a child has provided us personal information, contact us at [PRIVACY EMAIL] and we will delete it.",
+          "text": "The Service is intended for business use by adults. It is not directed to children, and we do not knowingly collect personal information from anyone under 18. If you believe a child has provided us personal information, contact us through the Contact form at https://hachisu.io/#contact and we will delete it.",
           "bold": false
         }
       ]
@@ -2813,25 +2768,7 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       "type": "paragraph",
       "segments": [
         {
-          "text": "Questions or requests about this Privacy Notice or your information:",
-          "bold": false
-        }
-      ]
-    },
-    {
-      "type": "listItem",
-      "segments": [
-        {
-          "text": "Email: [PRIVACY EMAIL]",
-          "bold": false
-        }
-      ]
-    },
-    {
-      "type": "listItem",
-      "segments": [
-        {
-          "text": "Mail: [LEGAL ENTITY NAME], [MAILING ADDRESS]",
+          "text": "Questions or requests about this Privacy Notice or your information: contact us through the Contact form at https://hachisu.io/#contact.",
           "bold": false
         }
       ]
@@ -2848,10 +2785,5 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
  */
 export const LEGAL_CONTENT_PLACEHOLDERS: readonly string[] = [
   "[ARBITRATION / DISPUTE RESOLUTION TO BE REVIEWED BY COUNSEL]",
-  "[EFFECTIVE DATE]",
-  "[GOVERNING LAW STATE]",
-  "[LEGAL ENTITY NAME]",
-  "[MAILING ADDRESS]",
-  "[PRIVACY EMAIL]",
-  "[SUPPORT EMAIL]"
+  "[GOVERNING LAW STATE]"
 ];

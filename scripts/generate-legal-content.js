@@ -208,4 +208,10 @@ export const LEGAL_CONTENT_PLACEHOLDERS: readonly string[] = ${JSON.stringify(pl
   }
 }
 
-generate();
+if (require.main === module) {
+  generate();
+}
+
+// The parsing pipeline is also the source for the public web legal pages
+// (scripts/generate-legal-pages.js), so both surfaces render the same blocks.
+module.exports = { DOCUMENTS, SOURCE_DIR, stripInternalAnnotations, parseBlocks, blockText };

@@ -18,7 +18,7 @@
 <meta property="og:image" content="https://hachisu.io/assets/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Hachisu — Bitcoin payments for merchants">
+<meta property="og:image:alt" content="Hachisu — Bitcoin payments for operators">
 
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Hachisu — Bitcoin Payments for Merchants">
@@ -26,246 +26,921 @@
 <meta name="twitter:image" content="https://hachisu.io/assets/og-image.png">
 
 <meta name="robots" content="index, follow">
-<meta name="theme-color" content="#B0731A">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
 
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 
 <style>
+  /* ── tokens ──────────────────────────────────────────────────────────────
+     Neutral true-black ground, cream as a material, orange as scarce signal.
+     Derived from constants/hachisu-colors.ts (primary #F28C10, cream #FFF7E6)
+     and the dark palette the previous site already shipped (#121009 / #F1ECE4).
+     The page commits to one dark treatment, so there is no light variant. */
   :root {
-    --ground:  #FAF8F5;
-    --surface: #FFFFFF;
-    --sunken:  #F2EEE8;
-    --ink:     #17130F;
-    --muted:   #675C53;
-    --line:    #E3DCD2;
-    --accent:  #A96B14;
-    --accent-ink: #7C4E0C;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --ground:  #121009;
-      --surface: #1A1712;
-      --sunken:  #16130E;
-      --ink:     #F1ECE4;
-      --muted:   #A2968A;
-      --line:    #2C2620;
-      --accent:  #E3A644;
-      --accent-ink: #F0BE6B;
-    }
-  }
-  :root[data-theme="dark"] {
-    --ground:  #121009;
-    --surface: #1A1712;
-    --sunken:  #16130E;
-    --ink:     #F1ECE4;
-    --muted:   #A2968A;
-    --line:    #2C2620;
-    --accent:  #E3A644;
-    --accent-ink: #F0BE6B;
+    --ground:     #000000;
+    --ground-2:   #000000;   /* footer — separated by its rule, not by tint */
+    --line:       #1A1A1A;   /* neutral; same perceived weight as the old #221D15 */
+    --line-2:     #2A2A2A;   /* neutral; same perceived weight as the old #342C21 */
+
+    --ink:        #F2EDE3;
+    --muted:      #A0958A;
+    --faint:      #8A8076;   /* 5.15:1 on --ground */
+
+    --cream:      #F1EBDD;
+    --cream-2:    #DED6C4;
+    --cream-ink:  #14110B;
+
+    --orange:     #F28C10;
+    --orange-ink: #E9A445;
+    --orange-dim: #7A5210;
+
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI",
+            Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, "JetBrains Mono",
+            "IBM Plex Mono", Consolas, monospace;
+
+    --gut: clamp(20px, 5vw, 64px);
+    --maxw: 1320px;
   }
 
   * { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
 
   body {
     margin: 0;
     background: var(--ground);
     color: var(--ink);
-    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: var(--sans);
     font-size: 17px;
-    line-height: 1.65;
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
   }
 
-  .wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; }
+  /* A single very low-contrast field so the black is not dead flat. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background:
+      radial-gradient(120% 80% at 78% 22%, rgba(242,140,16,0.016), transparent 62%),
+      radial-gradient(90% 70% at 8% 92%, rgba(255,255,255,0.018), transparent 58%);
+  }
 
-  a { color: var(--accent-ink); text-underline-offset: 2px; }
-  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+  .wrap {
+    width: 100%;
+    max-width: var(--maxw);
+    margin: 0 auto;
+    padding: 0 var(--gut);
+  }
 
-  /* ---------- header ---------- */
+  a { color: var(--orange-ink); text-decoration-color: var(--orange-dim); text-underline-offset: 3px; }
+  a:hover { text-decoration-color: var(--orange); }
+
+  :focus-visible {
+    outline: 2px solid var(--orange);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  .skip {
+    position: absolute; left: -9999px; top: 0; z-index: 100;
+    background: var(--cream); color: var(--cream-ink);
+    padding: 10px 16px; font: 600 14px/1 var(--sans); border-radius: 0 0 4px 0;
+  }
+  .skip:focus { left: 0; }
+
+  /* ── mono microcopy ─────────────────────────────────────────────────── */
+  .mono {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  /* ── header ─────────────────────────────────────────────────────────────
+     Sticky, with a translucent black blur once content passes beneath it. Over
+     the pure-black hero the tint is invisible, so no scroll-state JS is needed:
+     the same surface reads as plain black at the top and as frosted black once
+     anything scrolls under it. */
   header.site {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(0, 0, 0, 0.92); /* fallback when backdrop-filter is unsupported */
+  }
+  @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    header.site {
+      background: rgba(0, 0, 0, 0.72);
+      -webkit-backdrop-filter: blur(18px);
+              backdrop-filter: blur(18px);
+    }
+  }
+  header.site .bar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 20px 0 18px;
     border-bottom: 1px solid var(--line);
-    padding: 22px 0;
   }
   .brand {
-    display: flex; align-items: center; gap: 10px;
-    font-weight: 700; font-size: 19px; letter-spacing: -0.01em;
+    display: inline-flex; align-items: center; gap: 10px;
     color: var(--ink); text-decoration: none;
+    font-weight: 600; font-size: 18px; letter-spacing: -0.015em;
   }
-  .brand svg { display: block; }
+  .brand svg { display: block; color: var(--cream); }
 
-  /* ---------- hero ---------- */
-  .hero { padding: 68px 0 56px; }
-  .hero h1 {
-    font-size: clamp(34px, 6.2vw, 50px);
-    line-height: 1.06;
-    letter-spacing: -0.03em;
-    margin: 0 0 20px;
+  .bar .spacer { flex: 1 1 auto; }
+
+  /* ── buttons ────────────────────────────────────────────────────────── */
+  .cta {
+    -webkit-appearance: none; appearance: none;
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    font-family: var(--sans); font-weight: 600; letter-spacing: -0.005em;
+    border-radius: 2px; cursor: pointer;
+    transition: background-color .16s ease, color .16s ease, border-color .16s ease, transform .16s ease;
+  }
+  .cta svg { display: block; transition: transform .18s ease; }
+  .cta:hover svg { transform: translateX(3px); }
+
+  .cta-solid {
+    background: var(--cream); color: var(--cream-ink); border: 1px solid var(--cream);
+    font-size: 16px; padding: 14px 26px; min-height: 48px;
+    border-radius: 14px;
+  }
+  .cta-solid:hover { background: #FBF7EE; border-color: #FBF7EE; }
+  .cta-solid:active { transform: translateY(1px); }
+
+  .cta-ghost {
+    background: transparent; color: var(--ink); border: 1px solid var(--line-2);
+    font-size: 14px; padding: 9px 16px; min-height: 40px;
+  }
+  .cta-ghost:hover { border-color: var(--orange); color: var(--orange-ink); }
+
+  /* ── hero — a single centered column ─────────────────────────────────── */
+  .hero { position: relative; z-index: 2; }
+  .hero .wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-height: calc(100svh - 220px);
+    padding-top: clamp(48px, 10vh, 120px);
+    padding-bottom: clamp(48px, 12vh, 140px);
+  }
+
+  .hero-copy { max-width: 720px; }
+
+  h1 {
+    margin: 0 0 22px;
+    font-size: clamp(40px, 8.2vw, 78px);
+    line-height: 1.02;
+    letter-spacing: -0.038em;
+    font-weight: 600;
     text-wrap: balance;
-    font-weight: 700;
   }
+  h1 .keep { color: var(--muted); }
+
   .lede {
-    font-size: clamp(18px, 2.4vw, 21px);
-    color: var(--muted);
-    margin: 0;
-    max-width: 60ch;
-  }
-  .lede strong { color: var(--ink); font-weight: 600; }
-
-  /* ---------- sections ---------- */
-  section { padding: 40px 0; border-top: 1px solid var(--line); }
-  h2 {
-    font-size: 13px;
-    text-transform: uppercase;
-    letter-spacing: 0.11em;
-    font-weight: 700;
-    color: var(--accent-ink);
-    margin: 0 0 20px;
-  }
-  h3 {
-    font-size: 17px;
-    font-weight: 650;
-    margin: 0 0 4px;
-    letter-spacing: -0.005em;
-  }
-  p { margin: 0 0 16px; max-width: 68ch; }
-  p:last-child { margin-bottom: 0; }
-
-  /* ---------- capability list ---------- */
-  .caps { display: grid; gap: 22px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-  .cap p { color: var(--muted); font-size: 15.5px; margin: 0; }
-
-  /* ---------- custody callout ---------- */
-  .custody {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-left: 3px solid var(--accent);
-    border-radius: 4px;
-    padding: 22px 24px;
-  }
-  .custody p { font-size: 16.5px; }
-
-  /* ---------- facts table ---------- */
-  dl.facts {
-    display: grid;
-    grid-template-columns: minmax(140px, auto) 1fr;
-    gap: 12px 28px;
-    margin: 0;
-    font-size: 16px;
-  }
-  dl.facts dt { color: var(--muted); }
-  dl.facts dd { margin: 0; }
-  @media (max-width: 520px) {
-    dl.facts { grid-template-columns: 1fr; gap: 2px; }
-    dl.facts dt { margin-top: 12px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em; }
+    margin: 0 auto 34px;
+    font-size: clamp(17px, 2.1vw, 20px);
+    line-height: 1.45;
+    color: var(--ink);
+    max-width: 34ch;
+    letter-spacing: -0.012em;
   }
 
-  /* ---------- footer ---------- */
-  footer.site {
+  .actions { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: center; }
+
+  .caps {
+    margin: 34px 0 0;
+    padding-top: 22px;
     border-top: 1px solid var(--line);
-    padding: 32px 0 56px;
-    color: var(--muted);
-    font-size: 14.5px;
+    font-size: 11px;
   }
-  footer.site p { margin: 0 0 8px; }
+  .caps .sep { color: var(--faint); padding: 0 2px; }
+
+  @media (max-width: 620px) {
+    .caps { letter-spacing: 0.11em; font-size: 10.5px; }
+  }
+
+  /* ── about + benefits ──────────────────────────────────────────────────
+     The bridge between what Hachisu is and how it works technically. */
+  .about { position: relative; z-index: 2; border-top: 1px solid var(--line); }
+  .about .wrap { padding-top: clamp(34px, 5vw, 56px); }
+
+  .why { position: relative; z-index: 2; }
+  .why .wrap {
+    padding-top: clamp(40px, 6vw, 72px);
+    padding-bottom: clamp(56px, 8vw, 112px);
+  }
+  .why h2 {
+    margin: 0 0 14px;
+    font-size: clamp(28px, 4.4vw, 46px);
+    line-height: 1.08;
+    letter-spacing: -0.032em;
+    font-weight: 600;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  .why-sub {
+    margin: 0 0 clamp(42px, 6vw, 76px);
+    font-size: clamp(16px, 1.9vw, 18px);
+    line-height: 1.6;
+    color: var(--muted);
+    max-width: 58ch;
+  }
+
+  /* One product story. Without JS (or under reduced motion), each benefit
+     remains paired with its corresponding product screen in normal flow. */
+  .benefits { position: relative; }
+  .benefits-sticky { display: grid; gap: clamp(64px, 8vw, 112px); }
+  .benefit {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, .78fr) minmax(360px, 1fr);
+    gap: clamp(36px, 6vw, 96px);
+    align-items: center;
+    min-width: 0;
+  }
+  .benefit-copy {
+    position: relative;
+    padding: 0 0 0 clamp(18px, 2.2vw, 28px);
+    border-left: 1px solid var(--line-2);
+  }
+  .benefit-copy::before {
+    content: "";
+    position: absolute;
+    left: -1px; top: .18em;
+    width: 1px; height: 2.2em;
+    background: var(--cream);
+    opacity: .42;
+  }
+  .benefit h3 {
+    margin: 0 0 10px;
+    font-size: clamp(27px, 3.4vw, 44px);
+    line-height: 1.08;
+    letter-spacing: -0.032em;
+    font-weight: 600;
+    color: var(--cream);
+    text-wrap: balance;
+  }
+  .benefit p {
+    margin: 0;
+    font-size: clamp(15.5px, 1.8vw, 19px);
+    line-height: 1.55;
+    color: var(--muted);
+    max-width: 56ch;
+  }
+  .product-visual {
+    position: relative;
+    display: grid;
+    place-items: center;
+    min-height: clamp(520px, 58vw, 720px);
+    isolation: isolate;
+    pointer-events: none;
+  }
+  .product-visual::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    width: min(78%, 430px);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(241,235,221,.065), transparent 68%);
+    filter: blur(24px);
+  }
+  .product-frame {
+    position: relative;
+    height: min(82vh, 720px);
+    max-height: 100%;
+    aspect-ratio: 485 / 1024;
+    overflow: hidden;
+    background: #000;
+  }
+  .product-screen {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  @media (min-width: 801px) and (prefers-reduced-motion: no-preference) {
+    html.benefits-product-ready .benefits { height: 245vh; }
+    html.benefits-product-ready .benefits-sticky {
+      position: sticky;
+      top: 70px;
+      height: calc(100vh - 70px);
+      min-height: 610px;
+      display: block;
+    }
+    html.benefits-product-ready .benefit {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity .5s ease, visibility 0s linear .5s;
+      pointer-events: none;
+    }
+    html.benefits-product-ready .benefit.is-active {
+      opacity: 1;
+      visibility: visible;
+      transition-delay: 0s;
+    }
+    html.benefits-product-ready .benefit-copy {
+      opacity: 0;
+      filter: blur(5px);
+      transform: translateY(14px);
+      transition: opacity .5s ease, filter .5s ease, transform .5s ease;
+    }
+    html.benefits-product-ready .product-frame {
+      opacity: 0;
+      transform: translateY(12px) scale(.988);
+      transition: opacity .55s ease, transform .65s cubic-bezier(.22,.7,.2,1);
+    }
+    html.benefits-product-ready .benefit.is-active .benefit-copy,
+    html.benefits-product-ready .benefit.is-active .product-frame {
+      opacity: 1;
+      filter: none;
+      transform: none;
+    }
+  }
+
+  @media (max-width: 800px) {
+    .benefits-sticky { gap: clamp(70px, 20vw, 96px); }
+    .benefit {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 28px;
+    }
+    .benefit h3 { font-size: clamp(26px, 8vw, 38px); }
+    .product-visual { min-height: 0; }
+    .product-frame {
+      width: min(100%, 390px);
+      height: auto;
+      max-height: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .benefits-sticky { gap: clamp(64px, 8vw, 96px); }
+  }
+
+  /* ── footer ─────────────────────────────────────────────────────────────
+     The hero is the page. The footer carries the plain-language statement and
+     the spec strip a crawler (or a reader who scrolls) needs to answer what
+     Hachisu is, who it is for, and whether it holds merchant funds. */
+  footer.site {
+    position: relative; z-index: 2;
+    border-top: 1px solid var(--line);
+    background: var(--ground-2);
+  }
+  footer.site .wrap {
+    padding-top: clamp(30px, 4vw, 46px);
+    padding-bottom: clamp(30px, 4vw, 42px);
+  }
+  .foot-note {
+    margin: 0 0 24px;
+    color: var(--muted);
+    font-size: 15px; line-height: 1.62;
+    max-width: 74ch;
+  }
+  .foot-note strong { color: var(--ink); font-weight: 500; }
+
+  .foot-cta {
+    display: flex;
+    justify-content: center;
+    margin: 0 0 clamp(36px, 5vw, 56px);
+  }
+  .foot-cta .cta-solid { max-width: 100%; }
+
+  /* A grid rather than a wrapping row, so the strip reads as a deliberate
+     block instead of leaving one orphaned pair on a second line. */
+  dl.strip {
+    display: grid; grid-template-columns: 1fr; gap: 9px clamp(20px, 3vw, 40px);
+    margin: 0 0 24px; padding: 15px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    font-family: var(--mono); font-size: 11.5px;
+  }
+  @media (min-width: 620px)  { dl.strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (min-width: 1000px) { dl.strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  dl.strip > div { position: relative; display: flex; align-items: baseline; gap: 9px; }
+  dl.strip dt {
+    color: var(--faint); text-transform: uppercase;
+    letter-spacing: 0.14em; font-size: 10px; white-space: nowrap;
+  }
+  dl.strip dd { margin: 0; color: var(--cream-2); white-space: nowrap; }
+  dl.strip dd .on { color: var(--orange-ink); }
+  .legal-menu { position: relative; }
+  .legal-menu summary {
+    display: inline-flex; align-items: center; gap: 7px;
+    color: var(--cream-2); cursor: pointer; list-style: none;
+  }
+  .legal-menu summary::-webkit-details-marker { display: none; }
+  .legal-menu summary::after {
+    content: "";
+    width: 5px; height: 5px;
+    border-right: 1px solid currentColor;
+    border-bottom: 1px solid currentColor;
+    transform: translateY(-2px) rotate(45deg);
+    transition: transform .16s ease;
+  }
+  .legal-menu[open] summary::after { transform: translateY(1px) rotate(225deg); }
+  .legal-popover {
+    position: absolute; right: 0; bottom: calc(100% + 10px); z-index: 4;
+    display: grid; min-width: 190px; padding: 7px;
+    background: #080808; border: 1px solid var(--line-2); border-radius: 3px;
+    box-shadow: 0 18px 48px rgba(0,0,0,.72);
+  }
+  .legal-popover a {
+    display: block; padding: 7px 8px;
+    color: var(--cream-2); font-size: 11px; white-space: nowrap;
+    text-decoration: none;
+  }
+  .legal-popover a:hover { color: var(--orange-ink); }
+  .legal-popover a + a { border-top: 1px solid var(--line); }
+  .shuffle-target { position: relative; }
+  .shuffle-word { display: inline; }
+  .shuffle-source { color: inherit; }
+  .shuffle-visual {
+    position: absolute; left: 0; top: 0;
+    color: inherit; white-space: pre; pointer-events: none;
+  }
+  .shuffle-visual:empty { display: none; }
+  .shuffle-target.is-shuffling .shuffle-source { color: transparent !important; }
+
+  .foot-bar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 10px 24px;
+    align-items: center;
+  }
+  .foot-copy { justify-self: start; }
+  .foot-utils {
+    justify-self: center;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 16px;
+  }
+  .foot-domain { justify-self: end; }
+  .foot-contact {
+    -webkit-appearance: none; appearance: none;
+    display: inline-flex; align-items: center;
+    min-height: 44px; padding: 0;
+    background: none; border: 0; border-radius: 0;
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--faint); cursor: pointer;
+    box-shadow: inset 0 -1px 0 transparent;
+  }
+  .foot-contact:hover,
+  .foot-contact:focus-visible {
+    color: var(--cream-2);
+    box-shadow: inset 0 -1px 0 var(--orange-dim);
+  }
+  .foot-social {
+    display: inline-flex; align-items: center; gap: 7px;
+    min-height: 44px; padding: 0;
+    color: var(--faint); text-decoration: none;
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.16em; text-transform: uppercase;
+  }
+  .foot-social svg { display: block; flex: 0 0 auto; }
+  .foot-social:hover,
+  .foot-social:focus-visible { color: var(--orange-ink); }
+  @media (max-width: 640px) {
+    .foot-bar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 4px 20px;
+    }
+    .foot-utils { order: -1; width: 100%; justify-content: flex-start; }
+  }
+  @media (max-width: 520px) {
+    dl.strip dd { white-space: normal; }
+    .legal-popover { right: auto; left: 0; }
+  }
+
+  /* ── dialogs ────────────────────────────────────────────────────────── */
+  dialog.get {
+    padding: 0; border: 0; background: transparent; color: var(--cream-ink);
+    max-width: min(420px, calc(100vw - 32px));
+    max-height: calc(100svh - 32px);
+    overflow: visible;
+  }
+  dialog.get::backdrop {
+    background: rgba(0, 0, 0, 0.72);
+    -webkit-backdrop-filter: blur(6px) saturate(120%);
+            backdrop-filter: blur(6px) saturate(120%);
+  }
+  dialog.get[open] { animation: dlg-in .22s cubic-bezier(.2,.7,.3,1); }
+  dialog.get[open]::backdrop { animation: fade-in .22s ease; }
+
+  /* Download modal: a full-bleed black field, heading, QR plate, instruction.
+     Contact keeps the smaller glass card via the rules below. */
+  #get-hachisu {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    overflow: auto;
+  }
+  #get-hachisu::backdrop { background: #000; }
+  #get-hachisu[open] { animation: fade-in .22s ease; }
+  #get-hachisu .panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100svh;
+    max-height: none;
+    padding: clamp(56px, 10vh, 96px) var(--gut);
+    background: transparent;
+    background-image: none;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+    cursor: pointer; /* iOS: tappable backdrop without an explicit button */
+  }
+  #get-hachisu .panel h2 {
+    margin: 0 0 clamp(36px, 6.5vh, 64px);
+    font-size: clamp(26px, 4vw, 34px);
+    font-weight: 600;
+    letter-spacing: -0.032em;
+    color: var(--ink);
+    text-align: center;
+    text-wrap: balance;
+  }
+  /* Shrink-wraps the heading / QR / instruction so clicks on the surrounding
+     black field can dismiss, without changing the existing stack spacing. */
+  #get-hachisu .download-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: max-content;
+    max-width: 100%;
+    cursor: default;
+  }
+  #get-hachisu .qr-frame {
+    display: grid;
+    place-items: center;
+    width: min(280px, calc(100vw - 72px));
+    aspect-ratio: 1;
+    margin: 0;
+    padding: 28px;
+    background: #fff;
+    border: 0;
+    border-radius: 36px;
+    min-height: 0;
+  }
+  #get-hachisu .qr-frame svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+  }
+  #get-hachisu .scan-hint {
+    margin: clamp(32px, 5.5vh, 52px) 0 0;
+    font-size: 16px;
+    line-height: 1.4;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+    text-align: center;
+  }
+
+  #contact-hachisu { width: min(420px, calc(100vw - 32px)); color: var(--ink); }
+  #contact-hachisu::backdrop {
+    background: rgba(0, 0, 0, 0.38);
+    -webkit-backdrop-filter: blur(10px) saturate(120%);
+            backdrop-filter: blur(10px) saturate(120%);
+  }
+  #contact-hachisu .panel {
+    background: rgba(8, 8, 8, 0.52);
+    background-image: none;
+    border: 1px solid rgba(241, 235, 221, 0.14);
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+            backdrop-filter: blur(24px) saturate(140%);
+  }
+  #contact-hachisu .panel h2 { color: var(--ink); }
+  #contact-hachisu .panel .close { color: var(--faint); }
+  #contact-hachisu .panel .close:hover {
+    background: transparent; color: var(--cream-2);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    #contact-hachisu .panel { background: rgba(8, 8, 8, 0.92); }
+  }
+  @keyframes dlg-in { from { opacity: 0; transform: translateY(10px) scale(.985); } }
+  @keyframes fade-in { from { opacity: 0; } }
+
+  .panel {
+    position: relative;
+    background-color: var(--cream);   /* resolved fallback under the gradient */
+    background-image: linear-gradient(168deg, #FBF7EE 0%, var(--cream) 46%, #E7DFCD 100%);
+    border-radius: 6px;
+    padding: 30px 30px 26px;
+    /* "transmission" edge: a bright inner rim + a warm cast beneath, no WebGL. */
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.9),
+      inset 0 0 0 1px rgba(20,17,11,.10),
+      0 1px 0 rgba(242,140,16,.20),
+      0 30px 70px -20px rgba(0,0,0,.85);
+    max-height: calc(100svh - 32px);
+    overflow-y: auto;
+  }
+  .panel h2 {
+    margin: 0 0 8px; font-size: 25px; font-weight: 600; letter-spacing: -0.028em;
+    color: var(--cream-ink);
+  }
+
+  .panel .close {
+    position: absolute; top: 12px; right: 12px;
+    width: 32px; height: 32px; display: grid; place-items: center;
+    background: transparent; border: 0; border-radius: 3px; cursor: pointer;
+    color: #6E6350;
+  }
+  .panel .close:hover { background: rgba(20,17,11,.07); color: var(--cream-ink); }
+
+  .contact-form { display: grid; gap: 18px; margin: 18px 0 0; }
+  .contact-field { display: grid; gap: 6px; }
+  .contact-field label {
+    font-size: 13px; font-weight: 500; color: var(--cream-2);
+  }
+  .contact-field input,
+  .contact-field textarea {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; margin: 0; padding: 8px 0;
+    background: transparent; color: var(--ink);
+    border: 0; border-bottom: 1px solid rgba(241, 235, 221, 0.14);
+    border-radius: 0; box-shadow: none;
+    font-family: var(--sans); font-size: 15px; line-height: 1.45;
+  }
+  .contact-field textarea { min-height: 120px; resize: none; }
+  .contact-field input::placeholder,
+  .contact-field textarea::placeholder {
+    color: var(--faint); opacity: 1;
+  }
+  #contact-hachisu .contact-field input:focus-visible,
+  #contact-hachisu .contact-field textarea:focus-visible {
+    outline: none; border-radius: 0;
+    border-bottom-color: rgba(242, 140, 16, 0.55);
+  }
+  .contact-field input:-webkit-autofill,
+  .contact-field input:-webkit-autofill:hover,
+  .contact-field input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--ink);
+    caret-color: var(--ink);
+    transition: background-color 9999s ease-out;
+  }
+  .contact-send {
+    -webkit-appearance: none; appearance: none;
+    display: inline-flex; align-items: center; gap: 8px;
+    justify-self: start;
+    min-height: 44px; padding: 0; margin-top: 2px;
+    background: none; color: var(--cream);
+    border: 0; border-radius: 0; box-shadow: none;
+    font-family: var(--sans); font-size: 14px; font-weight: 600;
+    cursor: pointer;
+  }
+  .contact-send svg { display: block; transition: transform .18s ease; }
+  .contact-send:hover { color: var(--ink); }
+  .contact-send:hover svg { transform: translateX(3px); }
+  #contact-hachisu .contact-send:focus-visible {
+    outline: none; border-radius: 0; color: var(--ink);
+    box-shadow: inset 0 -1px 0 var(--orange-dim);
+  }
+  .contact-status {
+    margin: 2px 0 0;
+    font-size: 13.5px; line-height: 1.45; color: var(--muted);
+  }
+
+  /* ── motion ─────────────────────────────────────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .001ms !important;
+    }
+  }
 </style>
 </head>
 <body>
 
+<a class="skip" href="#main">Skip to content</a>
+
 <header class="site">
-  <div class="wrap">
+  <div class="wrap bar">
     <a class="brand" href="/">
-      <svg width="22" height="24" viewBox="0 0 22 24" fill="none" aria-hidden="true">
-        <path d="M11 1.2 20.5 6.6v10.8L11 22.8 1.5 17.4V6.6L11 1.2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-        <path d="M11 7.4 15.9 10.2v5.6L11 18.6l-4.9-2.8v-5.6L11 7.4Z" fill="currentColor" opacity="0.28"/>
+      <svg width="21" height="21" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <!-- The Hachisu mark: an upright hexagonal frame holding a solid cube
+             rotated 6° clockwise — the slight rotational tension is part of the
+             identity. The faint lighter stroke on the cube is its dimensional
+             edge, not a border. -->
+        <polygon points="24.00,3.60 41.67,13.80 41.67,34.20 24.00,44.40 6.33,34.20 6.33,13.80"
+          stroke="currentColor" stroke-width="3.2" stroke-linejoin="round" fill="none"/>
+        <polygon points="25.24,12.17 34.87,19.16 33.63,30.99 22.76,35.83 13.13,28.84 14.37,17.01"
+          fill="currentColor" stroke="#FBFAF4" stroke-opacity="0.55" stroke-width="0.9" stroke-linejoin="round"/>
       </svg>
       Hachisu
     </a>
+    <span class="spacer"></span>
+    <button type="button" class="cta cta-ghost" data-get-started>Get started</button>
   </div>
 </header>
 
-<main>
-  <div class="wrap">
+<main id="main">
 
-    <div class="hero">
-      <h1>Bitcoin payments for merchants.</h1>
-      <p class="lede">Hachisu is a <strong>non-custodial Bitcoin payment app</strong> for merchants and small businesses. Accept Bitcoin from your customers, invoice them, and run a point of sale — while every payment settles directly to a Bitcoin wallet only you control.</p>
+  <section class="hero">
+    <div class="wrap">
+
+      <div class="hero-copy">
+        <h1>Bitcoin payments<br><span class="keep">for&nbsp;operators.</span></h1>
+
+        <p class="lede">Built for independent commerce.</p>
+
+        <div class="actions">
+          <button type="button" class="cta cta-solid" data-get-started>
+            Operate independently
+            <svg width="15" height="11" viewBox="0 0 15 11" fill="none" aria-hidden="true">
+              <path d="M1 5.5h12M9 1.5l4 4-4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+
+        <p class="mono caps" data-shuffle>Invoices <span class="sep">·</span> Point of sale <span class="sep">·</span> Payment activity</p>
+      </div>
+
     </div>
+  </section>
 
-    <section>
-      <h2>What Hachisu does</h2>
-      <div class="caps">
-        <div class="cap">
-          <h3>Accept Bitcoin payments</h3>
-          <p>Take Bitcoin from customers in person or online, and watch payments settle in your store activity.</p>
-        </div>
-        <div class="cap">
-          <h3>Create invoices</h3>
-          <p>Bill a customer for a specific amount and share a payment link they can settle from any Bitcoin wallet.</p>
-        </div>
-        <div class="cap">
-          <h3>Send payment requests</h3>
-          <p>Issue a reusable request for a fixed or open amount, and track whether it has been paid.</p>
-        </div>
-        <div class="cap">
-          <h3>Run a point of sale</h3>
-          <p>Ring up items from a product list, or charge a one-off amount without building a cart.</p>
-        </div>
-        <div class="cap">
-          <h3>Add a pay button</h3>
-          <p>Put a Bitcoin payment button in front of customers without rebuilding your existing checkout.</p>
-        </div>
-        <div class="cap">
-          <h3>Track store activity</h3>
-          <p>Review payments as they arrive, open any transaction in detail, and export monthly statements.</p>
+  <section class="about">
+    <div class="wrap">
+      <p class="foot-note"><strong>Hachisu is a non-custodial Bitcoin system for people, businesses, and communities building independent economies around money they control.</strong> Accept Bitcoin from your community in person or online, create invoices, and run a point of sale. Every transaction settles directly to a Bitcoin wallet only you control. Hachisu never holds your Bitcoin, and never has access to your private keys or your recovery phrase.</p>
+    </div>
+  </section>
+
+  <section class="why">
+    <div class="wrap">
+      <h2>Built for independent commerce.</h2>
+      <p class="why-sub">Accept payments directly, reduce dependence on intermediaries, and keep your business connected to money you control.</p>
+
+      <div class="benefits" data-benefits>
+        <div class="benefits-sticky">
+          <article class="benefit is-active" data-benefit-state="0">
+            <div class="benefit-copy">
+              <h3>Your revenue. Paid directly.</h3>
+              <p>Your payments settle to your Bitcoin wallet.</p>
+            </div>
+            <div class="product-visual">
+              <div class="product-frame">
+                <img class="product-screen" src="/assets/benefit-activity.jpg" width="485" height="1024" alt="Hachisu activity screen showing settled Bitcoin payments" loading="lazy" decoding="async">
+              </div>
+            </div>
+          </article>
+          <article class="benefit" data-benefit-state="1">
+            <div class="benefit-copy">
+              <h3>Own the relationship.</h3>
+              <p>Your customers pay you, not a platform standing between you.</p>
+            </div>
+            <div class="product-visual">
+              <div class="product-frame">
+                <img class="product-screen" src="/assets/benefit-invoice.jpg" width="485" height="1024" alt="Hachisu Create Invoice screen" loading="lazy" decoding="async">
+              </div>
+            </div>
+          </article>
+          <article class="benefit" data-benefit-state="2">
+            <div class="benefit-copy">
+              <h3>Operate anywhere.</h3>
+              <p>Accept Bitcoin wherever your business goes.</p>
+            </div>
+            <div class="product-visual">
+              <div class="product-frame">
+                <img class="product-screen" src="/assets/benefit-pos.jpg?v=2" width="485" height="1024" alt="Hachisu Point of Sale charge screen" loading="lazy" decoding="async">
+              </div>
+            </div>
+          </article>
         </div>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <section>
-      <h2>Custody</h2>
-      <div class="custody">
-        <p><strong>Hachisu is non-custodial.</strong> You connect your own Bitcoin wallet, and customer payments settle directly to it. Hachisu never holds, controls, or transmits your Bitcoin, and never has access to your private keys or your recovery phrase.</p>
-        <p>Because Hachisu does not custody funds, closing your account does not put your Bitcoin at risk — your wallet is yours, and it keeps working whether or not you use Hachisu.</p>
-      </div>
-    </section>
-
-    <section>
-      <h2>Who it is for</h2>
-      <p>Hachisu is built for merchants and small businesses that want to accept Bitcoin without handing custody of it to a payment processor. It is a merchant tool, not a consumer wallet: it is designed around taking payment for goods and services, keeping a record of what was paid, and settling to infrastructure the business already controls.</p>
-    </section>
-
-    <section>
-      <h2>What Hachisu supports today</h2>
-      <dl class="facts">
-        <dt>Currency</dt>
-        <dd>Bitcoin only. Hachisu is not a general cryptocurrency payment platform.</dd>
-
-        <dt>Settlement</dt>
-        <dd>On-chain Bitcoin.</dd>
-
-        <dt>Lightning</dt>
-        <dd>Lightning is not currently available to merchants in Hachisu.</dd>
-
-        <dt>Custody</dt>
-        <dd>Non-custodial. Payments settle to a wallet you connect and control.</dd>
-
-        <dt>Platform</dt>
-        <dd>A mobile app for iPhone.</dd>
-
-        <dt>Availability</dt>
-        <dd>In development. Hachisu is not yet released on the App Store.</dd>
-      </dl>
-    </section>
-
-  </div>
 </main>
 
 <footer class="site">
   <div class="wrap">
-    <p><strong>Hachisu</strong> — Bitcoin payments for merchants.</p>
-    <p>Canonical site: <a href="https://hachisu.io/">hachisu.io</a></p>
+
+    <div class="foot-cta">
+      <button type="button" class="cta cta-solid" data-get-started>
+        Cyber commerce on your terms
+        <svg width="15" height="11" viewBox="0 0 15 11" fill="none" aria-hidden="true">
+          <path d="M1 5.5h12M9 1.5l4 4-4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <dl class="strip">
+      <div><dt>Network</dt><dd>Bitcoin.</dd></div>
+      <div><dt>Settlement</dt><dd>Direct to wallet.</dd></div>
+      <div><dt>Custody</dt><dd><span class="on">Non-custodial.</span></dd></div>
+      <div><dt>Lightning</dt><dd>Coming soon.</dd></div>
+      <div><dt>Platform</dt><dd>iPhone.</dd></div>
+      <div>
+        <dt>Legal</dt>
+        <dd>
+          <details class="legal-menu">
+            <summary>View</summary>
+            <div class="legal-popover" aria-label="Legal documents">
+              <a href="/terms">Terms of Service</a>
+              <a href="/privacy">Privacy Notice</a>
+              <a href="/e-sign">E-Sign Disclosure</a>
+            </div>
+          </details>
+        </dd>
+      </div>
+    </dl>
+
+    <div class="foot-bar">
+      <span class="mono foot-copy">© 2026 Hachisu</span>
+      <div class="foot-utils">
+        <button type="button" class="foot-contact" data-contact>Contact</button>
+        <a class="foot-social" href="https://x.com/brycesonjx" target="_blank" rel="noopener noreferrer" aria-label="X">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.727-8.828L1.254 2.25H8.08l4.253 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+          </svg>
+        </a>
+        <a class="foot-social" href="https://www.linkedin.com/in/brycesonjones/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+          </svg>
+          <span>LinkedIn</span>
+        </a>
+      </div>
+      <span class="mono foot-domain">hachisu.io</span>
+    </div>
+
   </div>
 </footer>
+
+<dialog class="get" id="get-hachisu" aria-labelledby="get-hachisu-title">
+  <div class="panel">
+    <div class="download-body" data-role="download-body">
+      <h2 id="get-hachisu-title">Download the Hachisu app</h2>
+      <div class="qr-frame" data-role="qr"></div>
+      <p class="scan-hint" data-role="foot">Scan with your mobile device</p>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="get" id="contact-hachisu" aria-labelledby="contact-hachisu-title">
+  <div class="panel">
+    <button type="button" class="close" data-close aria-label="Close">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+        <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </button>
+
+    <h2 id="contact-hachisu-title">Contact</h2>
+
+    <form class="contact-form" data-contact-form>
+      <div class="contact-field">
+        <label for="contact-email">Your email</label>
+        <input id="contact-email" name="email" type="email" autocomplete="email" required placeholder="name@email.com">
+      </div>
+      <div class="contact-field">
+        <label for="contact-message">How can we help?</label>
+        <textarea id="contact-message" name="message" rows="5" required></textarea>
+      </div>
+      <button type="submit" class="contact-send">
+        Send
+        <svg width="15" height="11" viewBox="0 0 15 11" fill="none" aria-hidden="true">
+          <path d="M1 5.5h12M9 1.5l4 4-4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <p class="contact-status" data-contact-status role="status" hidden></p>
+    </form>
+  </div>
+</dialog>
+
+<script src="/assets/app.js?v=4" defer></script>
+<script src="/assets/benefits-product.js" defer></script>
 
 <script type="application/ld+json">
 {

@@ -12,7 +12,7 @@
     "test:app": "node --test lib/auth/oauth-pkce.test.ts lib/auth/oauth-callback.test.ts lib/auth/session-storage.test.ts lib/crypto/web-crypto.test.ts lib/wallet/derivation-handoff.test.ts",
     "check:config": "node ./scripts/check-client-config.mjs",
     "check:supplychain": "node ./scripts/check-supply-chain.mjs",
-    "generate:legal": "node ./scripts/generate-legal-content.js",
+    "generate:legal": "node ./scripts/generate-legal-content.js && node ./scripts/generate-legal-pages.js",
     "check:design": "node ./scripts/check-design-invariants.mjs",
     "check:legal": "node ./scripts/check-legal-integrity.mjs",
     "check:deployed": "node ./scripts/check-deployed-functions.mjs",

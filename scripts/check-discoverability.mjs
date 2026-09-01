@@ -44,9 +44,10 @@
  *      cosmetic one.
  *
  *   6. Public copy must not represent Lightning as generally available while
- *      constants/feature-flags.ts gates it off. This is the rule with teeth:
- *      it ties marketing claims to the product's actual feature gate, so the
- *      site cannot drift into advertising something the app refuses to do.
+ *      constants/feature-flags.ts gates it off, and the landing page must state
+ *      that it is unavailable or coming soon. This is the rule with teeth: it
+ *      ties marketing claims to the product's actual feature gate, so the site
+ *      cannot drift into advertising something the app refuses to do.
  *
  *   7. Structured data must parse, must use a conservative type, and must not
  *      assert ratings, reviews, prices or download counts. Schema that outruns
@@ -431,6 +432,20 @@ if (!has(FLAGS)) {
         }
       }
     }
+
+    const unavailableDisclosure =
+      /\bLightning\b[\s\S]{0,48}\b(?:coming soon|not (?:currently )?available|unavailable|disabled)\b/i;
+    const landingText = has(INDEX) ? visibleText(read(INDEX)) : '';
+    if (!unavailableDisclosure.test(landingText)) {
+      violated = true;
+      fail(
+        'lightning-not-advertised',
+        `${rel(INDEX)}: does not clearly state that Lightning is unavailable or coming soon, ` +
+          `but constants/feature-flags.ts has LIGHTNING_ENABLED = false. The landing page must ` +
+          `make the gated status explicit.`,
+      );
+    }
+
     if (!violated) pass('public copy does not advertise Lightning while the product gate is off');
   } else {
     pass('LIGHTNING_ENABLED is true — Lightning copy is unconstrained by this guard');

@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Hachisu Terms of Service</title>
+<meta name="description" content="The Terms of Service governing use of the Hachisu application and services.">
+<link rel="canonical" href="https://hachisu.io/terms">
+<meta property="og:site_name" content="Hachisu">
+<meta property="og:title" content="Hachisu Terms of Service">
+<meta property="og:description" content="The Terms of Service governing use of the Hachisu application and services.">
+<meta property="og:url" content="https://hachisu.io/terms">
+<meta property="og:type" content="website">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+
+<style>
+  /* Tokens mirror the landing page (web/index.html). */
+  :root {
+    --ground: #000000;
+    --line: #1A1A1A;
+    --ink: #F2EDE3;
+    --muted: #A0958A;
+    --faint: #8A8076;
+    --cream: #F1EBDD;
+    --cream-2: #DED6C4;
+    --orange: #F28C10;
+    --orange-ink: #E9A445;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI",
+            Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, "JetBrains Mono",
+            "IBM Plex Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  a { color: var(--orange-ink); text-decoration-color: rgba(233, 164, 69, 0.4); text-underline-offset: 3px; }
+  a:hover { text-decoration-color: var(--orange-ink); }
+  :focus-visible { outline: 2px solid var(--orange); outline-offset: 3px; border-radius: 2px; }
+
+  header.site {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(0, 0, 0, 0.92);
+  }
+  @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    header.site {
+      background: rgba(0, 0, 0, 0.72);
+      -webkit-backdrop-filter: blur(18px);
+              backdrop-filter: blur(18px);
+    }
+  }
+  header.site .bar {
+    max-width: 820px; margin: 0 auto;
+    display: flex; align-items: center; gap: 20px;
+    padding: 20px clamp(20px, 5vw, 32px) 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .brand {
+    display: inline-flex; align-items: center; gap: 10px;
+    color: var(--ink); text-decoration: none;
+    font-weight: 600; font-size: 18px; letter-spacing: -0.015em;
+  }
+  .brand svg { display: block; color: var(--cream); }
+  .spacer { flex: 1 1 auto; }
+  .back {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--faint); text-decoration: none;
+  }
+  .back:hover { color: var(--orange-ink); }
+
+  main { max-width: 820px; margin: 0 auto; padding: clamp(36px, 6vw, 64px) clamp(20px, 5vw, 32px) 24px; }
+  article { max-width: 70ch; }
+  h1 {
+    margin: 0 0 10px;
+    font-size: clamp(30px, 5vw, 42px);
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    font-weight: 600;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  h2 {
+    margin: 2.2em 0 0.55em;
+    font-size: clamp(20px, 2.6vw, 24px);
+    line-height: 1.25;
+    letter-spacing: -0.018em;
+    font-weight: 600;
+    color: var(--cream);
+  }
+  p { margin: 0 0 1em; color: var(--cream-2); }
+  strong { color: var(--ink); font-weight: 600; }
+  ul { margin: 0 0 1em; padding-left: 1.35em; color: var(--cream-2); }
+  li { margin: 0 0 0.5em; }
+  li::marker { color: var(--faint); }
+
+  footer.site { border-top: 1px solid var(--line); margin-top: clamp(40px, 7vw, 72px); }
+  footer.site .wrap {
+    max-width: 820px; margin: 0 auto;
+    display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+    padding: 24px clamp(20px, 5vw, 32px) 34px;
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.13em; text-transform: uppercase; color: var(--faint);
+  }
+  footer.site a { color: var(--faint); text-decoration: none; }
+  footer.site a:hover { color: var(--orange-ink); }
+  footer.site [aria-current] { color: var(--cream-2); }
+  footer.site .sep { color: var(--line); }
+  footer.site .spacer { flex: 1 1 auto; }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="bar">
+    <a class="brand" href="/" aria-label="Hachisu home">
+      <svg width="21" height="21" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <polygon points="24.00,3.60 41.67,13.80 41.67,34.20 24.00,44.40 6.33,34.20 6.33,13.80"
+          stroke="currentColor" stroke-width="3.2" stroke-linejoin="round" fill="none"/>
+        <polygon points="25.24,12.17 34.87,19.16 33.63,30.99 22.76,35.83 13.13,28.84 14.37,17.01"
+          fill="currentColor" stroke="#FBFAF4" stroke-opacity="0.55" stroke-width="0.9" stroke-linejoin="round"/>
+      </svg>
+      Hachisu
+    </a>
+    <span class="spacer"></span>
+    <a class="back" href="/">Back to hachisu.io</a>
+  </div>
+</header>
+
+<main>
+  <article>
+      <h1>Hachisu Terms of Service</h1>
+      <p><strong>Effective date:</strong> August 1, 2026</p>
+      <p>These Terms of Service (&quot;Terms&quot;) are an agreement between you and Hachisu (&quot;we,&quot; &quot;us,&quot; or &quot;our&quot;) governing your use of the Hachisu mobile application and the backend services that power it (together, the &quot;Service&quot;).</p>
+      <h2>1. Acceptance of These Terms</h2>
+      <p>By creating an account, tapping &quot;I agree&quot; (or a similar control), or using the Service, you accept these Terms, our Privacy Notice, and our Electronic Communications and E-Sign Consent. If you do not agree, do not use the Service.</p>
+      <h2>2. What Hachisu Is (and Is Not)</h2>
+      <p>Hachisu is <strong>software</strong> that helps merchants accept Bitcoin payments using their own Bitcoin wallets and dedicated payment-processing infrastructure (BTCPay Server) that Hachisu provisions and manages for their stores. Understanding this architecture is central to these Terms:</p>
+      <ul>
+        <li><strong>Hachisu is non-custodial.</strong> We never hold, control, or transmit your Bitcoin. Payments to your store are received by wallets you control.</li>
+        <li><strong>We never possess your private keys.</strong> Hachisu does not collect, store, or have access to private keys, seed phrases, or recovery phrases, and has no ability to recover them if you lose them. When you connect a wallet, you provide only public wallet information (an extended public key or output descriptor), which can generate receiving addresses but cannot spend Bitcoin.</li>
+        <li><strong>We do not control the Bitcoin network.</strong> The Bitcoin network is a decentralized system operated by independent participants worldwide.</li>
+        <li><strong>We cannot reverse transactions.</strong> Hachisu cannot reverse, cancel, charge back, or recover a confirmed Bitcoin transaction, and cannot recover funds sent to an incorrect Bitcoin address.</li>
+      </ul>
+      <p>Hachisu does <strong>not</strong> provide: Bitcoin trading or exchange services, fiat currency conversion, investment services, lending, interest-bearing accounts, custodial wallets, or money transmission on your behalf. Hachisu is not a bank, and your use of the Service does not create a deposit account, banking relationship, or fiduciary relationship. Nothing in the Service is investment, financial, tax, accounting, or legal advice.</p>
+      <h2>3. Eligibility and Business Use</h2>
+      <p>To use the Service you must:</p>
+      <ul>
+        <li>be at least 18 years old and able to form a binding contract;</li>
+        <li>use the Service for business/commercial purposes — the Service is built for merchants, not for personal consumer banking or saving; and</li>
+        <li>not be prohibited from using the Service under applicable law, including U.S. sanctions laws (see Section 13).</li>
+      </ul>
+      <p>If you use the Service on behalf of a company or other entity, you represent that you are authorized to bind that entity, and &quot;you&quot; includes that entity.</p>
+      <h2>4. Your Account</h2>
+      <h2>4.1 Registration and accuracy</h2>
+      <p>You register with an email address (verified by one-time passcode) or, where available, a Google account. You agree to provide accurate, current, and complete information — including your profile and business information (such as business name, address, country, website, and description) — and to keep it up to date.</p>
+      <h2>4.2 Account security</h2>
+      <p>You are responsible for everything that happens under your account. Keep control of the email account and any Google account you use to sign in, and of any device where you are signed in; anyone with access to them can access your Hachisu account. Notify us promptly through the Contact form at <a href="/#contact">https://hachisu.io/#contact</a> if you suspect unauthorized access.</p>
+      <h2>5. Merchant Stores</h2>
+      <p>When you create a store, Hachisu provisions payment-processing infrastructure for it on BTCPay Server. You may create and manage one or more stores, and you are responsible for the names, descriptions, currencies, and settings you configure. Store names and other content you enter must not be unlawful, deceptive, or infringing.</p>
+      <h2>6. Bitcoin Wallet Connections</h2>
+      <h2>6.1 Public wallet information</h2>
+      <p>To receive on-chain Bitcoin payments, you connect your own Bitcoin wallet by providing public wallet information — an extended public key (xpub) or output descriptor. An extended public key is <strong>not</strong> a private key: it lets software derive receiving addresses and view related activity, but it cannot spend your Bitcoin.</p>
+      <p>By connecting a wallet, you authorize Hachisu to transmit that public wallet information to your store's payment-processing infrastructure and to use it to derive receiving addresses, generate invoices, and display balances and activity for your store — the Service's intended payment functionality. Hachisu stores only a one-way cryptographic fingerprint of the wallet scheme and non-sensitive metadata (such as address type), not the key material itself.</p>
+      <h2>6.2 Your responsibility to verify</h2>
+      <p><strong>You are responsible for verifying your wallet information before accepting payments.</strong> Payments to addresses derived from the wallet information you provide go to whatever wallet that information actually describes. Before going live, confirm — using your own wallet software — that addresses shown by the Service belong to your wallet. If you connect the wrong wallet, a wallet you do not control, or a wallet whose keys you have lost, payments sent to it may be unrecoverable, and Hachisu cannot retrieve them.</p>
+      <h2>6.3 Wallet custody and backups</h2>
+      <p>Your wallet, keys, and seed phrases are yours alone. You are responsible for safeguarding and backing them up. Hachisu cannot recover lost keys or seed phrases, and losing them may mean permanently losing access to your Bitcoin.</p>
+      <h2>7. Invoices, Payment Requests, POS, and Pay Button</h2>
+      <p>The Service lets you create Bitcoin invoices and payment requests, run point-of-sale (POS) checkouts, and generate a Pay Button; these produce checkout pages and links served by your store's payment infrastructure, which you or your customers use to complete payment.</p>
+      <p>You are solely responsible for:</p>
+      <ul>
+        <li>the amounts, currencies, descriptions, product names, and prices you configure;</li>
+        <li>the goods and services you sell, and delivering them;</li>
+        <li>your refund, cancellation, and dispute policies — and honoring them. Because Hachisu cannot reverse Bitcoin transactions, any refund is something <strong>you</strong> pay from your own funds as a new transaction;</li>
+        <li>handling your customers' questions, complaints, and disputes;</li>
+        <li>charging, collecting, and remitting any applicable taxes;</li>
+        <li>any consumer disclosures required for your business; and</li>
+        <li>any customer information (such as email addresses) you choose to enter into the Service, including having the right to provide it.</li>
+      </ul>
+      <p>Hachisu is a software provider, not a party to your sales. <strong>Hachisu is not the merchant of record for your transactions</strong> and has no responsibility to your customers for the goods or services you sell.</p>
+      <h2>8. Bitcoin Network Risks</h2>
+      <p>You acknowledge and accept the risks inherent in Bitcoin payments, including:</p>
+      <ul>
+        <li><strong>Irreversibility.</strong> Confirmed Bitcoin transactions cannot be reversed, charged back, or recalled by anyone, including Hachisu.</li>
+        <li><strong>Confirmation delays.</strong> The Bitcoin network confirms transactions at variable speeds; a payment may show as pending for minutes to hours, and an unconfirmed transaction may never confirm.</li>
+        <li><strong>Network fees.</strong> Bitcoin transactions incur network (miner) fees set by market conditions, not by Hachisu. Fees paid by your customers, or fees you pay when moving your own funds, can vary widely.</li>
+        <li><strong>Price volatility.</strong> The Bitcoin/fiat exchange rate changes constantly. Fiat-denominated amounts shown in the Service are approximations based on third-party rate sources and may differ from rates elsewhere or at settlement.</li>
+        <li><strong>Public ledger.</strong> Bitcoin transactions are recorded on a public blockchain, permanently and visibly to anyone (see the Privacy Notice for details).</li>
+        <li><strong>Protocol risk.</strong> The Bitcoin network's rules and performance are outside our control and may change.</li>
+      </ul>
+      <p>Underpayments, overpayments, expired invoices, and payments sent after an invoice's validity window are handled by the payment infrastructure's rules and, ultimately, are matters between you and your customer.</p>
+      <h2>9. Third-Party Infrastructure and Services</h2>
+      <p>The Service depends on infrastructure and services we do not fully control, including:</p>
+      <ul>
+        <li><strong>BTCPay Server</strong> payment-processing infrastructure, which generates invoices, checkout pages, and payment detection for your stores;</li>
+        <li><strong>Supabase</strong>, which hosts our backend (authentication, database, and server functions);</li>
+        <li><strong>Google</strong>, if you choose Google sign-in;</li>
+        <li><strong>third-party exchange-rate sources</strong> used to price invoices and display fiat values; and</li>
+        <li><strong>your own wallet software</strong>, which is chosen, operated, and secured by you. Hachisu is not responsible for third-party wallets, and their makers are not responsible for Hachisu.</li>
+      </ul>
+      <p>Third-party services have their own terms and may change, fail, or become unavailable in ways that affect the Service.</p>
+      <h2>10. Availability</h2>
+      <p>We aim to keep the Service available and working well, but we do not promise uninterrupted or error-free operation. The Service may be unavailable due to maintenance, outages (including outages of the third-party infrastructure above), or events beyond our control. The Bitcoin network itself continues to operate independently of the Service: an outage of Hachisu does not move or block Bitcoin already paid to your wallet, but it may temporarily prevent creating invoices or viewing activity. We may change, add, or remove features of the Service at any time (see Section 20).</p>
+      <h2>11. Fees</h2>
+      <p>Hachisu does not currently charge fees for the Service. Bitcoin network (miner) fees, which are paid to the Bitcoin network and not to Hachisu, always apply to on-chain transactions. If we introduce fees for the Service in the future, we will disclose them before they apply to you.</p>
+      <h2>12. Prohibited Uses</h2>
+      <p>You may not use the Service to:</p>
+      <ul>
+        <li>sell or facilitate anything illegal under the laws that apply to you or your customers, including controlled substances, stolen goods, or unlawful weapons;</li>
+        <li>engage in fraud, money laundering, terrorist financing, or other financial crime;</li>
+        <li>deceive or mislead customers, including through false product descriptions, fake invoices, or impersonation of another business;</li>
+        <li>infringe others' intellectual-property, privacy, or publicity rights;</li>
+        <li>interfere with or attempt to compromise the Service, its infrastructure, or other users' accounts, or access the Service by automated means we have not authorized;</li>
+        <li>circumvent limits, gates, or security controls in the Service; or</li>
+        <li>violate sanctions or export-control laws (Section 13).</li>
+      </ul>
+      <p>We may investigate suspected violations and may suspend or terminate accounts involved in them (Section 17).</p>
+      <h2>13. Sanctions and Legal Compliance</h2>
+      <p>You represent that you are not (a) located, organized, or resident in a country or region subject to comprehensive U.S. sanctions, or (b) named on any U.S. government restricted- party list, including the Treasury Department's list of Specially Designated Nationals. You agree not to use the Service for the benefit of any such country, region, or person, and to comply with applicable export-control laws.</p>
+      <p><strong>You are responsible for complying with all laws that apply to your business</strong>, including licensing, consumer-protection, privacy, tax, recordkeeping, and any financial-services regulations applicable to merchants accepting cryptocurrency in your jurisdiction. Hachisu does not warrant that the Service is appropriate or lawful for your particular business or location.</p>
+      <h2>14. Records and Reports</h2>
+      <p>The Service lets you view payment activity and export CSV reports and monthly account statements. These are provided for your convenience and are generated from the payment infrastructure's records. <strong>You are responsible for your own recordkeeping</strong>, including keeping the books, records, and tax documentation your business requires, and for exporting anything you want to keep before closing your account. We do not guarantee that the Service will retain or reproduce records indefinitely.</p>
+      <h2>15. Intellectual Property</h2>
+      <p>The Service — including the app, its design, and its content (other than what you and other users provide) — is owned by Hachisu and its licensors and is protected by intellectual-property laws. We grant you a limited, non-exclusive, non-transferable, revocable license to use the app for your business use of the Service under these Terms. You may not copy, modify, distribute, sell, or lease any part of the Service, or reverse engineer it except where the law permits despite this restriction.</p>
+      <p>You keep ownership of the content you enter into the Service (store names, product lists, invoice details, and similar). You grant us the license needed to host, process, display, and transmit that content in order to operate the Service.</p>
+      <h2>16. Feedback</h2>
+      <p>If you send us ideas, suggestions, or other feedback about the Service, you agree we may use it without restriction or obligation to you. Feedback is voluntary; we won't claim ownership of your business by virtue of your feedback, just the right to use the feedback itself.</p>
+      <h2>17. Suspension and Termination</h2>
+      <p>You may stop using the Service at any time.</p>
+      <p>We may suspend or terminate your access to the Service, or specific features, if we reasonably believe you have violated these Terms or applicable law, if required by a legal authority, or to protect the Service or other users. Where practical and lawful, we will give you notice and a chance to export your records.</p>
+      <p>Because Hachisu is non-custodial, suspension or termination of your account does not give Hachisu control over your Bitcoin: funds already received to your wallets remain yours and are unaffected. Termination ends your license to use the Service; Sections of these Terms that by their nature should survive (including Sections 18, 19, and 21–23) survive.</p>
+      <h2>18. Account Deletion</h2>
+      <p>You may permanently delete your account in the app (Account → Close Account). Deletion is immediate and irreversible: your Hachisu account and application data (profile, stores, invoices, payment requests, POS configuration, and related records) are permanently deleted, and the payment-processing stores Hachisu provisioned for your account are removed, so no new invoices or checkout pages can be created. The payment infrastructure retains historical invoice records — a previously issued invoice or checkout page may remain viewable, and an invoice still within its validity window at deletion remains payable, to your own wallet, until it expires. Residual copies in backups and logs, and Bitcoin blockchain records, are handled as described in the Privacy Notice and cannot all be deleted by Hachisu. <strong>Export any reports you need, and confirm you have your own wallet backups, before deleting your account.</strong> Deleting your account does not move, delete, or otherwise affect Bitcoin in your wallets.</p>
+      <h2>19. Disclaimers</h2>
+      <p>THE SERVICE IS PROVIDED &quot;AS IS&quot; AND &quot;AS AVAILABLE,&quot; WITHOUT WARRANTIES OF ANY KIND, WHETHER EXPRESS, IMPLIED, OR STATUTORY, INCLUDING IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. WITHOUT LIMITING THE FOREGOING, WE DO NOT WARRANT THAT:</p>
+      <ul>
+        <li>THE SERVICE WILL BE UNINTERRUPTED, TIMELY, SECURE, OR ERROR-FREE;</li>
+        <li>PAYMENT DETECTION, BALANCES, EXCHANGE RATES, OR REPORTS WILL BE ACCURATE OR COMPLETE;</li>
+        <li>THE BITCOIN NETWORK WILL OPERATE IN ANY PARTICULAR WAY; OR</li>
+        <li>THE SERVICE IS SUITABLE OR LAWFUL FOR YOUR PARTICULAR BUSINESS.</li>
+      </ul>
+      <p>SOME JURISDICTIONS DO NOT ALLOW CERTAIN WARRANTY DISCLAIMERS, SO SOME OF THE ABOVE MAY NOT APPLY TO YOU.</p>
+      <h2>20. Changes to the Service and These Terms</h2>
+      <p>We may change the Service over time, including adding, modifying, gating, or removing features. We may also update these Terms. If we make material changes to these Terms, we will notify you (in the app or by email) before they take effect and update the effective date above. If you continue using the Service after updated Terms take effect, the updated Terms apply. If you do not agree to updated Terms, stop using the Service and, if you wish, delete your account.</p>
+      <h2>21. Limitation of Liability</h2>
+      <p>TO THE MAXIMUM EXTENT PERMITTED BY LAW: (A) HACHISU AND ITS OFFICERS, DIRECTORS, EMPLOYEES, AND AGENTS WILL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF PROFITS, REVENUE, BUSINESS, GOODWILL, OR DATA, OR FOR ANY LOSS OF BITCOIN OR OTHER DIGITAL ASSETS — INCLUDING LOSSES ARISING FROM INCORRECT WALLET INFORMATION, LOST PRIVATE KEYS OR SEED PHRASES, BITCOIN NETWORK BEHAVIOR, EXCHANGE-RATE MOVEMENTS, OR THIRD-PARTY INFRASTRUCTURE — EVEN IF ADVISED OF THE POSSIBILITY; AND (B) HACHISU'S TOTAL AGGREGATE LIABILITY ARISING OUT OF OR RELATING TO THE SERVICE OR THESE TERMS WILL NOT EXCEED THE GREATER OF (i) THE AMOUNTS YOU PAID HACHISU FOR THE SERVICE IN THE TWELVE MONTHS BEFORE THE CLAIM AROSE AND (ii) ONE HUNDRED U.S. DOLLARS (US$100).</p>
+      <p>SOME JURISDICTIONS DO NOT ALLOW CERTAIN LIMITATIONS OF LIABILITY, SO SOME OF THE ABOVE MAY NOT APPLY TO YOU. NOTHING IN THESE TERMS LIMITS LIABILITY THAT CANNOT LAWFULLY BE LIMITED.</p>
+      <h2>22. Indemnification</h2>
+      <p>You agree to indemnify and hold harmless Hachisu and its officers, directors, employees, and agents from and against claims, damages, losses, and expenses (including reasonable attorneys' fees) arising out of or related to: (a) your use of the Service; (b) the goods or services you sell and your dealings with your customers, including refunds, disputes, and consumer-protection claims; (c) your violation of these Terms or of applicable law, including tax, licensing, and sanctions laws; or (d) content or information you provide, including customer information and wallet information. We will notify you of any such claim and may participate in its defense with counsel of our choosing.</p>
+      <h2>23. Governing Law and Dispute Resolution</h2>
+      <p>These Terms are governed by the laws of [GOVERNING LAW STATE], without regard to its conflict-of-laws rules.</p>
+      <p><strong>Dispute resolution:</strong> [ARBITRATION / DISPUTE RESOLUTION TO BE REVIEWED BY COUNSEL]</p>
+      <h2>24. Miscellaneous</h2>
+      <ul>
+        <li><strong>Entire agreement.</strong> These Terms, the Privacy Notice, and the E-Sign Consent are the entire agreement between you and Hachisu about the Service.</li>
+        <li><strong>Severability.</strong> If a provision of these Terms is unenforceable, the rest remains in effect.</li>
+        <li><strong>No waiver.</strong> Our not enforcing a provision is not a waiver of it.</li>
+        <li><strong>Assignment.</strong> You may not assign these Terms without our consent; we may assign them in connection with a merger, acquisition, or sale of assets.</li>
+        <li><strong>Notices.</strong> We provide notices as described in the E-Sign Consent; you may contact us at the addresses below.</li>
+      </ul>
+      <h2>25. Contact</h2>
+      <p>You can reach us through the Contact form at <a href="/#contact">https://hachisu.io/#contact</a>.</p>
+  </article>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>© 2026 Hachisu</span>
+    <span class="spacer"></span>
+    <nav aria-label="Legal documents" style="display:flex; gap:14px; align-items:center;">
+      <span aria-current="page">Terms</span>
+      <span class="sep">·</span>
+      <a href="/privacy">Privacy</a>
+      <span class="sep">·</span>
+      <a href="/e-sign">E-Sign</a>
+    </nav>
+  </div>
+</footer>
+
+</body>
+</html>
