@@ -202,7 +202,7 @@ try {
     const dir = fresh('red-12');
     edit(dir, 'web/index.html', (s) =>
       s.replace(
-        '<title>Hachisu — Bitcoin Payments for Merchants</title>',
+        '<title>Hachisu</title>',
         '<title>The future of payments</title>',
       ),
     );

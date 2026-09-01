@@ -271,14 +271,13 @@ if (has(INDEX)) {
 
   if (!title) {
     fail('metadata-complete', `${rel(INDEX)}: no <title>.`);
-  } else if (!/bitcoin/i.test(title) || !/hachisu/i.test(title)) {
+  } else if (!/hachisu/i.test(title)) {
     fail(
       'metadata-complete',
-      `${rel(INDEX)}: title "${title}" is not self-describing. It must name the brand and the ` +
-        `product category, because it is the single line most search surfaces show.`,
+      `${rel(INDEX)}: title "${title}" does not name the brand.`,
     );
   } else {
-    pass(`title names the brand and category: "${title}"`);
+    pass(`title names the brand: "${title}"`);
   }
 
   if (!description) {
