@@ -56,6 +56,19 @@ export function isOnchainConnected(store: MerchantStore): boolean {
   return store.onchain_status === 'connected';
 }
 
+/**
+ * Cached, UX-only readiness of a store's Bitcoin on-chain wallet for accepting
+ * payments: connected AND not explicitly disabled. Mirrors the server's
+ * authoritative guard (assertStoreHasOnchainWallet) closely enough to drive
+ * responsive gating — but the server remains the source of truth, since this
+ * cached value can be stale or forged. Use it to decide what UI to show, never
+ * as the security boundary.
+ */
+export function isOnchainReadyForPayments(store: MerchantStore | null | undefined): boolean {
+  if (!store) return false;
+  return store.onchain_status === 'connected' && store.onchain_enabled !== false;
+}
+
 /** Wallet/payment-destination status label for a single store row. */
 export function merchantStoreStatusLabel(store: MerchantStore): string {
   if (storeHasPaymentDestination(store)) return 'Connected';

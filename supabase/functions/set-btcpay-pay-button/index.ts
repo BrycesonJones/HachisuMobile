@@ -20,6 +20,7 @@ import {
   getStorePayButton,
   setStorePayButtonEnabled,
 } from '../_shared/btcpay-client.ts';
+import { assertStoreHasOnchainWallet } from '../_shared/wallet-guard.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
 import { readJsonObjectBody } from '../_shared/request-body.ts';
 
@@ -108,6 +109,25 @@ Deno.serve(async (req) => {
     const message =
       err instanceof BtcpayConfigError ? err.message : 'BTCPay is not configured.';
     return jsonResponse({ ok: false, error: message }, 500);
+  }
+
+  // WALLET INTEGRITY: ENABLING the Pay Button exposes a public checkout surface,
+  // so it requires a valid, enabled on-chain wallet (authoritative BTCPay state,
+  // server-resolved store id, fail closed). DISABLING is always allowed — a
+  // merchant must be able to turn off a surface regardless of wallet state, and
+  // if the wallet was removed the disable is exactly what we want to permit.
+  if (enabled) {
+    const walletGuard = await assertStoreHasOnchainWallet(config, store.btcpay_store_id);
+    if (!walletGuard.ok) {
+      console.log(
+        `[pay-button:set] user=${user.id} store=${store.id} action=enable ` +
+          `result=${walletGuard.code} reason=${walletGuard.reason}`,
+      );
+      return jsonResponse(
+        { ok: false, error: walletGuard.error, code: walletGuard.code },
+        walletGuard.status,
+      );
+    }
   }
 
   try {

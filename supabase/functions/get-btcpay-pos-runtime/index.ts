@@ -30,6 +30,7 @@ import {
   getPosApp,
   sanitizeCheckoutLink,
 } from '../_shared/btcpay-client.ts';
+import { assertStoreHasOnchainWallet } from '../_shared/wallet-guard.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
 import { readJsonObjectBody } from '../_shared/request-body.ts';
 
@@ -40,6 +41,8 @@ type ResultCode =
   | 'BTCPAY_APP_NOT_FOUND'
   | 'BTCPAY_REQUEST_FAILED'
   | 'INVALID_RUNTIME_URL'
+  | 'WALLET_NOT_CONNECTED'
+  | 'WALLET_STATE_UNKNOWN'
   | 'SERVER_ERROR';
 
 interface PosAppRow {
@@ -166,6 +169,16 @@ Deno.serve(async (req) => {
   }
 
   const logPrefix = `[pos-runtime] user=${user.id} app=${app.id} btcpayApp=${app.btcpay_app_id}`;
+
+  // --- 3a. WALLET INTEGRITY: never expose a customer-facing POS runtime URL for
+  //         a store whose on-chain wallet is missing or disabled. If the wallet
+  //         was removed/disabled after the app was created, exposure stops here.
+  //         Authoritative (BTCPay), server-resolved store id, fails closed.
+  const walletGuard = await assertStoreHasOnchainWallet(config, app.btcpay_store_id);
+  if (!walletGuard.ok) {
+    console.log(`${logPrefix} result=${walletGuard.code} reason=${walletGuard.reason}`);
+    return errorResponse(walletGuard.code, walletGuard.error, walletGuard.status);
+  }
 
   // --- 4. Confirm the app is live in BTCPay (authoritative, read-only) -----
   let btcpayApp;

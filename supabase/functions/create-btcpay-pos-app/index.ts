@@ -23,6 +23,7 @@ import {
   createPosApp,
   getBtcpayConfig,
 } from '../_shared/btcpay-client.ts';
+import { assertStoreHasOnchainWallet } from '../_shared/wallet-guard.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
 import { readJsonObjectBody } from '../_shared/request-body.ts';
 
@@ -132,6 +133,19 @@ Deno.serve(async (req) => {
     const message =
       err instanceof BtcpayConfigError ? err.message : 'BTCPay is not configured.';
     return jsonResponse({ error: message }, 500);
+  }
+
+  // 4a. WALLET INTEGRITY: refuse to create a POS payment surface for a store
+  //     with no valid, enabled on-chain wallet. Authoritative (BTCPay), on the
+  //     server-resolved store id, fails closed. A walletless POS app would be a
+  //     checkout that can never take payment.
+  const walletGuard = await assertStoreHasOnchainWallet(config, store.btcpay_store_id);
+  if (!walletGuard.ok) {
+    console.log(
+      `[create-pos-app] user=${user.id} store=${store.id} result=${walletGuard.code} ` +
+        `reason=${walletGuard.reason}`,
+    );
+    return jsonResponse({ error: walletGuard.error, code: walletGuard.code }, walletGuard.status);
   }
 
   // 5. Create the POS app in BTCPay. Title defaults to the app name; both are

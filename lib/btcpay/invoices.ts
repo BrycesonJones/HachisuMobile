@@ -28,6 +28,8 @@ export type CreateInvoiceErrorCode =
   | 'INVALID_CURRENCY'
   | 'INVALID_BUYER_EMAIL'
   | 'INVALID_EXPIRATION'
+  | 'WALLET_NOT_CONNECTED'
+  | 'WALLET_STATE_UNKNOWN'
   | 'NO_PAYMENT_METHOD_AVAILABLE'
   | 'PAYMENT_METHOD_LOOKUP_FAILED'
   | 'BTCPAY_INVOICE_CREATE_FAILED'
@@ -227,6 +229,10 @@ function messageForCode(code: CreateInvoiceErrorCode): string {
       return 'That currency is not supported.';
     case 'INVALID_BUYER_EMAIL':
       return 'Enter a valid buyer email.';
+    case 'WALLET_NOT_CONNECTED':
+      return 'Connect your Bitcoin wallet to accept payments.';
+    case 'WALLET_STATE_UNKNOWN':
+      return 'Could not verify this store’s Bitcoin wallet right now. Please try again.';
     case 'NO_PAYMENT_METHOD_AVAILABLE':
       return 'Set up a Bitcoin payment method before creating an invoice.';
     case 'PAYMENT_METHOD_LOOKUP_FAILED':

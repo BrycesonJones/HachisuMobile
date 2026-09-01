@@ -30,6 +30,7 @@ import {
   getStoreLightningPaymentMethod,
   getStorePayButton,
 } from '../_shared/btcpay-client.ts';
+import { assertStoreHasOnchainWallet } from '../_shared/wallet-guard.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
 import { readJsonObjectBody } from '../_shared/request-body.ts';
 
@@ -212,6 +213,22 @@ Deno.serve(async (req) => {
     const message =
       err instanceof BtcpayConfigError ? err.message : 'BTCPay is not configured.';
     return jsonResponse({ ok: false, error: message }, 500);
+  }
+
+  // WALLET INTEGRITY: the generated output IS the exposed payment surface (a
+  // shareable checkout link / HTML snippet / QR). Never produce it for a store
+  // without a valid, enabled on-chain wallet. Authoritative (BTCPay), on the
+  // server-resolved store id, fails closed.
+  const walletGuard = await assertStoreHasOnchainWallet(config, store.btcpay_store_id);
+  if (!walletGuard.ok) {
+    console.log(
+      `[pay-button:generate] user=${user.id} store=${store.id} result=${walletGuard.code} ` +
+        `reason=${walletGuard.reason}`,
+    );
+    return jsonResponse(
+      { ok: false, error: walletGuard.error, code: walletGuard.code },
+      walletGuard.status,
+    );
   }
 
   try {

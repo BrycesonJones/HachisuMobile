@@ -43,6 +43,7 @@ import {
   type PayButtonOutput,
   setPayButton,
 } from '@/lib/btcpay/pay-button';
+import { isOnchainReadyForPayments } from '@/types/merchant-store';
 
 const DESTRUCTIVE_COLOR = '#F87171';
 
@@ -50,6 +51,12 @@ export default function PayButtonScreen() {
   const router = useRouter();
   const { activeStore } = useActiveStore();
   const merchantStoreId = activeStore?.id ?? null;
+
+  // Cached, UX-only wallet readiness. Enabling the Pay Button (and generating its
+  // output) exposes a public checkout surface, so both require a connected
+  // on-chain wallet. The server enforces this authoritatively; this only decides
+  // whether to offer Enable or a connect CTA. Disabling never requires a wallet.
+  const walletReady = isOnchainReadyForPayments(activeStore);
 
   // Pay Button enabled state is AUTHORITATIVE: it is read from BTCPay via the
   // edge function, never an optimistic local flip. `statusLoading` covers the
@@ -384,6 +391,23 @@ export default function PayButtonScreen() {
                 {busy ? 'Disabling…' : 'Disable Pay Button'}
               </Text>
             </Pressable>
+          ) : !walletReady ? (
+            <View style={styles.walletCta}>
+              <MaterialIcons
+                name="account-balance-wallet"
+                size={22}
+                color={COLORS.primaryText}
+              />
+              <Text style={styles.walletCtaTitle}>Connect your Bitcoin wallet</Text>
+              <Text style={styles.walletCtaBody}>
+                Connect your Bitcoin wallet to accept payments before enabling the Pay
+                Button.
+              </Text>
+              <PrimaryButton
+                label="Connect wallet"
+                onPress={() => router.push('/account/btc-wallet-settings' as never)}
+              />
+            </View>
           ) : (
             <View style={styles.enableButton}>
               <PrimaryButton
@@ -844,6 +868,25 @@ const styles = StyleSheet.create({
   },
   enableButton: {
     marginTop: 16,
+  },
+  walletCta: {
+    marginTop: 16,
+    padding: 18,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: COLORS.secondaryText,
+    gap: 10,
+  },
+  walletCtaTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.primaryText,
+  },
+  walletCtaBody: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: COLORS.secondaryText,
+    marginBottom: 4,
   },
   errorCard: {
     flexDirection: 'row',

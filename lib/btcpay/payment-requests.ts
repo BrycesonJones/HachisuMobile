@@ -30,6 +30,8 @@ export type PaymentRequestErrorCode =
   | 'INVALID_BUYER_EMAIL'
   | 'INVALID_EXPIRATION'
   | 'INVALID_CUSTOMER_DATA_OPTION'
+  | 'WALLET_NOT_CONNECTED'
+  | 'WALLET_STATE_UNKNOWN'
   | 'NO_PAYMENT_METHOD_AVAILABLE'
   | 'PAYMENT_METHOD_LOOKUP_FAILED'
   | 'BTCPAY_PAYMENT_REQUEST_CREATE_FAILED'
@@ -297,6 +299,10 @@ function messageForCode(code: PaymentRequestErrorCode): string {
       return 'Enter a valid recipient email.';
     case 'INVALID_EXPIRATION':
       return 'Select a valid expiration.';
+    case 'WALLET_NOT_CONNECTED':
+      return 'Connect your Bitcoin wallet to accept payments.';
+    case 'WALLET_STATE_UNKNOWN':
+      return 'Could not verify this store’s Bitcoin wallet right now. Please try again.';
     case 'NO_PAYMENT_METHOD_AVAILABLE':
       return 'Set up a Bitcoin payment method before creating a payment request.';
     case 'PAYMENT_METHOD_LOOKUP_FAILED':

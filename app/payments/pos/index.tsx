@@ -24,6 +24,7 @@ import { HachisuColors } from '@/constants/hachisu-colors';
 import { useActiveStore } from '@/contexts/active-store-context';
 import { usePosApps } from '@/hooks/use-pos-apps';
 import { createPosApp } from '@/lib/btcpay/pos-apps';
+import { isOnchainReadyForPayments } from '@/types/merchant-store';
 
 export default function PointOfSaleScreen() {
   const router = useRouter();
@@ -41,8 +42,14 @@ export default function PointOfSaleScreen() {
     }, [refetch]),
   );
 
+  // Cached, UX-only wallet readiness. The server independently enforces this
+  // (WALLET_NOT_CONNECTED), so a stale cache can never actually create a POS
+  // surface — this only decides whether to show the form or the connect CTA.
+  const walletReady = isOnchainReadyForPayments(activeStore);
+
   const trimmedName = appName.trim();
-  const canCreate = trimmedName.length > 0 && !!activeMerchantStoreId && !submitting;
+  const canCreate =
+    trimmedName.length > 0 && !!activeMerchantStoreId && walletReady && !submitting;
 
   async function handleCreate() {
     if (!canCreate || !activeMerchantStoreId) return;
@@ -106,38 +113,56 @@ export default function PointOfSaleScreen() {
             </View>
           ) : null}
 
-          {/* Create a new POS app inline. */}
-          <View style={styles.createBlock}>
-            <InvoiceFormField
-              label="App Name"
-              required
-              value={appName}
-              onChangeText={setAppName}
-              placeholder="Example: Atlanta Pop-Up"
-              returnKeyType="done"
-              editable={!submitting}
-              onSubmitEditing={handleCreate}
-            />
-            {!activeMerchantStoreId ? (
-              <Text style={styles.errorText}>Select a store first to create a POS app.</Text>
-            ) : null}
-            {createError ? <Text style={styles.errorText}>{createError}</Text> : null}
-
-            <View style={styles.createButton}>
-              {submitting ? (
-                <View style={styles.submittingButton}>
-                  <ActivityIndicator color={COLORS.background} />
-                  <Text style={styles.submittingLabel}>Creating…</Text>
-                </View>
-              ) : (
-                <PrimaryButton
-                  label="Create POS"
-                  onPress={handleCreate}
-                  disabled={!canCreate}
-                />
-              )}
+          {/* A POS app is a Bitcoin payment surface, so it requires a connected
+              on-chain wallet. When the active store has none, direct the merchant
+              to connect one instead of presenting a checkout that can't be paid. */}
+          {activeMerchantStoreId && !walletReady ? (
+            <View style={styles.walletCta}>
+              <MaterialIcons name="account-balance-wallet" size={22} color={COLORS.primaryText} />
+              <Text style={styles.walletCtaTitle}>Connect your Bitcoin wallet</Text>
+              <Text style={styles.walletCtaBody}>
+                Connect your Bitcoin wallet to accept payments before creating a point of
+                sale.
+              </Text>
+              <PrimaryButton
+                label="Connect wallet"
+                onPress={() => router.push('/account/btc-wallet-settings' as never)}
+              />
             </View>
-          </View>
+          ) : (
+            /* Create a new POS app inline. */
+            <View style={styles.createBlock}>
+              <InvoiceFormField
+                label="App Name"
+                required
+                value={appName}
+                onChangeText={setAppName}
+                placeholder="Example: Atlanta Pop-Up"
+                returnKeyType="done"
+                editable={!submitting}
+                onSubmitEditing={handleCreate}
+              />
+              {!activeMerchantStoreId ? (
+                <Text style={styles.errorText}>Select a store first to create a POS app.</Text>
+              ) : null}
+              {createError ? <Text style={styles.errorText}>{createError}</Text> : null}
+
+              <View style={styles.createButton}>
+                {submitting ? (
+                  <View style={styles.submittingButton}>
+                    <ActivityIndicator color={COLORS.background} />
+                    <Text style={styles.submittingLabel}>Creating…</Text>
+                  </View>
+                ) : (
+                  <PrimaryButton
+                    label="Create POS"
+                    onPress={handleCreate}
+                    disabled={!canCreate}
+                  />
+                )}
+              </View>
+            </View>
+          )}
 
           {/* Existing POS apps for this store. */}
           {loading && posApps.length === 0 ? (
@@ -228,6 +253,25 @@ const styles = StyleSheet.create({
   },
   createBlock: {
     marginTop: 18,
+  },
+  walletCta: {
+    marginTop: 18,
+    padding: 18,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: COLORS.secondaryText,
+    gap: 10,
+  },
+  walletCtaTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.primaryText,
+  },
+  walletCtaBody: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: COLORS.secondaryText,
+    marginBottom: 4,
   },
   errorText: {
     marginTop: 12,

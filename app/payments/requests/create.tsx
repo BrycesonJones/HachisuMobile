@@ -359,7 +359,8 @@ export default function CreatePaymentRequestScreen() {
               />
               <View style={styles.errorTextBlock}>
                 <Text style={styles.errorText}>{submitError}</Text>
-                {submitErrorCode === 'NO_PAYMENT_METHOD_AVAILABLE' ? (
+                {submitErrorCode === 'NO_PAYMENT_METHOD_AVAILABLE' ||
+                submitErrorCode === 'WALLET_NOT_CONNECTED' ? (
                   <Text style={styles.errorHint}>
                     BTCPay decides which payment methods a store can offer.
                     Connect a Bitcoin wallet

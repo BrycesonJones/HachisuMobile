@@ -56,6 +56,7 @@ import {
   validateExpiresInHours,
   validateTitle,
 } from '../_shared/payment-request-input.ts';
+import { assertStoreHasOnchainWallet } from '../_shared/wallet-guard.ts';
 import { logAuthorizationDenied } from '../_shared/security-log.ts';
 import { readJsonObjectBody } from '../_shared/request-body.ts';
 
@@ -85,6 +86,8 @@ type ResultCode =
   | 'INVALID_BUYER_EMAIL'
   | 'INVALID_EXPIRATION'
   | 'INVALID_CUSTOMER_DATA_OPTION'
+  | 'WALLET_NOT_CONNECTED'
+  | 'WALLET_STATE_UNKNOWN'
   | 'NO_PAYMENT_METHOD_AVAILABLE'
   | 'PAYMENT_METHOD_LOOKUP_FAILED'
   | 'BTCPAY_PAYMENT_REQUEST_CREATE_FAILED'
@@ -236,6 +239,17 @@ Deno.serve(async (req) => {
   const logPrefix =
     `[payment-request:create] user=${user.id} store=${store.id} btcpayStore=${btcpayStoreId} ` +
     `key=${idempotencyKey}`;
+
+  // --- 3a. WALLET INTEGRITY (shared invariant) ----------------------------
+  //
+  // A payment request generates invoices when a customer pays, so it is a
+  // Bitcoin payment surface. Enforce the same authoritative wallet floor the POS
+  // and Pay Button surfaces use, before claiming idempotency or calling BTCPay.
+  const walletGuard = await assertStoreHasOnchainWallet(config, store.btcpay_store_id);
+  if (!walletGuard.ok) {
+    console.log(`${logPrefix} result=${walletGuard.code} reason=${walletGuard.reason}`);
+    return errorResponse(walletGuard.code, walletGuard.error, walletGuard.status);
+  }
 
   // --- 4. Idempotency: return the prior request, or claim this attempt -----
   const existing = await readClaim(admin, store.id, idempotencyKey);
