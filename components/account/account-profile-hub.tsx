@@ -16,6 +16,8 @@ import type { AccountType } from '@/types/user-profile';
 function resolveRoute(id: ProfileMenuItemId, accountType: AccountType | null): string {
   // TODO: replace stubs in app/account/* with real screens once they exist.
   switch (id) {
+    case 'feedback':
+      return '/account/feedback';
     case 'profile':
       return accountType === 'business'
         ? '/account/business-profile'

@@ -5,34 +5,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HachisuColors } from '@/constants/hachisu-colors';
 import type { ProfileDisplay } from '@/components/account/profile-display-utils';
+import {
+  buildMenuItems,
+  type ProfileMenuItem,
+  type ProfileMenuItemId,
+} from '@/components/account/profile-menu-items';
 import type { AccountType } from '@/types/user-profile';
 
-export type ProfileMenuItemId =
-  | 'profile'
-  | 'app-notifications'
-  | 'documents';
-
-interface ProfileMenuItem {
-  id: ProfileMenuItemId;
-  label: string;
-  icon: keyof typeof MaterialIcons.glyphMap;
-  tag?: string;
-}
-
-function buildMenuItems(
-  accountType: AccountType | null,
-): readonly ProfileMenuItem[] {
-  const profileItem: ProfileMenuItem =
-    accountType === 'business'
-      ? { id: 'profile', label: 'Business Profile', icon: 'person-outline' }
-      : { id: 'profile', label: 'Personal Profile', icon: 'person-outline' };
-
-  return [
-    profileItem,
-    { id: 'app-notifications', label: 'App Notifications', icon: 'notifications-none' },
-    { id: 'documents', label: 'Documents', icon: 'description' },
-  ];
-}
+export type { ProfileMenuItemId } from '@/components/account/profile-menu-items';
 
 interface ProfileMenuSheetProps {
   visible: boolean;
