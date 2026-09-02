@@ -7,6 +7,14 @@ interface PhoneNumberInputProps {
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
+  /**
+   * International calling code and flag shown beside the input. The defaults
+   * keep legacy call sites (the post-auth account phone editor) on their
+   * existing US presentation; country-aware screens pass the metadata for the
+   * user's selected country (see constants/supported-countries.ts).
+   */
+  callingCode?: string;
+  flag?: string;
 }
 
 export function PhoneNumberInput({
@@ -14,12 +22,14 @@ export function PhoneNumberInput({
   value,
   onChangeText,
   placeholder = '201-555-0123',
+  callingCode = '+1',
+  flag = '🇺🇸',
 }: PhoneNumberInputProps) {
   return (
     <View style={styles.container}>
       <Text style={styles.label}>{label}</Text>
       <View style={styles.inputRow}>
-        <Text style={styles.countryCode}>+1</Text>
+        <Text style={styles.countryCode}>{callingCode}</Text>
         <TextInput
           style={styles.input}
           value={value}
@@ -29,7 +39,7 @@ export function PhoneNumberInput({
           keyboardType="phone-pad"
           autoComplete="tel"
         />
-        <Text style={styles.flag}>🇺🇸</Text>
+        <Text style={styles.flag}>{flag}</Text>
       </View>
     </View>
   );

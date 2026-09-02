@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -7,59 +7,47 @@ import { AuthTitleBlock } from '@/components/auth/auth-title-block';
 import { CountrySelectorCard } from '@/components/auth/country-selector-card';
 import { PrimaryButton } from '@/components/auth/primary-button';
 import { ScreenContainer } from '@/components/auth/screen-container';
+import { LegalAgreementFooter } from '@/components/legal/legal-agreement-footer';
 import { COLORS } from '@/constants/colors';
 import {
   PERSONAL_ONBOARDING_PROGRESS,
   PERSONAL_ONBOARDING_STEP_COUNT,
 } from '@/constants/personal-onboarding-progress';
-import { upsertUserProfile } from '@/lib/auth/auth-service';
+import { isSupportedCountry, SUPPORTED_COUNTRIES } from '@/constants/supported-countries';
+import { LEGAL_AGREED } from '@/lib/auth/personal-signup';
 
-function LegalConsentText() {
-  function handleLinkPress(_label: string) {
-    // TODO: open legal document URLs (E-Sign Consent, Terms of Service, Privacy Notice)
-  }
-
-  return (
-    <Text style={styles.legalText}>
-      By tapping &ldquo;Agree,&rdquo; you agree to the{' '}
-      <Text style={styles.link} onPress={() => handleLinkPress('E-Sign Consent')}>
-        E-Sign Consent
-      </Text>
-      ,{' '}
-      <Text style={styles.link} onPress={() => handleLinkPress('Terms of Service')}>
-        Terms of Service
-      </Text>
-      , and{' '}
-      <Text style={styles.link} onPress={() => handleLinkPress('Privacy Notice')}>
-        Privacy Notice
-      </Text>
-      .
-    </Text>
-  );
-}
-
+/**
+ * Pre-auth screen: personal sign-up verifies the email LAST, so there is no
+ * Supabase session here and nothing may be persisted yet. The selected
+ * country — and the fact that the user tapped Agree under the legal
+ * disclosure — ride the flow as route params and are committed by
+ * finalizePersonalSignup after the OTP succeeds (the authoritative versioned
+ * consent record is written server-side by completeOnboarding at that point).
+ *
+ * The launch is limited to SUPPORTED_COUNTRIES: the selector offers exactly
+ * that list, stores the full canonical name, and Agree stays disabled until
+ * one is chosen.
+ */
 export default function PersonalCountryScreen() {
   const router = useRouter();
-  // TODO: replace with a real country picker; persisted value is the display string for now.
-  const [country] = useState('United States');
-  const [isSaving, setIsSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Answers carried from earlier pre-auth steps (username), forwarded onward.
+  // A carried country (e.g. re-entering this screen via a stale link) is only
+  // adopted when it is one of the launch countries.
+  const carriedParams = useLocalSearchParams<{
+    flow?: string;
+    username?: string;
+    country?: string;
+  }>();
+  const [country, setCountry] = useState<string | null>(() =>
+    isSupportedCountry(carriedParams.country) ? carriedParams.country : null,
+  );
 
-  async function handleAgree() {
-    if (isSaving) return;
-    setIsSaving(true);
-    setErrorMessage(null);
-
-    const { error } = await upsertUserProfile({ country });
-
-    if (error) {
-      setIsSaving(false);
-      setErrorMessage(error.message);
-      return;
-    }
-
-    setIsSaving(false);
-    router.push('/auth/personal-phone');
+  function handleAgree() {
+    if (!isSupportedCountry(country)) return;
+    router.push({
+      pathname: '/auth/personal-phone',
+      params: { ...carriedParams, country, legal: LEGAL_AGREED },
+    });
   }
 
   return (
@@ -71,22 +59,25 @@ export default function PersonalCountryScreen() {
       />
 
       <AuthTitleBlock
-        title="Where are you from?"
-        subtitle="Select the country where you live"
+        title="Where do you live?"
+        subtitle="Select your country of residence"
         centered
       />
 
-      <CountrySelectorCard label="Select your country" value={country} />
+      <CountrySelectorCard
+        label="Select your country"
+        value={country}
+        options={SUPPORTED_COUNTRIES}
+        onSelect={setCountry}
+      />
 
-      {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+      <Text style={styles.availabilityNote}>
+        Hachisu is currently available in select countries.
+      </Text>
 
       <View style={styles.footer}>
-        <LegalConsentText />
-        <PrimaryButton
-          label={isSaving ? 'Saving…' : 'Agree'}
-          onPress={handleAgree}
-          disabled={isSaving}
-        />
+        <LegalAgreementFooter actionLabel="Agree" />
+        <PrimaryButton label="Agree" onPress={handleAgree} disabled={!country} />
       </View>
     </ScreenContainer>
   );
@@ -96,25 +87,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  availabilityNote: {
+    marginTop: 12,
+    fontSize: 13,
+    lineHeight: 18,
+    color: COLORS.mutedText,
+    textAlign: 'center',
+  },
   footer: {
     marginTop: 'auto',
     gap: 20,
     paddingBottom: 16,
-  },
-  legalText: {
-    fontSize: 13,
-    lineHeight: 20,
-    color: COLORS.secondaryText,
-    textAlign: 'center',
-  },
-  link: {
-    textDecorationLine: 'underline',
-    color: COLORS.secondaryText,
-  },
-  errorText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: COLORS.orange,
-    textAlign: 'center',
   },
 });

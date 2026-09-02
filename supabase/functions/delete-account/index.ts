@@ -87,6 +87,8 @@ Deno.serve(async (req) => {
   }
 
   const authHeader = req.headers.get('Authorization') ?? '';
+  // Milestone trail (A09-safe: booleans, ids, counts — never tokens/bodies).
+  console.log(`[delete-account] request received authHeaderPresent=${authHeader.startsWith('Bearer ')}`);
   if (!authHeader.startsWith('Bearer ')) {
     return jsonResponse({ ok: false, error: 'Missing or invalid Authorization header.' }, 401);
   }
@@ -97,6 +99,11 @@ Deno.serve(async (req) => {
     data: { user },
     error: userError,
   } = await userScoped.auth.getUser();
+  console.log(
+    `[delete-account] jwt verification verified=${!userError && !!user}` +
+      (userError ? ` status=${(userError as { status?: number }).status ?? 'n/a'}` : '') +
+      (user ? ` user=${user.id}` : ''),
+  );
   if (userError || !user) {
     return jsonResponse({ ok: false, error: 'Not authenticated.' }, 401);
   }
@@ -150,6 +157,9 @@ Deno.serve(async (req) => {
     (storeRows ?? []) as { btcpay_store_id: string | null }[],
     profileRow?.btcpay_store_id,
     attestedStoreIds,
+  );
+  console.log(
+    `[delete-account] user=${user.id} lookups ok storeCount=${storeIds.length} btcpayCleanup=${storeIds.length > 0 ? 'start' : 'skipped'}`,
   );
 
   // 2. Permanently delete each BTCPay store (idempotent: 404 = already gone).
@@ -253,7 +263,14 @@ Deno.serve(async (req) => {
   }
 
   // 3. Hard-delete the Supabase auth user; all app tables cascade.
+  console.log(`[delete-account] user=${user.id} btcpayCleanup=done deleteUser=start`);
   const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
+  console.log(
+    `[delete-account] user=${user.id} deleteUser result ok=${!deleteError}` +
+      (deleteError
+        ? ` status=${deleteError.status ?? 'n/a'} code=${(deleteError as { code?: string }).code ?? 'n/a'}`
+        : ''),
+  );
   if (deleteError) {
     // A concurrent duplicate submission can win the race between getUser and
     // deleteUser. The account is gone either way, which is this call's goal.
@@ -273,6 +290,10 @@ Deno.serve(async (req) => {
   // checked — a verification that cannot run has not verified anything, and
   // must not be read as a clean result. See confirmAccountDeleted().
   const readback = confirmAccountDeleted(await admin.auth.admin.getUserById(user.id));
+  console.log(
+    `[delete-account] user=${user.id} read-back verdict confirmed=${readback.confirmed}` +
+      (readback.confirmed ? '' : ` reason=${readback.reason}`),
+  );
   if (!readback.confirmed) {
     console.error(`[delete-account] user=${user.id} deletion unconfirmed: ${readback.reason}`);
     return jsonResponse(
@@ -281,6 +302,7 @@ Deno.serve(async (req) => {
     );
   }
 
+  console.log(`[delete-account] user=${user.id} completed ok=true`);
   return jsonResponse({ ok: true });
 });
 

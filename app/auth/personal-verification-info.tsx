@@ -17,18 +17,19 @@ import { PrimaryButton } from '@/components/auth/primary-button';
 import { LegalAgreementFooter } from '@/components/legal/legal-agreement-footer';
 import { COLORS } from '@/constants/colors';
 import { useAuth } from '@/contexts/auth-context';
-import { completeOnboarding } from '@/lib/auth/auth-service';
+import { finalizePersonalSignup } from '@/lib/auth/auth-service';
+import { HOME_ROUTE, resolvePostAuthRoute } from '@/lib/auth/onboarding-routing';
 import {
   formatDateOfBirthInput,
-  formatSsnLast4Input,
   isNonEmpty,
   isValidDateOfBirth,
-  isValidSsnLast4,
   isValidZip,
 } from '@/utils/auth-validation';
 
-// Note: DOB and SSN are collected for KYC UX parity but are intentionally NOT persisted to
-// user_profiles. They will be sent to a KYC provider in a future iteration.
+// Note: DOB is collected for KYC UX parity but is intentionally NOT persisted to
+// user_profiles. It will be sent to a KYC provider in a future iteration.
+// SSN is deliberately not collected anywhere in onboarding (see the Privacy
+// Notice: "We do not collect Social Security numbers").
 
 function buildPersonalAddress({
   streetAddress,
@@ -53,9 +54,16 @@ function buildPersonalAddress({
 export default function PersonalVerificationInfoScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { refreshProfile } = useAuth();
-  const { phone: phoneParam } = useLocalSearchParams<{ phone?: string }>();
-  const phone = typeof phoneParam === 'string' ? phoneParam.trim() : '';
+  const { isAuthenticated, refreshProfile } = useAuth();
+  // Pre-auth answers carried from earlier steps (username, country, legal
+  // agreement, phone), forwarded into the email/OTP finalization.
+  const carriedParams = useLocalSearchParams<{
+    flow?: string;
+    username?: string;
+    country?: string;
+    legal?: string;
+    phone?: string;
+  }>();
   const [fullName, setFullName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [streetAddress, setStreetAddress] = useState('');
@@ -63,7 +71,6 @@ export default function PersonalVerificationInfoScreen() {
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [zipCode, setZipCode] = useState('');
-  const [ssnLast4, setSsnLast4] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -74,23 +81,16 @@ export default function PersonalVerificationInfoScreen() {
       isNonEmpty(streetAddress) &&
       isNonEmpty(city) &&
       isNonEmpty(state) &&
-      isValidZip(zipCode) &&
-      isValidSsnLast4(ssnLast4),
-    [fullName, dateOfBirth, streetAddress, city, state, zipCode, ssnLast4],
+      isValidZip(zipCode),
+    [fullName, dateOfBirth, streetAddress, city, state, zipCode],
   );
 
   function handleDateOfBirthChange(value: string) {
     setDateOfBirth(formatDateOfBirthInput(value));
   }
 
-  function handleSsnChange(value: string) {
-    setSsnLast4(formatSsnLast4Input(value));
-  }
-
   async function handleContinue() {
     if (!isFormValid || isSaving) return;
-    setIsSaving(true);
-    setErrorMessage(null);
 
     const personalAddress = buildPersonalAddress({
       streetAddress,
@@ -100,22 +100,44 @@ export default function PersonalVerificationInfoScreen() {
       zipCode,
     });
 
-    const { error } = await completeOnboarding({
-      account_type: 'personal',
+    const answers = {
+      ...carriedParams,
       full_name: fullName.trim(),
       personal_address: personalAddress,
-      phone: phone || null,
-    });
+    };
 
-    if (error) {
+    // Fresh signup: no session exists yet, so nothing can be persisted here.
+    // Carry the answers into the email/OTP step; verifying the code is what
+    // authenticates and commits them (finalizePersonalSignup).
+    if (!isAuthenticated) {
+      router.push({ pathname: '/auth/personal-email', params: answers });
+      return;
+    }
+
+    // Resume: a session already exists (e.g. a previous finalization failed
+    // after the OTP, or an authenticated user re-entered onboarding), so
+    // finalize directly instead of demanding a second email verification.
+    setIsSaving(true);
+    setErrorMessage(null);
+
+    const result = await finalizePersonalSignup(null, answers);
+
+    if (result.status === 'error') {
       setIsSaving(false);
-      setErrorMessage(error.message);
+      setErrorMessage(result.error.message);
       return;
     }
 
     await refreshProfile();
     setIsSaving(false);
-    router.replace('/(tabs)/home');
+
+    if (result.status === 'completed') {
+      router.replace(HOME_ROUTE);
+      return;
+    }
+
+    // Already-completed account, or answers missing: route by profile state.
+    router.replace(resolvePostAuthRoute(result.profile));
   }
 
   return (
@@ -204,18 +226,6 @@ export default function PersonalVerificationInfoScreen() {
                 keyboardType="number-pad"
                 maxLength={10}
               />
-              <View>
-                <LabeledTextInput
-                  label="Last 4 digits of SSN"
-                  value={ssnLast4}
-                  onChangeText={handleSsnChange}
-                  placeholder="1234"
-                  keyboardType="number-pad"
-                  secureTextEntry
-                  maxLength={4}
-                />
-                <Text style={styles.fieldHelper}>Used only for identity verification.</Text>
-              </View>
             </View>
 
             <Text style={styles.securityNote}>
@@ -275,12 +285,6 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: 12,
-  },
-  fieldHelper: {
-    fontSize: 13,
-    color: COLORS.mutedText,
-    marginTop: 8,
-    paddingHorizontal: 4,
   },
   securityNote: {
     fontSize: 13,

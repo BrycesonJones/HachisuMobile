@@ -100,6 +100,16 @@ export type DeletionReadback =
  * inverts: the inability to verify becomes the verification. A verification
  * step must fail CLOSED, so an error is 'unverifiable', not success.
  *
+ * With ONE deliberate carve-out (live incident 2026-09-02): getUserById on a
+ * user that IS deleted answers `{ data: { user: null }, error:
+ * AuthApiError(404 user_not_found) }` — supabase-js reports "no such user" as
+ * an error. That answer is the positive proof of absence this read-back
+ * exists to obtain (the same already-gone signal the deleteUser step
+ * accepts), so it confirms; treating it as unverifiable reported every
+ * successful deletion as "Could not close your account" and stranded the
+ * device holding a session for a deleted identity. Any other error — or a
+ * contradictory not-found that still carries a user — remains unverifiable.
+ *
  * Accepts the `UserResponse` shape structurally so it can be exercised without
  * an Admin API client.
  */
@@ -107,7 +117,15 @@ export function confirmAccountDeleted(readback: {
   data?: { user?: unknown } | null;
   error?: unknown;
 }): DeletionReadback {
-  if (readback.error) return { confirmed: false, reason: 'unverifiable' };
   if (readback.data?.user) return { confirmed: false, reason: 'still_exists' };
+  if (isUserNotFoundError(readback.error)) return { confirmed: true };
+  if (readback.error) return { confirmed: false, reason: 'unverifiable' };
   return { confirmed: true };
+}
+
+/** True only for the Admin API's unambiguous "no such user" answer. */
+function isUserNotFoundError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const { status, code } = error as { status?: unknown; code?: unknown };
+  return status === 404 || code === 'user_not_found';
 }

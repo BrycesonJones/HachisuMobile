@@ -10,6 +10,15 @@ import {
   updateDevProfile,
   type DevProfileUpdates,
 } from '@/lib/auth/dev-session';
+import {
+  decidePersonalFinalization,
+  type PersonalSignupParams,
+} from '@/lib/auth/personal-signup';
+import { classifyCloseAccountFailure } from '@/lib/auth/account-delete-errors';
+import {
+  classifyAuthIdentityCheck,
+  type AuthIdentityVerdict,
+} from '@/lib/auth/session-validation';
 import { readFunctionError } from '@/lib/btcpay/function-error';
 import { createMerchantStore } from '@/lib/btcpay/stores';
 import { recordCurrentLegalAcceptance } from '@/lib/legal/consent';
@@ -141,30 +150,96 @@ export async function verifyEmailOtp(
   return { error: null };
 }
 
+// Temporary structured trail for the account-deletion path (debug builds
+// only). Milestones only — never tokens, secrets, or raw backend bodies.
+function deleteLog(label: string, payload: Record<string, unknown> = {}) {
+  if (!isProfileDebugEnabled) return;
+  console.log(`[account-delete] ${label}`, payload);
+}
+
+export interface DeleteAccountResult {
+  error: AuthError | null;
+  /** True when the failure was a dead/stale session, not a failed deletion. */
+  sessionExpired?: boolean;
+}
+
 /**
  * Permanently deletes the authenticated user's account via the delete-account
  * Edge Function. The server derives the target account from the verified JWT;
  * no user id is (or can be) supplied by the client. On error the account and
  * the local session are both still intact — the caller must NOT clear state.
+ * All failure text is classified before display (classifyCloseAccountFailure):
+ * auth failures become the session-expired copy, our server's own user-facing
+ * copy passes through, anything else falls back to the generic retry copy.
  */
-export async function deleteAccount(): Promise<{ error: AuthError | null }> {
+export async function deleteAccount(): Promise<DeleteAccountResult> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  deleteLog('invoking delete-account', {
+    sessionPresent: session != null,
+    accessTokenPresent: typeof session?.access_token === 'string',
+    localUserId: session?.user?.id,
+  });
+
   const { data, error } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>(
     'delete-account',
     { method: 'POST', body: {} },
   );
 
-  authLog('deleteAccount:result', { ok: !error && data?.ok === true, message: error?.message });
-
   if (error) {
+    const status = (error as { context?: { status?: number } })?.context?.status;
     const detail = await readFunctionError(error);
-    return { error: { message: detail ?? 'Could not close your account. Please try again.' } };
+    const failure = classifyCloseAccountFailure(status, detail);
+    deleteLog('failure', {
+      stage: 'invoke',
+      status,
+      sessionExpired: failure.sessionExpired,
+      // Server-redacted copy only; invoke errors never carry raw bodies here.
+      detail,
+    });
+    return { error: { message: failure.message }, sessionExpired: failure.sessionExpired };
   }
+
+  deleteLog('response received', { ok: data?.ok === true });
+
   if (data?.ok !== true) {
-    return {
-      error: { message: data?.error ?? 'Could not close your account. Please try again.' },
-    };
+    const failure = classifyCloseAccountFailure(undefined, data?.error);
+    deleteLog('failure', { stage: 'server-result', sessionExpired: failure.sessionExpired });
+    return { error: { message: failure.message }, sessionExpired: failure.sessionExpired };
   }
+
+  deleteLog('backend confirmed deletion');
   return { error: null };
+}
+
+/**
+ * Server-authoritative check that the restored session's identity still
+ * exists. supabase.auth.getUser() validates the JWT against the auth server
+ * (refreshing if needed), so a deleted account answers with an authoritative
+ * not-found/invalid-session error even while its cached access token is still
+ * cryptographically valid. The verdict table lives in
+ * lib/auth/session-validation.ts; callers must treat 'indeterminate' (the
+ * check could not run) as keep-the-session, never as invalid.
+ */
+export async function verifyAuthIdentity(): Promise<AuthIdentityVerdict> {
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    const verdict = classifyAuthIdentityCheck({
+      user: data?.user ?? null,
+      error: error ?? null,
+    });
+    authLog('verifyAuthIdentity', { verdict, status: error?.status, code: error?.code });
+    return verdict;
+  } catch (err) {
+    const shaped =
+      err instanceof Error
+        ? { name: err.name, message: err.message }
+        : { name: 'UnknownError', message: String(err) };
+    const verdict = classifyAuthIdentityCheck({ user: null, error: shaped });
+    authLog('verifyAuthIdentity:threw', { verdict, name: shaped.name });
+    return verdict;
+  }
 }
 
 export async function signOut(): Promise<{ error: AuthError | null }> {
@@ -468,6 +543,89 @@ export async function signInWithGoogleOAuth(): Promise<{
   // the custom-scheme redirect is interceptable, so honouring tokens carried
   // there would be a session fixation/replay vector (A07 CWE-294, CWE-384).
   return { error: { message: 'Google sign-in did not return a session.' } };
+}
+
+export type { PersonalSignupParams };
+
+/**
+ * Supabase's session errors ("Auth session missing!", "No authenticated
+ * user") are implementation details and must never reach the UI. If the
+ * session vanished between the OTP and the commit (revoked, expired,
+ * clock skew), tell the user what to do instead.
+ */
+function friendlySignupError(error: AuthError): AuthError {
+  const raw = error.message.toLowerCase();
+  if (raw.includes('auth session missing') || raw.includes('no authenticated user')) {
+    return {
+      message: 'Your sign-in session was interrupted. Please request a new code and try again.',
+    };
+  }
+  return error;
+}
+
+export type FinalizePersonalSignupResult =
+  | { status: 'completed' }
+  /** Not finalized (already-complete account, or missing answers): route by profile. */
+  | { status: 'resume'; profile: UserProfile | null }
+  | { status: 'error'; error: AuthError };
+
+/**
+ * The single finalization point for personal sign-up, called after the email
+ * OTP succeeds. Requires an authenticated session — every screen before the
+ * OTP step is pre-auth and only carries answers forward as route params (see
+ * lib/auth/personal-signup.ts).
+ *
+ * Ensures the profile row exists, protects already-completed accounts, then
+ * commits the carried answers (username, country, phone, full name, address)
+ * through the existing completeOnboarding lifecycle: legal acceptance
+ * recorded first, profile upsert + onboarding_completed, first-store
+ * provisioning. Idempotent end to end — a retry after success resumes by
+ * profile state instead of rewriting it, and the consent write ignores
+ * duplicates.
+ */
+export async function finalizePersonalSignup(
+  email: string | null,
+  params: PersonalSignupParams,
+): Promise<FinalizePersonalSignupResult> {
+  let resolvedEmail = nonEmpty(email ?? undefined);
+
+  if (!resolvedEmail && !isDevAuthActive()) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    resolvedEmail = nonEmpty(user?.email);
+  }
+
+  if (!resolvedEmail) {
+    return { status: 'error', error: { message: 'No email on the authenticated account.' } };
+  }
+
+  const { profile, error: profileError } = await ensureUserProfile({
+    email: resolvedEmail,
+    accountType: 'personal',
+    onboardingStatus: 'email_verified',
+  });
+
+  if (profileError) {
+    return { status: 'error', error: friendlySignupError(profileError) };
+  }
+
+  const decision = decidePersonalFinalization(profile, params);
+
+  if (decision.kind !== 'complete') {
+    return { status: 'resume', profile };
+  }
+
+  const { error } = await completeOnboarding({
+    account_type: 'personal',
+    ...decision.answers,
+  });
+
+  if (error) {
+    return { status: 'error', error: friendlySignupError(error) };
+  }
+
+  return { status: 'completed' };
 }
 
 /** The pre-auth business signup answers carried through the flow as route params. */

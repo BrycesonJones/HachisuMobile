@@ -24,12 +24,19 @@ const PERSONAL_VERIFICATION_ROWS = [
 
 export default function VerifyPersonalScreen() {
   const router = useRouter();
-  const { phone } = useLocalSearchParams<{ phone?: string }>();
+  // Pre-auth answers carried from earlier steps, forwarded onward untouched.
+  const carriedParams = useLocalSearchParams<{
+    flow?: string;
+    username?: string;
+    country?: string;
+    legal?: string;
+    phone?: string;
+  }>();
 
   function handleLetsGo() {
     router.push({
       pathname: '/auth/personal-verification-info',
-      params: typeof phone === 'string' && phone.length > 0 ? { phone } : undefined,
+      params: carriedParams,
     });
   }
 

@@ -6,7 +6,9 @@ import {
   deleteAccount as authDeleteAccount,
   fetchUserProfile,
   signOut as authSignOut,
+  verifyAuthIdentity,
 } from '@/lib/auth/auth-service';
+import { shouldPurgeRestoredSession } from '@/lib/auth/session-validation';
 import { isProfileDebugEnabled } from '@/lib/auth/config';
 import {
   activateDevAuth,
@@ -27,11 +29,14 @@ interface AuthContextValue {
   signOut: () => Promise<void>;
   /**
    * Permanently deletes the account server-side, then clears every piece of
-   * local session/user state. On error the session is left fully intact so the
-   * user can retry; local state is only discarded after the server confirms
-   * the deletion.
+   * local session/user state. On a deletion error the session is left fully
+   * intact so the user can retry; local state is only discarded after the
+   * server confirms the deletion — or when the session itself is
+   * authoritatively dead (`sessionExpired`), in which case the stale session
+   * is purged (nothing destructive was attempted with it) and the caller
+   * should return the user to the public landing screen.
    */
-  closeAccount: () => Promise<{ error: string | null }>;
+  closeAccount: () => Promise<{ error: string | null; sessionExpired?: boolean }>;
   devSignIn: (
     email: string,
     accountType: AccountType,
@@ -52,12 +57,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isDevSession = devSession != null;
   const isAuthenticated = session != null;
 
-  const loadProfile = useCallback(async (userId: string) => {
+  const loadProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
     try {
       const nextProfile = await fetchUserProfile(userId);
       setProfile(nextProfile);
+      return nextProfile;
     } catch {
       setProfile(null);
+      return null;
     }
   }, []);
 
@@ -125,9 +132,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSupabaseSession(initialSession);
 
       if (initialSession?.user.id) {
-        await loadProfile(initialSession.user.id);
+        const restoredProfile = await loadProfile(initialSession.user.id);
+
+        // getSession() only reads the locally persisted session — it proves
+        // nothing about the server. With no profile row this session is
+        // ambiguous: a legitimate signup moments before finalization creates
+        // the row, or a ghost left behind by account deletion (the client can
+        // miss the local sign-out if it is killed right after the backend
+        // deletes the identity). Ask the auth server which one it is; only an
+        // authoritative "this identity/session no longer exists" purges —
+        // a check that cannot run (network, 5xx) keeps the session.
+        if (!restoredProfile) {
+          const verdict = await verifyAuthIdentity();
+          if (shouldPurgeRestoredSession(false, verdict)) {
+            try {
+              await supabase.auth.signOut({ scope: 'local' });
+            } catch {
+              // Ignored: the storage purge below is the guarantee.
+            }
+            await clearLocalAccountData();
+            if (!isMounted) return;
+            setSupabaseSession(null);
+            setProfile(null);
+            setIsLoading(false);
+            return;
+          }
+        }
       }
 
+      if (!isMounted) return;
       setIsLoading(false);
     }
 
@@ -135,8 +168,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
       if (getDevSession()) {
+        return;
+      }
+
+      // initSession already restored this same persisted session and loaded
+      // its profile; re-processing the INITIAL_SESSION event only duplicates
+      // the fetch (and could resurrect a session initSession just purged).
+      if (event === 'INITIAL_SESSION') {
         return;
       }
 
@@ -169,7 +209,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(null);
   }, [isDevSession]);
 
-  const closeAccount = useCallback(async (): Promise<{ error: string | null }> => {
+  const closeAccount = useCallback(async (): Promise<{
+    error: string | null;
+    sessionExpired?: boolean;
+  }> => {
     if (isDevSession) {
       // Dev bypass has no real Supabase account: simulate by tearing down the
       // in-memory dev session, dev stores, and any persisted local data.
@@ -181,8 +224,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { error: null };
     }
 
-    const { error } = await authDeleteAccount();
+    // Pre-flight: confirm the session's identity still exists server-side
+    // before attempting a destructive call with it. A stale session (e.g. the
+    // account was already deleted by a previous attempt) gets purged and a
+    // truthful message — never the raw "Not authenticated." backend text.
+    const verdict = await verifyAuthIdentity();
+    if (verdict === 'invalid') {
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch {
+        // Ignored: the storage purge below is the guarantee.
+      }
+      await clearLocalAccountData();
+      setSupabaseSession(null);
+      setProfile(null);
+      return {
+        error: 'Your session has expired. Please sign in again.',
+        sessionExpired: true,
+      };
+    }
+
+    const { error, sessionExpired } = await authDeleteAccount();
     if (error) {
+      if (sessionExpired) {
+        // The server rejected the session itself; same purge as above.
+        try {
+          await supabase.auth.signOut({ scope: 'local' });
+        } catch {
+          // Ignored: the storage purge below is the guarantee.
+        }
+        await clearLocalAccountData();
+        setSupabaseSession(null);
+        setProfile(null);
+        return { error: error.message, sessionExpired: true };
+      }
       // The account was NOT deleted — keep the session and all local state.
       return { error: error.message };
     }

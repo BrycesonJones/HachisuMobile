@@ -36,12 +36,3 @@ export function isValidZip(zip: string): boolean {
   const digits = zip.replace(/\D/g, '');
   return digits.length >= 5;
 }
-
-export function isValidSsnLast4(ssn: string): boolean {
-  const digits = ssn.replace(/\D/g, '');
-  return digits.length === 4;
-}
-
-export function formatSsnLast4Input(value: string): string {
-  return value.replace(/\D/g, '').slice(0, 4);
-}

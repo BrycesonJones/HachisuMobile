@@ -24,11 +24,19 @@ export function useCloseAccount() {
     inFlightRef.current = true;
     setIsClosingAccount(true);
 
-    const { error } = await closeAccount();
+    const { error, sessionExpired } = await closeAccount();
 
     if (error) {
       inFlightRef.current = false;
       setIsClosingAccount(false);
+      if (sessionExpired) {
+        // The session is dead (already purged by closeAccount) — nothing to
+        // retry here. Tell the user, then leave the authenticated UI.
+        Alert.alert('Session expired', error, [
+          { text: 'OK', onPress: () => router.replace('/') },
+        ]);
+        return;
+      }
       Alert.alert('Could not close account', error);
       return;
     }

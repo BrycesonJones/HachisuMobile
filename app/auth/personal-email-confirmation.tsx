@@ -7,26 +7,37 @@ import { BackButton } from '@/components/auth/back-button';
 import { OtpInputPlaceholder } from '@/components/auth/otp-input-placeholder';
 import { PrimaryButton } from '@/components/auth/primary-button';
 import { ScreenContainer } from '@/components/auth/screen-container';
+import { LegalAgreementFooter } from '@/components/legal/legal-agreement-footer';
 import { COLORS } from '@/constants/colors';
 import { useAuth } from '@/contexts/auth-context';
 import { isAuthDevBypassEnabled } from '@/lib/auth/config';
-import { ensureUserProfile, verifyEmailOtp } from '@/lib/auth/auth-service';
-import type { AccountType } from '@/types/user-profile';
+import { finalizePersonalSignup, verifyEmailOtp } from '@/lib/auth/auth-service';
+import { HOME_ROUTE, resolvePostAuthRoute } from '@/lib/auth/onboarding-routing';
+import { friendlyOtpErrorMessage } from '@/lib/auth/personal-signup';
 
 const CODE_LENGTH = 6;
 
 export default function PersonalEmailConfirmationScreen() {
   const router = useRouter();
-  const { devSignIn } = useAuth();
-  const { email, accountType } = useLocalSearchParams<{ email?: string; accountType?: string }>();
+  const { devSignIn, isAuthenticated, refreshProfile } = useAuth();
+  const params = useLocalSearchParams<{
+    email?: string;
+    accountType?: string;
+    username?: string;
+    country?: string;
+    legal?: string;
+    phone?: string;
+    full_name?: string;
+    personal_address?: string;
+  }>();
+  const { email } = params;
   const [code, setCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const displayEmail = typeof email === 'string' && email.length > 0 ? email : 'your email';
   const isCodeComplete = code.length === CODE_LENGTH;
-  const resolvedAccountType: AccountType =
-    accountType === 'business' ? 'business' : 'personal';
+  const hasEmail = typeof email === 'string' && email.length > 0;
 
   async function handleNext() {
     if (!isCodeComplete || isLoading || typeof email !== 'string') return;
@@ -34,14 +45,18 @@ export default function PersonalEmailConfirmationScreen() {
     setIsLoading(true);
     setErrorMessage(null);
 
+    // A previous attempt already verified this code and signed the user in but
+    // failed while committing their answers. The code is single-use, so retry
+    // the commit rather than the verification — which would now fail as expired.
+    if (isAuthenticated) {
+      await finishSignUp();
+      return;
+    }
+
     if (isAuthDevBypassEnabled) {
       console.warn(`[auth] Dev bypass: accepting code for ${email}`);
-      await devSignIn(email, resolvedAccountType);
-      setIsLoading(false);
-      router.replace({
-        pathname: '/auth/choose-username',
-        params: { flow: 'personal' },
-      });
+      await devSignIn(email, 'personal');
+      await finishSignUp();
       return;
     }
 
@@ -49,28 +64,75 @@ export default function PersonalEmailConfirmationScreen() {
 
     if (verifyError) {
       setIsLoading(false);
-      setErrorMessage(verifyError.message);
+      // Raw Supabase messages (expired/invalid token, rate limits, network
+      // failures) never reach the user — map them to actionable copy. Nothing
+      // has been finalized at this point: a failed code leaves onboarding and
+      // the carried answers fully intact for another attempt.
+      setErrorMessage(friendlyOtpErrorMessage(verifyError.message));
       return;
     }
 
-    const { error: profileError } = await ensureUserProfile({
-      email,
-      accountType: resolvedAccountType,
-      onboardingStatus: 'email_verified',
-    });
+    await finishSignUp();
+  }
 
-    if (profileError) {
+  /**
+   * Email verification is the last step of personal sign-up: commit the
+   * answers carried through the flow (username, country, legal agreement,
+   * phone, verification info) via the single idempotent finalization, then
+   * land on the dashboard.
+   */
+  async function finishSignUp() {
+    const result = await finalizePersonalSignup(
+      typeof email === 'string' ? email : null,
+      params,
+    );
+
+    if (result.status === 'error') {
       setIsLoading(false);
-      setErrorMessage(profileError.message);
+      setErrorMessage(result.error.message);
       return;
     }
 
+    await refreshProfile();
     setIsLoading(false);
 
-    router.replace({
-      pathname: '/auth/choose-username',
-      params: { flow: 'personal' },
-    });
+    if (result.status === 'completed') {
+      router.replace(HOME_ROUTE);
+      return;
+    }
+
+    // Already-completed account, or answers missing: route by profile state.
+    router.replace(resolvePostAuthRoute(result.profile));
+  }
+
+  // Reached without the email that requested the code (stale deep link,
+  // malformed state): there is nothing a code could be verified against, so
+  // recover by returning to the email step with the carried onboarding
+  // answers intact — never a dead-end or a raw error.
+  if (!hasEmail) {
+    const { email: _email, accountType: _accountType, ...onboardingParams } = params;
+    return (
+      <ScreenContainer style={styles.recoveryContainer}>
+        <View style={styles.header}>
+          <BackButton />
+        </View>
+
+        <AuthTitleBlock
+          title="Let’s try that again"
+          subtitle="We need your email address before we can send a confirmation code"
+          centered
+        />
+
+        <View style={styles.buttonArea}>
+          <PrimaryButton
+            label="Enter your email"
+            onPress={() =>
+              router.replace({ pathname: '/auth/personal-email', params: onboardingParams })
+            }
+          />
+        </View>
+      </ScreenContainer>
+    );
   }
 
   return (
@@ -111,6 +173,10 @@ export default function PersonalEmailConfirmationScreen() {
               disabled={!isCodeComplete || isLoading}
             />
           </View>
+
+          {/* Verifying the code finalizes signup, which records this
+              acceptance server-side before onboarding completes. */}
+          <LegalAgreementFooter actionLabel="Next" />
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenContainer>
@@ -143,5 +209,8 @@ const styles = StyleSheet.create({
   },
   buttonArea: {
     marginTop: 32,
+  },
+  recoveryContainer: {
+    flex: 1,
   },
 });

@@ -170,6 +170,67 @@ Deno.test('a read-back error outranks an absent user', () => {
   );
 });
 
+Deno.test('a user_not_found read-back IS the confirmation, not an inability to verify', () => {
+  // Live incident 2026-09-02 (personal account close): admin.getUserById on a
+  // just-deleted user answers { data: { user: null }, error: AuthApiError(404,
+  // user_not_found) } — supabase-js reports "no such user" as an ERROR.
+  // Treating every error as 'unverifiable' reported a completed deletion as
+  // "Could not close your account" while the account was verifiably gone,
+  // stranding the device with a session for a deleted identity. A
+  // 404/user_not_found answer from the read-back is the positive proof of
+  // absence this check exists to obtain — the same already-gone signal the
+  // deleteUser step itself accepts.
+  assertEquals(
+    confirmAccountDeleted({
+      data: { user: null },
+      error: {
+        name: 'AuthApiError',
+        message: 'User not found',
+        status: 404,
+        code: 'user_not_found',
+      },
+    }),
+    { confirmed: true },
+  );
+
+  // Either not-found signal alone suffices (mirrors the deleteUser check).
+  assertEquals(
+    confirmAccountDeleted({ data: { user: null }, error: { status: 404 } }),
+    { confirmed: true },
+  );
+  assertEquals(
+    confirmAccountDeleted({ data: { user: null }, error: { code: 'user_not_found' } }),
+    { confirmed: true },
+  );
+});
+
+Deno.test('a not-found error with a user still present stays unconfirmed', () => {
+  // Contradictory answer — fail closed, never confirm on confusion.
+  assertEquals(
+    confirmAccountDeleted({
+      data: { user: { id: 'u1' } },
+      error: { status: 404, code: 'user_not_found' },
+    }).confirmed,
+    false,
+  );
+});
+
+Deno.test('other read-back error statuses remain unverifiable', () => {
+  // The not-found carve-out must not widen: a 500/403/network failure still
+  // means nobody verified anything.
+  for (const error of [
+    { name: 'AuthApiError', message: 'service unavailable', status: 503 },
+    { name: 'AuthApiError', message: 'forbidden', status: 403 },
+    { status: 500, code: 'unexpected_failure' },
+    new Error('network'),
+  ]) {
+    assertEquals(confirmAccountDeleted({ data: { user: null }, error }), {
+      confirmed: false,
+      reason: 'unverifiable',
+    });
+  }
+});
+
 Deno.test('a read-back with no data at all does not confirm silently', () => {
   // A malformed/absent payload is not evidence of deletion either — but with no
   // error to go on it is still the "gone" branch, so pin it explicitly rather
