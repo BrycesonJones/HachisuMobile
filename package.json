@@ -9,7 +9,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test:app": "node --test lib/auth/oauth-pkce.test.ts lib/auth/oauth-callback.test.ts lib/auth/session-storage.test.ts lib/crypto/web-crypto.test.ts lib/wallet/derivation-handoff.test.ts",
+    "test:app": "node --test lib/auth/oauth-pkce.test.ts lib/auth/oauth-callback.test.ts lib/auth/session-storage.test.ts lib/crypto/web-crypto.test.ts lib/wallet/derivation-handoff.test.ts lib/payments/wallet-gate.test.ts",
     "check:config": "node ./scripts/check-client-config.mjs",
     "check:supplychain": "node ./scripts/check-supply-chain.mjs",
     "generate:legal": "node ./scripts/generate-legal-content.js && node ./scripts/generate-legal-pages.js",

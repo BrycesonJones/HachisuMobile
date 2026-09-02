@@ -43,7 +43,8 @@ import {
   type PayButtonOutput,
   setPayButton,
 } from '@/lib/btcpay/pay-button';
-import { isOnchainReadyForPayments } from '@/types/merchant-store';
+import { WalletRequiredCard } from '@/components/payments/wallet-required-card';
+import { isOnchainReadyForPayments } from '@/lib/payments/wallet-gate';
 
 const DESTRUCTIVE_COLOR = '#F87171';
 
@@ -392,22 +393,7 @@ export default function PayButtonScreen() {
               </Text>
             </Pressable>
           ) : !walletReady ? (
-            <View style={styles.walletCta}>
-              <MaterialIcons
-                name="account-balance-wallet"
-                size={22}
-                color={COLORS.primaryText}
-              />
-              <Text style={styles.walletCtaTitle}>Connect your Bitcoin wallet</Text>
-              <Text style={styles.walletCtaBody}>
-                Connect your Bitcoin wallet to accept payments before enabling the Pay
-                Button.
-              </Text>
-              <PrimaryButton
-                label="Connect wallet"
-                onPress={() => router.push('/account/btc-wallet-settings' as never)}
-              />
-            </View>
+            <WalletRequiredCard feature="pay-button" />
           ) : (
             <View style={styles.enableButton}>
               <PrimaryButton
@@ -868,25 +854,6 @@ const styles = StyleSheet.create({
   },
   enableButton: {
     marginTop: 16,
-  },
-  walletCta: {
-    marginTop: 16,
-    padding: 18,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: COLORS.secondaryText,
-    gap: 10,
-  },
-  walletCtaTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.primaryText,
-  },
-  walletCtaBody: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: COLORS.secondaryText,
-    marginBottom: 4,
   },
   errorCard: {
     flexDirection: 'row',

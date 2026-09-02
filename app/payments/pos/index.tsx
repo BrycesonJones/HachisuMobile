@@ -21,10 +21,11 @@ import { InvoiceFormField } from '@/components/payments/invoices/create/invoice-
 import { PosAppRow } from '@/components/payments/pos/pos-app-row';
 import { COLORS } from '@/constants/colors';
 import { HachisuColors } from '@/constants/hachisu-colors';
+import { WalletRequiredCard } from '@/components/payments/wallet-required-card';
 import { useActiveStore } from '@/contexts/active-store-context';
 import { usePosApps } from '@/hooks/use-pos-apps';
 import { createPosApp } from '@/lib/btcpay/pos-apps';
-import { isOnchainReadyForPayments } from '@/types/merchant-store';
+import { isOnchainReadyForPayments } from '@/lib/payments/wallet-gate';
 
 export default function PointOfSaleScreen() {
   const router = useRouter();
@@ -115,20 +116,10 @@ export default function PointOfSaleScreen() {
 
           {/* A POS app is a Bitcoin payment surface, so it requires a connected
               on-chain wallet. When the active store has none, direct the merchant
-              to connect one instead of presenting a checkout that can't be paid. */}
+              straight into the wallet-connection flow instead of presenting a
+              checkout that can't be paid. */}
           {activeMerchantStoreId && !walletReady ? (
-            <View style={styles.walletCta}>
-              <MaterialIcons name="account-balance-wallet" size={22} color={COLORS.primaryText} />
-              <Text style={styles.walletCtaTitle}>Connect your Bitcoin wallet</Text>
-              <Text style={styles.walletCtaBody}>
-                Connect your Bitcoin wallet to accept payments before creating a point of
-                sale.
-              </Text>
-              <PrimaryButton
-                label="Connect wallet"
-                onPress={() => router.push('/account/btc-wallet-settings' as never)}
-              />
-            </View>
+            <WalletRequiredCard feature="pos" />
           ) : (
             /* Create a new POS app inline. */
             <View style={styles.createBlock}>
@@ -253,25 +244,6 @@ const styles = StyleSheet.create({
   },
   createBlock: {
     marginTop: 18,
-  },
-  walletCta: {
-    marginTop: 18,
-    padding: 18,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: COLORS.secondaryText,
-    gap: 10,
-  },
-  walletCtaTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.primaryText,
-  },
-  walletCtaBody: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: COLORS.secondaryText,
-    marginBottom: 4,
   },
   errorText: {
     marginTop: 12,

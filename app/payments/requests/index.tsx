@@ -22,8 +22,10 @@ import {
   TIME_OPTIONS,
 } from '@/components/payments/requests/request-filters';
 import { RequestSearchInput } from '@/components/payments/requests/request-search-input';
+import { WalletRequiredCard } from '@/components/payments/wallet-required-card';
 import { COLORS } from '@/constants/colors';
 import { useActiveStore } from '@/contexts/active-store-context';
+import { isOnchainReadyForPayments } from '@/lib/payments/wallet-gate';
 
 const CREATE_REQUEST_ROUTE = '/payments/requests/create';
 
@@ -33,7 +35,13 @@ const DEV_SAMPLE_REQUESTS: readonly unknown[] = [];
 
 export default function PaymentRequestsScreen() {
   const router = useRouter();
-  const { activeStore } = useActiveStore();
+  const { activeStore, activeMerchantStoreId } = useActiveStore();
+
+  // Cached, UX-only wallet readiness. A store with no connected/enabled on-chain
+  // wallet shows the wallet-required state instead of the request-management UI.
+  // The server independently rejects walletless payment-request creation.
+  const walletReady = isOnchainReadyForPayments(activeStore);
+  const walletGated = activeMerchantStoreId != null && !walletReady;
 
   const [search, setSearch] = useState('');
   const [statusId, setStatusId] = useState(DEFAULT_STATUS_ID);
@@ -88,36 +96,42 @@ export default function PaymentRequestsScreen() {
           </View>
         ) : null}
 
-        <View style={styles.createButton}>
-          <PrimaryButton label="Create Request" onPress={goToCreate} />
-        </View>
+        {walletGated ? (
+          <WalletRequiredCard feature="requests" />
+        ) : (
+          <>
+            <View style={styles.createButton}>
+              <PrimaryButton label="Create Request" onPress={goToCreate} />
+            </View>
 
-        <RequestSearchInput value={search} onChangeText={setSearch} />
+            <RequestSearchInput value={search} onChangeText={setSearch} />
 
-        <View style={styles.filterRow}>
-          <View style={styles.filterItem}>
-            <InvoiceFilterButton
-              title="Status"
-              options={STATUS_OPTIONS}
-              selectedId={statusId}
-              onChange={setStatusId}
-            />
-          </View>
-          <View style={styles.filterItem}>
-            <InvoiceFilterButton
-              title="Time"
-              options={TIME_OPTIONS}
-              selectedId={timeId}
-              onChange={setTimeId}
-            />
-          </View>
-        </View>
+            <View style={styles.filterRow}>
+              <View style={styles.filterItem}>
+                <InvoiceFilterButton
+                  title="Status"
+                  options={STATUS_OPTIONS}
+                  selectedId={statusId}
+                  onChange={setStatusId}
+                />
+              </View>
+              <View style={styles.filterItem}>
+                <InvoiceFilterButton
+                  title="Time"
+                  options={TIME_OPTIONS}
+                  selectedId={timeId}
+                  onChange={setTimeId}
+                />
+              </View>
+            </View>
 
-        {isEmpty ? (
-          <View style={styles.emptyWrap}>
-            <RequestEmptyState filtered={isFiltered} onClearFilters={clearFilters} />
-          </View>
-        ) : null}
+            {isEmpty ? (
+              <View style={styles.emptyWrap}>
+                <RequestEmptyState filtered={isFiltered} onClearFilters={clearFilters} />
+              </View>
+            ) : null}
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

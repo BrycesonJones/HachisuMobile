@@ -1,5 +1,10 @@
 import type { Tables } from '@/types/supabase';
 
+// The wallet-readiness predicate lives in the framework-free payment gate module
+// (unit-tested under node --test) and is re-exported here so existing callers can
+// keep importing it from the store types. Single source of truth.
+export { isOnchainReadyForPayments } from '@/lib/payments/wallet-gate';
+
 export type MerchantStore = Tables<'merchant_stores'>;
 
 /** Aggregate view of a merchant's stores, used by the Wallet UI + profile menu. */
@@ -54,19 +59,6 @@ export function onchainStatusLabel(store: MerchantStore): string {
 /** True when the store's Bitcoin on-chain wallet is connected. */
 export function isOnchainConnected(store: MerchantStore): boolean {
   return store.onchain_status === 'connected';
-}
-
-/**
- * Cached, UX-only readiness of a store's Bitcoin on-chain wallet for accepting
- * payments: connected AND not explicitly disabled. Mirrors the server's
- * authoritative guard (assertStoreHasOnchainWallet) closely enough to drive
- * responsive gating — but the server remains the source of truth, since this
- * cached value can be stale or forged. Use it to decide what UI to show, never
- * as the security boundary.
- */
-export function isOnchainReadyForPayments(store: MerchantStore | null | undefined): boolean {
-  if (!store) return false;
-  return store.onchain_status === 'connected' && store.onchain_enabled !== false;
 }
 
 /** Wallet/payment-destination status label for a single store row. */

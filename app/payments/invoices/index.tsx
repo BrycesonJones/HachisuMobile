@@ -27,10 +27,12 @@ import {
 } from '@/components/payments/invoices/invoice-filters';
 import { InvoiceRow } from '@/components/payments/invoices/invoice-row';
 import { InvoiceSearchInput } from '@/components/payments/invoices/invoice-search-input';
+import { WalletRequiredCard } from '@/components/payments/wallet-required-card';
 import { COLORS } from '@/constants/colors';
 import { useActiveStore } from '@/contexts/active-store-context';
 import { useStoreInvoices } from '@/hooks/use-store-invoices';
 import type { InvoiceStatusFilterId } from '@/lib/btcpay/invoice-list';
+import { isOnchainReadyForPayments } from '@/lib/payments/wallet-gate';
 import type { ActivityItem } from '@/types/activity';
 
 const CREATE_INVOICE_ROUTE = '/payments/invoices/create';
@@ -49,6 +51,13 @@ export default function InvoicesScreen() {
   const router = useRouter();
   const { activeStore, activeMerchantStoreId } = useActiveStore();
 
+  // Cached, UX-only wallet readiness. When a store is selected but has no
+  // connected/enabled on-chain wallet, the whole invoice-management UI is
+  // replaced by the wallet-required state. The server independently rejects
+  // walletless invoice creation, so this is presentation only.
+  const walletReady = isOnchainReadyForPayments(activeStore);
+  const walletGated = activeMerchantStoreId != null && !walletReady;
+
   const [search, setSearch] = useState('');
   const [statusId, setStatusId] = useState<InvoiceStatusFilterId>(DEFAULT_STATUS_ID);
   const [timeId, setTimeId] = useState(DEFAULT_TIME_ID);
@@ -66,7 +75,7 @@ export default function InvoicesScreen() {
     error,
     refresh,
     loadMore,
-  } = useStoreInvoices(activeMerchantStoreId, {
+  } = useStoreInvoices(walletGated ? null : activeMerchantStoreId, {
     statusFilter: statusId,
     search,
     startDate,
@@ -124,7 +133,21 @@ export default function InvoicesScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <FlatList
+      {walletGated ? (
+        <View style={styles.scrollContent}>
+          <Text style={styles.title}>Invoices</Text>
+          {activeStore ? (
+            <View style={styles.storeRow}>
+              <MaterialIcons name="storefront" size={15} color={COLORS.secondaryText} />
+              <Text style={styles.storeName} numberOfLines={1}>
+                {activeStore.name}
+              </Text>
+            </View>
+          ) : null}
+          <WalletRequiredCard feature="invoices" />
+        </View>
+      ) : (
+        <FlatList
         data={items}
         keyExtractor={(invoice) => invoice.btcpayInvoiceId}
         renderItem={({ item }) => <InvoiceRow invoice={item} onPress={openInvoice} />}
@@ -199,7 +222,8 @@ export default function InvoicesScreen() {
             onLoadMore={loadMore}
           />
         }
-      />
+        />
+      )}
     </SafeAreaView>
   );
 }
