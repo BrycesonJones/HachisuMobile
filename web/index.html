@@ -489,13 +489,28 @@
     align-items: center;
   }
   .foot-copy { justify-self: start; }
-  .foot-utils {
+  .foot-center {
     justify-self: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .foot-utils {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 4px 16px;
   }
+  .foot-oss {
+    display: inline-flex; align-items: center;
+    min-height: 44px;
+    color: var(--faint); text-decoration: none;
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.16em; text-transform: uppercase;
+  }
+  .foot-oss:hover,
+  .foot-oss:focus-visible { color: var(--orange-ink); }
   .foot-domain { justify-self: end; }
   .foot-contact {
     -webkit-appearance: none; appearance: none;
@@ -529,7 +544,8 @@
       justify-content: space-between;
       gap: 4px 20px;
     }
-    .foot-utils { order: -1; width: 100%; justify-content: flex-start; }
+    .foot-center { order: -1; width: 100%; align-items: flex-start; }
+    .foot-utils { justify-content: flex-start; }
   }
   @media (max-width: 520px) {
     dl.strip dd { white-space: normal; }
@@ -861,7 +877,7 @@
       <div><dt>Settlement</dt><dd>Direct to wallet.</dd></div>
       <div><dt>Custody</dt><dd><span class="on">Non-custodial.</span></dd></div>
       <div><dt>Lightning</dt><dd>Coming soon.</dd></div>
-      <div><dt>Platform</dt><dd>iPhone.</dd></div>
+      <div><dt>Platform</dt><dd>iPhone · Android coming soon.</dd></div>
       <div>
         <dt>Legal</dt>
         <dd>
@@ -879,6 +895,7 @@
 
     <div class="foot-bar">
       <span class="mono foot-copy">© 2026 Hachisu</span>
+      <div class="foot-center">
       <div class="foot-utils">
         <button type="button" class="foot-contact" data-contact>Contact</button>
         <a class="foot-social" href="https://x.com/brycesonjx" target="_blank" rel="noopener noreferrer" aria-label="X">
@@ -892,6 +909,8 @@
           </svg>
           <span>LinkedIn</span>
         </a>
+      </div>
+      <a class="foot-oss" href="https://github.com/BrycesonJones/HachisuMobile" target="_blank" rel="noopener noreferrer">Open Source</a>
       </div>
       <span class="mono foot-domain">hachisu.io</span>
     </div>

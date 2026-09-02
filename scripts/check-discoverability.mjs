@@ -432,8 +432,12 @@ if (!has(FLAGS)) {
       }
     }
 
+    // Tempered scan: the status must belong to the LIGHTNING entry itself. A
+    // later grid entry's own status (e.g. "Platform iPhone. Android coming
+    // soon.") must not satisfy this rule, so the window may not cross into the
+    // next entry's label.
     const unavailableDisclosure =
-      /\bLightning\b[\s\S]{0,48}\b(?:coming soon|not (?:currently )?available|unavailable|disabled)\b/i;
+      /\bLightning\b(?:(?!\b(?:Network|Settlement|Custody|Platform|Legal|Status)\b)[\s\S]){0,48}\b(?:coming soon|not (?:currently )?available|unavailable|disabled)\b/i;
     const landingText = has(INDEX) ? visibleText(read(INDEX)) : '';
     if (!unavailableDisclosure.test(landingText)) {
       violated = true;
