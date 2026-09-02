@@ -52,12 +52,12 @@ globalThis.fetch = ((input: Request | URL | string, init?: RequestInit) => {
   return Promise.reject(new Error(`unexpected outbound fetch: ${url}`));
 }) as typeof fetch;
 
-function post(body: unknown): Promise<Response> {
+function post(body: unknown, headers: Record<string, string> = {}): Promise<Response> {
   return Promise.resolve(
     handler(
       new Request('https://edge.test/send-contact-message', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: typeof body === 'string' ? body : JSON.stringify(body),
       }),
     ),
@@ -105,6 +105,61 @@ Deno.test('a missing, blank, or oversize message is refused', async () => {
     assertEquals(res.status, 400, `message ${String(message).slice(0, 12)}… must be refused`);
   }
   assertEquals(sent.length, 0);
+});
+
+// --- request bounding ---------------------------------------------------------
+
+Deno.test('a body declared oversize is refused up front (413), and nothing is sent', async () => {
+  reset();
+  const res = await post(
+    { email: 'a@b.co', message: 'hello' },
+    { 'Content-Length': String(10 * 1024 * 1024) },
+  );
+  assertEquals(res.status, 413);
+  assertEquals((await res.json()).ok, false);
+  assertEquals(sent.length, 0);
+});
+
+// --- CORS is scoped to the Hachisu web origins --------------------------------
+//
+// CORS is not authentication — any non-browser client can still POST — but the
+// grant must not invite arbitrary third-party pages to drive this endpoint from
+// their visitors' browsers. Only hachisu.io (and local dev of web/) is granted.
+
+Deno.test('the Hachisu origins get an exact CORS grant, never a wildcard', async () => {
+  reset();
+  for (const origin of ['https://hachisu.io', 'https://www.hachisu.io', 'http://localhost:8000', 'http://127.0.0.1:4173']) {
+    const res = await post({ email: 'a@b.co', message: 'hello' }, { Origin: origin });
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get('Access-Control-Allow-Origin'), origin, `origin ${origin} must be granted exactly`);
+    assertEquals(res.headers.get('Vary'), 'Origin');
+  }
+});
+
+Deno.test('a foreign origin gets no CORS grant', async () => {
+  reset();
+  for (const origin of ['https://evil.example', 'https://hachisu.io.evil.example', 'http://hachisu.io', 'null']) {
+    const res = await post({ email: 'a@b.co', message: 'hello' }, { Origin: origin });
+    assertEquals(res.headers.get('Access-Control-Allow-Origin'), null, `origin ${origin} must not be granted`);
+  }
+});
+
+Deno.test('preflight: allowed origin is granted, foreign origin is not', async () => {
+  reset();
+  const preflight = (origin: string) =>
+    handler(
+      new Request('https://edge.test/send-contact-message', {
+        method: 'OPTIONS',
+        headers: { Origin: origin, 'Access-Control-Request-Method': 'POST' },
+      }),
+    );
+
+  const ours = await preflight('https://hachisu.io');
+  assertEquals(ours.headers.get('Access-Control-Allow-Origin'), 'https://hachisu.io');
+  assertStringIncludes(String(ours.headers.get('Access-Control-Allow-Methods')), 'POST');
+
+  const theirs = await preflight('https://evil.example');
+  assertEquals(theirs.headers.get('Access-Control-Allow-Origin'), null);
 });
 
 // --- the send itself ----------------------------------------------------------

@@ -59,7 +59,14 @@ function check(name, expect, fixture) {
   if (!ok) failed++;
 }
 
-/** Builds a synthetic deployed tree: fixture/<slug>/supabase/functions/... */
+/**
+ * Builds a synthetic deployed tree: fixture/<slug>/supabase/functions/...
+ *
+ * A `verify_jwt_disabled` marker file at fixture/<slug>/ stands in for the
+ * platform's verify_jwt=false on that function. The pristine tree carries the
+ * marker exactly where production deliberately does: the declared-public
+ * contact endpoint.
+ */
 function synthesize(dest) {
   for (const slug of functionSlugs(ROOT)) {
     for (const rel of bundleFilesFor(ROOT, slug)) {
@@ -68,6 +75,7 @@ function synthesize(dest) {
       cpSync(join(ROOT, rel), target);
     }
   }
+  writeFileSync(join(dest, 'send-contact-message', 'verify_jwt_disabled'), '');
 }
 
 const work = mkdtempSync(join(tmpdir(), 'hachisu-deployed-selftest-'));
@@ -131,6 +139,22 @@ try {
     const shared = join(dir, 'delete-account', 'supabase/functions/_shared');
     cpSync(join(shared, 'cors.ts'), join(shared, 'zz-not-in-repo.ts'));
     check('RED-5  a deployed file absent from the repository', 'source-absent-in-repository', dir);
+  }
+
+  // RED 6 — a JWT-gated function deployed with verify_jwt=false. The public
+  // allowlist must not blunt the rule for any function NOT on it.
+  {
+    const dir = fresh('red-jwt-off');
+    writeFileSync(join(dir, 'delete-account', 'verify_jwt_disabled'), '');
+    check('RED-6  a gated function with verify_jwt turned off', 'verify-jwt-disabled', dir);
+  }
+
+  // RED 7 — a declared-public function deployed WITH the JWT gate on. That is
+  // config drift from declared intent (and silently breaks the contact form).
+  {
+    const dir = fresh('red-jwt-drift');
+    rmSync(join(dir, 'send-contact-message', 'verify_jwt_disabled'), { force: true });
+    check('RED-7  a declared-public function with the gate back on', 'public-function-gated', dir);
   }
 
   // GREEN again: the mutations must not have leaked into the pristine tree.

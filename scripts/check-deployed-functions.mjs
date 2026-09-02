@@ -103,6 +103,27 @@ if (AGAINST !== 'worktree' && AGAINST !== 'head') {
 
 const FUNCTIONS_DIR = join(ROOT, 'supabase', 'functions');
 
+/**
+ * Functions that are DELIBERATELY deployed public (verify_jwt=false).
+ *
+ * This set is the declared intent the deployed configuration is verified
+ * against, in BOTH directions: a function not listed here must have the
+ * platform JWT gate on, and a function listed here must have it off — a
+ * public endpoint that silently regains the gate is config drift too (it
+ * breaks its anonymous callers), and either direction means production was
+ * changed out-of-band.
+ *
+ * Listing a function here is a security decision. It is only correct when the
+ * function holds no privileged credential path reachable from caller input and
+ * is hardened as a public API (bounded validated input, fixed destinations,
+ * generic errors). Currently:
+ *
+ *   send-contact-message — the hachisu.io landing-page contact form; visitors
+ *   have no Supabase session. Server-fixed recipient, bounded inputs,
+ *   origin-scoped CORS, no service-role usage. See its index.ts header.
+ */
+const PUBLIC_FUNCTIONS = new Set(['send-contact-message']);
+
 const failures = [];
 const checks = [];
 const notes = [];
@@ -218,10 +239,17 @@ try {
     // Self-test path: a fixture stands in for the platform. Every comparison
     // below is the real one; only the transport is replaced.
     notes.push(`fixture mode: ${FIXTURE}`);
+    // A `verify_jwt_disabled` marker file in a fixture function's directory
+    // stands in for the platform's verify_jwt=false on that function.
     deployed = readdirSync(FIXTURE)
       .filter((name) => statSync(join(FIXTURE, name)).isDirectory())
       .sort()
-      .map((slug) => ({ slug, status: 'ACTIVE', verifyJwt: true, importMap: false }));
+      .map((slug) => ({
+        slug,
+        status: 'ACTIVE',
+        verifyJwt: !existsSync(join(FIXTURE, slug, 'verify_jwt_disabled')),
+        importMap: false,
+      }));
   } else {
     projectRef = resolveProjectRef();
     if (!projectRef) {
@@ -269,15 +297,32 @@ try {
   // would still stand, but defence-in-depth would be silently gone), and an
   // import map would re-resolve module specifiers at deploy time without
   // changing a single byte of the source this guard compares.
-  const unverified = deployed.filter((fn) => fn.verifyJwt === false);
+  // The declared-public set (PUBLIC_FUNCTIONS) is verified in both directions.
+  const unverified = deployed.filter(
+    (fn) => fn.verifyJwt === false && !PUBLIC_FUNCTIONS.has(fn.slug),
+  );
   for (const fn of unverified) {
     fail(
       'verify-jwt-disabled',
       `${fn.slug}: deployed with verify_jwt=false — the platform JWT gate is off for this function`,
     );
   }
-  if (unverified.length === 0 && deployed.length > 0) {
-    pass(`all ${deployed.length} deployed functions enforce verify_jwt`);
+  const gatedPublic = deployed.filter(
+    (fn) => PUBLIC_FUNCTIONS.has(fn.slug) && fn.verifyJwt !== false,
+  );
+  for (const fn of gatedPublic) {
+    fail(
+      'public-function-gated',
+      `${fn.slug}: declared public (verify_jwt=false) but deployed with the JWT gate on — ` +
+        `configuration drifted from declared intent and anonymous callers are broken`,
+    );
+  }
+  if (unverified.length === 0 && gatedPublic.length === 0 && deployed.length > 0) {
+    const publicDeployed = deployed.filter((fn) => PUBLIC_FUNCTIONS.has(fn.slug)).length;
+    pass(
+      `all ${deployed.length - publicDeployed} gated functions enforce verify_jwt; ` +
+        `${publicDeployed} declared-public function(s) verified public as intended`,
+    );
   }
 
   const withImportMap = deployed.filter((fn) => fn.importMap === true);
