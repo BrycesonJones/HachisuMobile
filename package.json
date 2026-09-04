@@ -23,7 +23,7 @@
     "check:exceptions:selftest": "node ./scripts/check-exceptional-conditions.selftest.mjs",
     "check:discoverability": "node ./scripts/check-discoverability.mjs",
     "check:discoverability:selftest": "node ./scripts/check-discoverability.selftest.mjs",
-    "test:functions": "cd supabase/functions && deno test --allow-env --allow-net --allow-read"
+    "test:functions": "cd supabase/functions && deno test --allow-env --allow-net --allow-read --node-modules-dir=none"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
