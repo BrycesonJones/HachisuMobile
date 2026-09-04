@@ -105,9 +105,11 @@ export default function FeedbackScreen() {
         // Non-fatal: the widget continues anonymously (posting/voting still
         // work; commenting is disabled for anonymous viewers). Known cause:
         // UserJot rejects unsigned identify for privileged workspace members.
-        console.warn(
-          `[feedback] UserJot identify failed (${typeof detail === 'string' ? detail : 'unknown'}); feedback continues anonymously`,
-        );
+        if (__DEV__) {
+          console.warn(
+            `[feedback] UserJot identify failed (${typeof detail === 'string' ? detail : 'unknown'}); feedback continues anonymously`,
+          );
+        }
         return;
       }
       if (type === 'uj:open') {
@@ -134,11 +136,15 @@ export default function FeedbackScreen() {
   const handleContentProcessTerminated = useCallback(() => {
     if (resolveTerminationRecovery(autoRecoveriesRef.current) === 'reload') {
       autoRecoveriesRef.current += 1;
-      console.warn('[feedback] UserJot WebView content process terminated; reloading once');
+      if (__DEV__) {
+        console.warn('[feedback] UserJot WebView content process terminated; reloading once');
+      }
       setLoadState('loading');
       setAttempt((n) => n + 1);
     } else {
-      console.warn('[feedback] UserJot WebView content process terminated repeatedly');
+      if (__DEV__) {
+        console.warn('[feedback] UserJot WebView content process terminated repeatedly');
+      }
       setLoadState('error');
     }
   }, []);

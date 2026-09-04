@@ -58,6 +58,83 @@ export type Database = {
           },
         ]
       }
+      merchant_payment_requests: {
+        Row: {
+          allow_custom_amounts: boolean
+          amount: number
+          btcpay_payment_request_id: string | null
+          btcpay_status: string | null
+          btcpay_store_id: string
+          created_at: string
+          currency: string
+          expires_at: string | null
+          form_id: string | null
+          id: string
+          idempotency_key: string
+          memo: string | null
+          merchant_store_id: string
+          recipient_email: string | null
+          reference_id: string | null
+          request_url: string | null
+          sync_status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          allow_custom_amounts?: boolean
+          amount: number
+          btcpay_payment_request_id?: string | null
+          btcpay_status?: string | null
+          btcpay_store_id: string
+          created_at?: string
+          currency: string
+          expires_at?: string | null
+          form_id?: string | null
+          id?: string
+          idempotency_key: string
+          memo?: string | null
+          merchant_store_id: string
+          recipient_email?: string | null
+          reference_id?: string | null
+          request_url?: string | null
+          sync_status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          allow_custom_amounts?: boolean
+          amount?: number
+          btcpay_payment_request_id?: string | null
+          btcpay_status?: string | null
+          btcpay_store_id?: string
+          created_at?: string
+          currency?: string
+          expires_at?: string | null
+          form_id?: string | null
+          id?: string
+          idempotency_key?: string
+          memo?: string | null
+          merchant_store_id?: string
+          recipient_email?: string | null
+          reference_id?: string | null
+          request_url?: string | null
+          sync_status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_payment_requests_merchant_store_id_fkey"
+            columns: ["merchant_store_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       merchant_pos_apps: {
         Row: {
           app_name: string

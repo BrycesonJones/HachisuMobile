@@ -21,6 +21,12 @@
  *   7. CWE-338/757 — the Supabase client built before WebCrypto is installed,
  *                    so auth-js falls back to Math.random() and `plain`.
  *   8. CWE-320     — the auth session persisted to unencrypted device storage.
+ *   9. Release build profile (App Store readiness) — eas.json must define a
+ *                    production profile whose environment carries the public
+ *                    Supabase endpoint and pins every development toggle off.
+ *                    Without it a cloud build has no EXPO_PUBLIC_* values at all
+ *                    (.env is gitignored and never uploaded), so lib/supabase.ts
+ *                    throws at import and the app crashes on cold start.
  *
  * These are guards, not bug reports: the tree is expected to pass today. Their
  * job is to make the insecure state unrepresentable going forward.
@@ -212,6 +218,78 @@ if (secureStorage === null) {
   );
 } else if (!failures.some((f) => f.rule === 'session-in-plaintext-storage')) {
   pass('the auth session is held in platform-backed secure storage');
+}
+
+// ---------------------------------------------------------------------------
+// 9. Release build profile: eas.json production environment.
+// ---------------------------------------------------------------------------
+{
+  const easPath = join(ROOT, 'eas.json');
+  const easSource = read(easPath);
+  let eas = null;
+  if (easSource === null) {
+    fail('release-profile-missing', `${rel(easPath)}: no eas.json — there is no defined production build profile`);
+  } else {
+    try {
+      eas = JSON.parse(easSource);
+    } catch (e) {
+      fail('release-profile-missing', `${rel(easPath)}: not valid JSON (${e.message})`);
+    }
+  }
+
+  const profiles = eas?.build && typeof eas.build === 'object' ? eas.build : null;
+
+  /** Resolves a profile's env through its `extends` chain (child overrides parent). */
+  function resolveEnv(name, seen = new Set()) {
+    const profile = profiles?.[name];
+    if (!profile || typeof profile !== 'object' || seen.has(name)) return {};
+    seen.add(name);
+    const parent = typeof profile.extends === 'string' ? resolveEnv(profile.extends, seen) : {};
+    return { ...parent, ...(profile.env && typeof profile.env === 'object' ? profile.env : {}) };
+  }
+
+  if (profiles) {
+    // Every profile's env is subject to the same rules as the .env files.
+    for (const [name, profile] of Object.entries(profiles)) {
+      const env = profile?.env && typeof profile.env === 'object' ? profile.env : {};
+      for (const [key, value] of Object.entries(env)) {
+        const at = `${rel(easPath)}: build.${name}.env.${key}`;
+        const hit = PRIVILEGED.find((p) => key.toUpperCase().includes(p));
+        if (hit) fail('privileged-env-is-public', `${at} publishes a privileged secret (${hit}) into the mobile bundle`);
+        if (typeof value === 'string' && /^https?:\/\//i.test(value) && !/^https:\/\//i.test(value)) {
+          fail('insecure-endpoint', `${at} uses plaintext http:// — client traffic must be HTTPS`);
+        }
+      }
+    }
+
+    const production = profiles.production;
+    if (!production || typeof production !== 'object') {
+      fail('release-profile-missing', `${rel(easPath)}: build.production profile is not defined`);
+    } else {
+      const env = resolveEnv('production');
+      const at = `${rel(easPath)}: build.production`;
+      for (const required of ['EXPO_PUBLIC_SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_ANON_KEY']) {
+        if (typeof env[required] !== 'string' || !env[required].trim()) {
+          fail('release-env-incomplete', `${at}: ${required} is not set — a release build would throw on cold start`);
+        }
+      }
+      if (typeof env.EXPO_PUBLIC_SUPABASE_URL === 'string' && !/^https:\/\//i.test(env.EXPO_PUBLIC_SUPABASE_URL)) {
+        fail('release-env-incomplete', `${at}: EXPO_PUBLIC_SUPABASE_URL must be an https:// endpoint`);
+      }
+      for (const toggle of ['EXPO_PUBLIC_AUTH_DEV_BYPASS', 'EXPO_PUBLIC_DEV_AUTH_BYPASS', 'EXPO_PUBLIC_PROFILE_DEBUG']) {
+        if (env[toggle] !== 'false') {
+          fail('release-dev-toggle', `${at}: ${toggle} must be pinned to "false" in the release environment`);
+        }
+      }
+      if (production.developmentClient === true) {
+        fail('release-dev-toggle', `${at}: developmentClient must not be enabled on the release profile`);
+      }
+    }
+  }
+
+  if (!failures.some((f) => ['release-profile-missing', 'release-env-incomplete', 'release-dev-toggle'].includes(f.rule))) {
+    pass('eas.json defines a production profile with the public endpoint set and every dev toggle off');
+  }
 }
 
 // ---------------------------------------------------------------------------

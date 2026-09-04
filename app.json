@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "HachisuMobile",
+    "name": "Hachisu",
     "slug": "hachisu-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,7 +10,11 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.hachisumobile.hachisu-mobile"
+      "requireFullScreen": true,
+      "bundleIdentifier": "com.hachisumobile.hachisu-mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {

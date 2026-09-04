@@ -31,14 +31,6 @@ export default function RootLayout() {
             <Stack.Screen name="auth" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen
-              name="transaction-details"
-              options={{
-                presentation: 'fullScreenModal',
-                headerShown: false,
-                animation: 'slide_from_bottom',
-              }}
-            />
-            <Stack.Screen
               name="activity-details"
               options={{
                 presentation: 'fullScreenModal',
@@ -77,7 +69,6 @@ export default function RootLayout() {
                 animation: 'slide_from_right',
               }}
             />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
           </Stack>
           <StatusBar style="light" />
           {/* Full-screen overlay: blocks app use for signed-in users missing
