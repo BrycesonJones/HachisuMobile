@@ -2075,6 +2075,24 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       "type": "heading",
       "segments": [
         {
+          "text": "4.8 Feedback",
+          "bold": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "segments": [
+        {
+          "text": "The app's Feedback screen opens a feedback board operated by UserJot. When the screen loads, we send UserJot your Hachisu account ID and your email address so that feedback you post is attributed to your account. Anything you choose to post there — feature requests, comments, and votes — is stored by UserJot, and posts on the board are visible to other people who use it. We do not send UserJot your profile, store, wallet, or payment information.",
+          "bold": false
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "segments": [
+        {
           "text": "5. How We Collect Information",
           "bold": false
         }
@@ -2102,6 +2120,19 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
         },
         {
           "text": " — payment activity and balances retrieved from the payment infrastructure associated with your stores.",
+          "bold": false
+        }
+      ]
+    },
+    {
+      "type": "listItem",
+      "segments": [
+        {
+          "text": "From the feedback board",
+          "bold": true
+        },
+        {
+          "text": " — feedback, comments, and votes you choose to post through the app's Feedback screen.",
           "bold": false
         }
       ]
@@ -2274,6 +2305,32 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
         },
         {
           "text": " — the payment-processing system your Hachisu store runs on. It receives your store configuration, your public wallet information (xpub/descriptor), invoice and payment-request details, and POS configuration, and it generates the checkout pages your customers use.",
+          "bold": false
+        }
+      ]
+    },
+    {
+      "type": "listItem",
+      "segments": [
+        {
+          "text": "UserJot",
+          "bold": true
+        },
+        {
+          "text": " — the feedback board behind the app's Feedback screen. It receives your Hachisu account ID and email address, and the feedback, comments, and votes you choose to post. It receives no profile, store, wallet, or payment information.",
+          "bold": false
+        }
+      ]
+    },
+    {
+      "type": "listItem",
+      "segments": [
+        {
+          "text": "Resend",
+          "bold": true
+        },
+        {
+          "text": " — our email delivery provider. It receives your email address and the contents of any message you send us through the Contact form, so we can receive and reply to it.",
           "bold": false
         }
       ]
@@ -2472,6 +2529,19 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
         },
         {
           "text": " copies in service-provider backups and server logs, which expire on those providers' schedules. The payment infrastructure also retains historical invoice records, so a previously issued invoice or checkout page may remain viewable after your account is deleted; an invoice still within its validity window at deletion remains payable — to your own wallet — until it expires.",
+          "bold": false
+        }
+      ]
+    },
+    {
+      "type": "listItem",
+      "segments": [
+        {
+          "text": "Not removed by deleting your account:",
+          "bold": true
+        },
+        {
+          "text": " feedback, comments, and votes you posted to the UserJot feedback board, and the account ID and email address UserJot holds for you. Deleting your Hachisu account does not delete them. Contact us through the Contact form if you want that information removed as well.",
           "bold": false
         }
       ]
