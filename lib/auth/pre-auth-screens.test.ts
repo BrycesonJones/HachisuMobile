@@ -131,31 +131,19 @@ test('personal onboarding collects no SSN data', () => {
   }
 });
 
-// Google sign-up on the personal email screen must be the same proven
-// pattern business sign-up uses: OAuth (the only auth action) followed by the
-// SAME finalization the OTP path converges on. The carried params — including
-// the explicit legal agreement and the personal account type — ride the
-// in-memory route state through the in-app OAuth browser session, so Google
-// can neither bypass the legal gate nor drift into business finalization.
-test('app/auth/personal-email.tsx offers Google sign-up converging on finalizePersonalSignup', () => {
+// The personal email screen is the single account-setup entry point: it sends
+// the OTP and hands the carried pre-auth answers to the confirmation screen.
+// (Google sign-up previously also lived here; the surface is gated off — see
+// GOOGLE_AUTH_ENABLED and lib/auth/google-auth-gate.test.ts, which owns the
+// invariant that no shipped screen may re-expose it.)
+test('app/auth/personal-email.tsx offers first-party email/OTP sign-up', () => {
   const source = withoutComments(
     readFileSync(join(repoRoot, 'app/auth/personal-email.tsx'), 'utf8'),
   );
 
-  // Both authentication paths exist…
-  for (const required of ['GoogleSignInButton', 'signInWithGoogleOAuth', 'sendEmailOtp']) {
-    assert.ok(
-      source.includes(required),
-      `personal-email.tsx must offer both email/OTP and Google sign-up (missing ${required})`,
-    );
-  }
-
-  // …and Google converges on the one personal finalization, fed the carried
-  // pre-auth answers (username, country, phone, profile fields, legal flag).
   assert.ok(
-    source.includes('finalizePersonalSignup(null, carriedParams)'),
-    'the Google path must finalize via finalizePersonalSignup with the carried ' +
-      'onboarding params — no second finalization implementation',
+    source.includes('sendEmailOtp'),
+    'personal-email.tsx must send the email OTP — it is the only account setup path',
   );
 
   // Account-type integrity: a personal signup must never route through
@@ -195,9 +183,9 @@ test('app/auth/personal-email.tsx offers Google sign-up converging on finalizePe
   }
 });
 
-// Business sign-up guard: adding Google to the personal flow must not touch
-// the proven business wiring.
-test('business sign-up keeps its own Google + finalization wiring', () => {
+// Business sign-up guard: the business flow keeps its own email/OTP wiring,
+// with finalization on the confirmation screen (where the session exists).
+test('business sign-up keeps its own email/OTP + finalization wiring', () => {
   const businessEmail = withoutComments(
     readFileSync(join(repoRoot, 'app/auth/business-email.tsx'), 'utf8'),
   );
@@ -206,9 +194,16 @@ test('business sign-up keeps its own Google + finalization wiring', () => {
   );
 
   assert.ok(
-    businessEmail.includes('signInWithGoogleOAuth') &&
-      businessEmail.includes('finalizeBusinessSignup'),
-    'business-email.tsx must keep Google sign-up finalizing via finalizeBusinessSignup',
+    businessEmail.includes('sendEmailOtp'),
+    'business-email.tsx must send the email OTP — it is the only account setup path',
+  );
+  assert.ok(
+    businessEmail.includes("accountType: 'business'"),
+    'the OTP hand-off must carry the business account type explicitly',
+  );
+  assert.ok(
+    !businessEmail.includes('finalizePersonalSignup'),
+    'business-email.tsx must remain a business signup — no personal finalization',
   );
   assert.ok(
     businessConfirmation.includes('finalizeBusinessSignup'),

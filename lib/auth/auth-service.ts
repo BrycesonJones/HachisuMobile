@@ -1,6 +1,7 @@
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 
+import { GOOGLE_AUTH_ENABLED } from '@/constants/feature-flags';
 import { isAuthDevBypassEnabled, isProfileDebugEnabled } from '@/lib/auth/config';
 import { interpretOAuthCallback } from '@/lib/auth/oauth-callback';
 import {
@@ -496,6 +497,15 @@ export async function signInWithGoogleOAuth(): Promise<{
   error: AuthError | null;
   cancelled?: boolean;
 }> {
+  // Product gate (constants/feature-flags.ts). Enforced here — not only by
+  // hiding the button — so the disabled state holds for any caller that
+  // reaches this function without going through the sign-up screens. This is
+  // what makes it safe to leave the provider configured server-side: no
+  // shipped client can invoke it.
+  if (!GOOGLE_AUTH_ENABLED) {
+    return { error: { message: 'Google sign-in is not available. Use your email address.' } };
+  }
+
   if (isAuthDevBypassEnabled) {
     return { error: { message: 'Google sign-in is unavailable in dev bypass mode. Use email.' } };
   }

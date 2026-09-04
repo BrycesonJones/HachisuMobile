@@ -1779,19 +1779,6 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       "type": "listItem",
       "segments": [
         {
-          "text": "Google account information (optional).",
-          "bold": true
-        },
-        {
-          "text": " If you sign in with Google, our authentication provider receives basic information from your Google account (such as your email address) to sign you in. We do not receive your Google password.",
-          "bold": false
-        }
-      ]
-    },
-    {
-      "type": "listItem",
-      "segments": [
-        {
           "text": "Session information.",
           "bold": true
         },
@@ -2123,19 +2110,6 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       "type": "listItem",
       "segments": [
         {
-          "text": "From third-party sign-in",
-          "bold": true
-        },
-        {
-          "text": " — if you choose to sign in with Google.",
-          "bold": false
-        }
-      ]
-    },
-    {
-      "type": "listItem",
-      "segments": [
-        {
           "text": "Automatically, at the infrastructure level",
           "bold": true
         },
@@ -2300,19 +2274,6 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
         },
         {
           "text": " — the payment-processing system your Hachisu store runs on. It receives your store configuration, your public wallet information (xpub/descriptor), invoice and payment-request details, and POS configuration, and it generates the checkout pages your customers use.",
-          "bold": false
-        }
-      ]
-    },
-    {
-      "type": "listItem",
-      "segments": [
-        {
-          "text": "Google",
-          "bold": true
-        },
-        {
-          "text": " — only if you choose to sign in with Google, to authenticate you.",
           "bold": false
         }
       ]
@@ -2630,11 +2591,11 @@ export const LEGAL_CONTENT: Record<string, readonly LegalBlock[]> = {
       "type": "listItem",
       "segments": [
         {
-          "text": "Google sign-in.",
+          "text": "Sign-in.",
           "bold": true
         },
         {
-          "text": " Signing in with Google is optional; email sign-in is available.",
+          "text": " We sign you in with your email address and a one-time code. We do not use passwords or third-party sign-in services.",
           "bold": false
         }
       ]
