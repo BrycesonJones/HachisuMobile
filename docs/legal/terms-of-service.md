@@ -344,13 +344,28 @@ claim and may participate in its defense with counsel of our choosing.
 
 ## 23. Governing Law and Dispute Resolution
 
-These Terms are governed by the laws of [GOVERNING LAW STATE], without regard to its
-conflict-of-laws rules.
+These Terms and any dispute, claim, or controversy arising out of or relating to these
+Terms, the Services, or your use of Hachisu are governed by the laws of the State of
+Georgia, without regard to its conflict-of-laws principles.
 
-**Dispute resolution:** [ARBITRATION / DISPUTE RESOLUTION TO BE REVIEWED BY COUNSEL]
+To the fullest extent permitted by applicable law, any legal action or proceeding arising
+out of or relating to these Terms or the Services must be brought exclusively in the state
+courts located in Cobb County, Georgia or, where federal subject-matter jurisdiction
+exists, the United States District Court for the Northern District of Georgia. You and
+Hachisu consent to the personal jurisdiction and venue of those courts and waive any
+objection to those courts based on inconvenient forum or similar grounds, to the extent
+such waiver is permitted by law.
 
-[NOTE FOR REVIEW: counsel to decide whether to adopt arbitration, any class-action
-waiver, small-claims carve-outs, opt-out mechanics, and venue.]
+If the laws of your state, country, or other jurisdiction provide rights, remedies,
+protections, or forums that cannot lawfully be waived, restricted, or displaced by
+contract, those rights are not affected by this Section. Nothing in these Terms is
+intended to deprive you of any mandatory protection available under applicable law.
+
+Notwithstanding the foregoing, either party may bring an eligible individual claim in
+small-claims court where permitted by applicable law. Hachisu may also seek temporary,
+preliminary, injunctive, or other equitable relief in any court of competent jurisdiction
+when reasonably necessary to protect the Services, intellectual property, confidential
+information, security, or other legal rights.
 
 ## 24. Miscellaneous
 

@@ -14,7 +14,7 @@
 
 import { LEGAL_CONTENT_PLACEHOLDERS } from '@/constants/legal-content.generated';
 
-export const CURRENT_TERMS_VERSION = 'terms_2026-09-01_v1';
+export const CURRENT_TERMS_VERSION = 'terms_2026-09-04_v1';
 export const CURRENT_ESIGN_VERSION = 'esign_2026-09-01_v1';
 export const CURRENT_PRIVACY_NOTICE_VERSION = 'privacy_2026-09-04_v2';
 
